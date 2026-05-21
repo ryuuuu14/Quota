@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import textwrap
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DB_PATH', os.path.join(_project_root, 'data', 'database.sqlite'))
@@ -52,22 +53,112 @@ st.set_page_config(
 render_sidebar("home")
 
 # ── Welcome page ──
-st.title("Hệ thống Quản lý Chế độ Làm việc T04")
 st.markdown("""
-<div style="color: var(--md-on-surface-variant); font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-Chào mừng đến với hệ thống quản lý định mức giờ chuẩn và nghiên cứu khoa học.
+<div style="
+background: linear-gradient(135deg, var(--md-primary-fixed), #e8f0fe);
+padding: 32px;
+border-radius: var(--radius-lg);
+margin-bottom: 32px;
+border: 1px solid var(--md-outline-variant);
+">
+<h2 style="margin: 0 0 12px 0; color: var(--md-primary); font-weight: 800;">Hệ thống Quản lý Chế độ Làm việc Nhà giáo T04</h2>
+<p style="margin: 0; color: var(--md-on-surface-variant); font-size: 16px; line-height: 1.6;">
+Hỗ trợ tự động hóa việc tính toán định mức giờ chuẩn giảng dạy và nghiên cứu khoa học (NCKH) theo quy chuẩn T04. Hệ thống tự động phân bổ định mức theo tỷ lệ ngày làm việc thực tế, xử lý các quy tắc miễn giảm và thực hiện quy đổi giờ theo Điều 12.
+</p>
 </div>
 
-<h3 style="margin-top: 32px;">Hướng dẫn sử dụng:</h3>
-<ol style="color: var(--md-on-surface-variant); font-size: 16px; line-height: 1.8; padding-left: 20px;">
-    <li><strong>Cài đặt Hệ thống:</strong> Cấu hình các thông số cơ bản (Năm học, Quy tắc miễn giảm, Hoạt động, v.v.).</li>
-    <li><strong>Quản lý Cán bộ:</strong> Thêm hồ sơ nhà giáo và ghi nhận diễn biến công tác (chức danh, đơn vị, miễn giảm).</li>
-    <li><strong>Nhật ký Hoạt động:</strong> Nhập liệu các hoạt động giảng dạy, NCKH, coi thi, chấm thi, v.v.</li>
-    <li><strong>Dashboard:</strong> Theo dõi tiến độ hoàn thành, định mức và thực hiện quy đổi giờ theo Điều 12 (nếu đủ điều kiện).</li>
-</ol>
-<p style="color: var(--md-on-surface-variant); font-size: 16px; margin-top: 16px;">
-    <em>Vui lòng chọn chức năng trên thanh menu bên trái để tiếp tục.</em>
+<h3 style="margin-bottom: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+<span class="material-symbols-outlined" style="color: var(--md-primary);">explore</span>
+Quy trình 4 bước sử dụng hệ thống
+</h3>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 32px;">
+<!-- Step 1 -->
+<div class="md-card" style="display: flex; flex-direction: column; justify-content: space-between; height: 100%; margin-bottom: 0px;">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+<span class="md-chip md-chip-primary" style="font-size: 11px; padding: 4px 10px;">BƯỚC 1</span>
+<span class="material-symbols-outlined" style="color: var(--md-primary); font-size: 28px;">settings</span>
+</div>
+<h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; color: var(--md-on-surface);">Cài đặt Quy chế & Danh mục</h4>
+<p style="margin: 0; font-size: 14px; color: var(--md-on-surface-variant); line-height: 1.5;">
+Thiết lập <strong>Năm học/Học kỳ</strong>, quy định số ngày làm việc thực tế, định mức chuẩn cho từng <strong>Chức danh</strong>, và các quy tắc <strong>Miễn giảm</strong>.
 </p>
+</div>
+<div style="margin-top: 16px; font-size: 13px; color: var(--md-primary); font-weight: 600;">
+👉 Mục: Cài đặt Hệ thống
+</div>
+</div>
+
+<!-- Step 2 -->
+<div class="md-card" style="display: flex; flex-direction: column; justify-content: space-between; height: 100%; margin-bottom: 0px;">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+<span class="md-chip md-chip-primary" style="font-size: 11px; padding: 4px 10px;">BƯỚC 2</span>
+<span class="material-symbols-outlined" style="color: var(--md-primary); font-size: 28px;">groups</span>
+</div>
+<h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; color: var(--md-on-surface);">Quản lý Hồ sơ & Timeline</h4>
+<p style="margin: 0; font-size: 14px; color: var(--md-on-surface-variant); line-height: 1.5;">
+Tạo hồ sơ nhà giáo và cập nhật <strong>Quá trình công tác (Timeline)</strong>. Định mức nghĩa vụ sẽ tự động phân bổ <strong>theo tỷ lệ ngày</strong> khi chức vụ/chức danh thay đổi.
+</p>
+</div>
+<div style="margin-top: 16px; font-size: 13px; color: var(--md-primary); font-weight: 600;">
+👉 Mục: Quản lý Cán bộ
+</div>
+</div>
+
+<!-- Step 3 -->
+<div class="md-card" style="display: flex; flex-direction: column; justify-content: space-between; height: 100%; margin-bottom: 0px;">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+<span class="md-chip md-chip-primary" style="font-size: 11px; padding: 4px 10px;">BƯỚC 3</span>
+<span class="material-symbols-outlined" style="color: var(--md-primary); font-size: 28px;">edit_note</span>
+</div>
+<h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; color: var(--md-on-surface);">Nhập Nhật ký Hoạt động</h4>
+<p style="margin: 0; font-size: 14px; color: var(--md-on-surface-variant); line-height: 1.5;">
+Ghi nhận các hoạt động thực hiện (Giảng dạy, NCKH, Nghiên cứu chuyên đề, Coi thi/Chấm thi). Hệ thống sẽ tự động nhân với <strong>hệ số quy đổi</strong> chuẩn.
+</p>
+</div>
+<div style="margin-top: 16px; font-size: 13px; color: var(--md-primary); font-weight: 600;">
+👉 Mục: Nhật ký Hoạt động
+</div>
+</div>
+
+<!-- Step 4 -->
+<div class="md-card" style="display: flex; flex-direction: column; justify-content: space-between; height: 100%; margin-bottom: 0px;">
+<div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+<span class="md-chip md-chip-primary" style="font-size: 11px; padding: 4px 10px;">BƯỚC 4</span>
+<span class="material-symbols-outlined" style="color: var(--md-primary); font-size: 28px;">dashboard</span>
+</div>
+<h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; color: var(--md-on-surface);">Theo dõi & Quyết toán</h4>
+<p style="margin: 0; font-size: 14px; color: var(--md-on-surface-variant); line-height: 1.5;">
+Theo dõi mức độ hoàn thành tiến độ. Áp dụng cơ chế **Quy đổi Điều 12** để bù trừ giờ thừa/thiếu giữa Giảng dạy và NCKH khi đủ điều kiện.
+</p>
+</div>
+<div style="margin-top: 16px; font-size: 13px; color: var(--md-primary); font-weight: 600;">
+👉 Mục: Bảng điều khiển
+</div>
+</div>
+</div>
+
+<div style="
+background-color: var(--md-surface-container-low);
+border: 1px solid var(--md-outline-variant);
+border-radius: var(--radius-lg);
+padding: 24px;
+margin-bottom: 32px;
+">
+<h4 style="margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; color: var(--md-on-surface); font-weight: 700;">
+<span class="material-symbols-outlined" style="color: var(--md-amber);">lightbulb</span>
+Nguyên tắc cốt lõi của Quy định T04:
+</h4>
+<ul style="margin: 0; padding-left: 20px; color: var(--md-on-surface-variant); font-size: 14px; line-height: 1.6;">
+<li style="margin-bottom: 8px;"><strong>Tính toán theo tỷ lệ (Pro-rata):</strong> Khi nhà giáo thay đổi thông tin (ví dụ: được bổ nhiệm chức vụ quản lý giữa năm học, nghỉ thai sản, đi học), định mức giờ chuẩn sẽ được chia nhỏ thành từng giai đoạn và tính tỷ lệ chính xác theo số ngày thực tế.</li>
+<li style="margin-bottom: 8px;"><strong>Khấu trừ ngày làm việc đột xuất:</strong> Các ngày nghỉ bệnh, đi công tác dài ngày sẽ trực tiếp làm giảm số ngày làm việc định mức, từ đó giảm trừ tương ứng nghĩa vụ giờ dạy và nghiên cứu khoa học.</li>
+<li><strong>Bù trừ Điều 12:</strong> Giờ dạy thừa có thể quy đổi sang giờ NCKH, và ngược lại giờ NCKH thừa có thể dùng để bù cho giờ dạy thiếu, nhưng phải đáp ứng đầy đủ điều kiện quy định tối thiểu của chức danh hiện tại.</li>
+</ul>
+</div>
 """, unsafe_allow_html=True)
 
 # ── Regulation Viewer ──
