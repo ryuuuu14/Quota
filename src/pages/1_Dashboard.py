@@ -203,15 +203,24 @@ if selected_tf_id:
         df_table = df_display[selected_cols].copy()
         df_table.columns = [col_mapping[c] for c in selected_cols]
 
+        def format_numeric(val):
+            import math
+            if isinstance(val, (int, float)) and not math.isnan(val) and not math.isinf(val):
+                if val.is_integer() or val == int(val):
+                    return f"{int(val)}"
+                return f"{val:.1f}"
+            return val
+
         def highlight_val(val):
-            if isinstance(val, (int, float)) and val < 0:
-                return 'color: var(--md-red); font-weight: bold'
-            elif isinstance(val, (int, float)) and val > 0:
-                return 'color: var(--md-green)'
+            if isinstance(val, (int, float)):
+                if val < 0:
+                    return 'color: #b91c1c; font-weight: bold;'
+                elif val > 0:
+                    return 'color: #047857;'
             elif val == 'Đạt':
-                return 'background-color: var(--md-green-bg); color: var(--md-green); font-weight: bold'
+                return 'background-color: #ecfdf5; color: #047857; font-weight: bold;'
             elif val == 'Không đạt':
-                return 'background-color: var(--md-red-bg); color: var(--md-red); font-weight: bold'
+                return 'background-color: #fef2f2; color: #b91c1c; font-weight: bold;'
             return ''
 
         config = {}
@@ -220,9 +229,32 @@ if selected_tf_id:
         if 'Họ và tên' in df_table.columns:
             config['Họ và tên'] = st.column_config.Column(pinned=True)
 
+        # Determine float columns to format
+        float_cols = [col for col in [
+            'Định mức gốc GD', 'Định mức thực tế GD', 'Số giờ được miễn giảm', 
+            'Đã Giảng dạy (tổng GC)', 'Trong đó: Kế hoạch khác', 'Vượt/Thiếu GD', 
+            'Định mức gốc NCKH', 'Định mức thực tế NCKH', 'Đã NCKH', 'Vượt/Thiếu NCKH',
+            'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
+        ] if col in df_table.columns]
+
+        format_dict = {col: format_numeric for col in float_cols}
+
+        # Apply styling only to target columns (Vượt/Thiếu, Đạt/Không đạt) to keep base columns clean and readable
+        style_cols = [col for col in [
+            'Số giờ được miễn giảm', 'Đã Giảng dạy (tổng GC)', 'Trong đó: Kế hoạch khác',
+            'Vượt/Thiếu GD', 'Đã NCKH', 'Vượt/Thiếu NCKH', 'Trạng thái',
+            'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
+        ] if col in df_table.columns]
+
         try:
-            st.dataframe(df_table.round(1).style.map(highlight_val), width='stretch', column_config=config)
-        except Exception:
-            st.dataframe(df_table.round(1), width='stretch', column_config=config)
+            styled_df = df_table.style
+            if float_cols:
+                styled_df = styled_df.format(format_dict)
+            if style_cols:
+                styled_df = styled_df.map(highlight_val, subset=style_cols)
+            st.dataframe(styled_df, width='stretch', column_config=config)
+        except Exception as e:
+            st.error(f"Lỗi render DataFrame: {e}")
+            st.dataframe(df_table, width='stretch', column_config=config)
 
 conn.close()
