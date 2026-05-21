@@ -11,34 +11,119 @@ st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Nh
 
 conn = get_connection()
 
-df_teachers = pd.read_sql_query("SELECT id, name FROM teachers", conn)
+df_teachers = pd.read_sql_query("SELECT id, name, subject_group FROM teachers", conn)
 df_activities = pd.read_sql_query("SELECT * FROM activity_types", conn)
-df_timeframes = pd.read_sql_query("SELECT id, name FROM timeframes ORDER BY id DESC", conn)
+df_timeframes = pd.read_sql_query("SELECT id, name, start_date, end_date FROM timeframes ORDER BY id DESC", conn)
 
 if df_teachers.empty or df_activities.empty or df_timeframes.empty:
-    render_warning_state("Cần thêm Nhà giáo, cấu hình Loại hoạt động và Timeframe trước khi ghi nhận nhật ký.")
+    render_warning_state("Cần thêm Nhà giáo, cấu hình Loại hoạt động và Năm học trước khi ghi nhận nhật ký.")
 else:
-    teacher_options = {f"{row['name']} (ID: {row['id']})": int(row['id']) for idx, row in df_teachers.iterrows()}
+    teacher_options = {f"{row['name']} ({row['subject_group']})": int(row['id']) for idx, row in df_teachers.iterrows()}
     tf_options = {row['name']: int(row['id']) for idx, row in df_timeframes.iterrows()}
 
-    with st.expander("Ghi nhận mới", expanded=True):
-        col_t, col_c, col_a = st.columns(3)
-        teacher_sel = col_t.selectbox("Chọn Nhà giáo", options=list(teacher_options.keys()))
+    st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 24px 0;">', unsafe_allow_html=True)
+    st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">history</span> Lịch sử Hoạt động (Gần đây)</h3>', unsafe_allow_html=True)
 
-        categories = sorted(df_activities['category'].unique())
-        category_sel = col_c.selectbox("Danh mục hoạt động", options=categories)
+    query = """
+    SELECT al.id, t.name as 'Nhà giáo', at.name as 'Hoạt động', tf.name as 'Timeframe',
+           al.log_date as 'Ngày', al.quantity as 'Số lượng', al.class_level as 'Cấp/Lớp',
+           al.class_type, al.student_count as 'Sĩ số', al.note as 'Ghi chú',
+           at.category, at.base_conversion_rate, at.is_teaching_activity, at.is_nckh_activity
+    FROM activity_logs al
+    JOIN teachers t ON al.teacher_id = t.id
+    JOIN activity_types at ON al.activity_type_id = at.id
+    JOIN timeframes tf ON al.timeframe_id = tf.id
+    ORDER BY al.log_date DESC, al.id DESC
+    LIMIT 100
+    """
+    
+    from calculations import calculate_activity_hours
+    df_logs = pd.read_sql_query(query, conn)
+    
+    if not df_logs.empty:
+        hours_list = []
+        for idx, row in df_logs.iterrows():
+            hours = calculate_activity_hours(
+                row.rename({'Số lượng': 'quantity', 'Cấp/Lớp': 'class_level', 'Sĩ số': 'student_count'}),
+                row
+            )
+            hours_list.append(hours)
+        df_logs['Giờ chuẩn (Ước tính)'] = hours_list
 
-        filtered_activities = df_activities[df_activities['category'] == category_sel]
-        activity_options = {row['name']: row['id'] for idx, row in filtered_activities.iterrows()}
-        activity_sel = col_a.selectbox("Hoạt động cụ thể", options=list(activity_options.keys()))
+        display_cols = [
+            'id', 'Nhà giáo', 'Hoạt động', 'Ngày', 'Số lượng',
+            'Cấp/Lớp', 'Sĩ số', 'Giờ chuẩn (Ước tính)', 'Ghi chú'
+        ]
+        df_display = df_logs[[c for c in display_cols if c in df_logs.columns]]
+        st.dataframe(df_display, width='stretch', hide_index=True)
 
-        col3, col4 = st.columns(2)
-        log_date = col3.date_input("Ngày thực hiện", value=date.today())
-        tf_sel = col4.selectbox("Thuộc Năm học", options=list(tf_options.keys()))
+        with st.expander("Xoá Nhật ký"):
+            del_id = st.selectbox(
+                "Chọn dòng nhật ký cần xoá", 
+                options=df_logs['id'].tolist(),
+                format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]}"
+            )
+            confirm_key = f"confirm_del_log_{del_id}"
+            
+            if st.session_state.get(confirm_key, False):
+                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa dòng nhật ký #{del_id} này không?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("Xác nhận xóa vĩnh viễn", key=f"yes_log_{del_id}", type="primary"):
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM activity_logs WHERE id = ?", (int(del_id),))
+                        conn.commit()
+                        st.session_state[confirm_key] = False
+                        st.success("Đã xoá thành công!")
+                        st.rerun()
+                with col_no:
+                    if st.button("Hủy bỏ", key=f"no_log_{del_id}"):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+            else:
+                if st.button("Yêu cầu xoá dòng này", key=f"req_log_{del_id}"):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
+    else:
+        render_empty_state("Chưa có nhật ký hoạt động nào.")
 
+    st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 24px 0;">', unsafe_allow_html=True)
+
+    with st.expander("Ghi nhận mới", expanded=False):
+        col_left, col_right = st.columns(2)
+        teacher_sel = col_left.selectbox("Chọn Nhà giáo", options=list(teacher_options.keys()))
+
+        activity_options = {f"[{row['category']}] {row['name']}": int(row['id']) for idx, row in df_activities.iterrows()}
+        activity_sel = col_right.selectbox("Chọn Hoạt động", options=list(activity_options.keys()))
         selected_act_id = activity_options[activity_sel]
         act_info = df_activities[df_activities['id'] == selected_act_id].iloc[0]
         unit = act_info['unit']
+
+        col3, col4 = st.columns(2)
+        log_date = col3.date_input("Ngày thực hiện", value=date.today())
+        
+        matching_tf_name = "Chưa xác định"
+        matching_tf_id = None
+        log_date_str = log_date.isoformat()
+        for idx, row in df_timeframes.iterrows():
+            if row['start_date'] <= log_date_str <= row['end_date']:
+                matching_tf_id = int(row['id'])
+                matching_tf_name = row['name']
+                break
+        if matching_tf_id is None and not df_timeframes.empty:
+            matching_tf_id = int(df_timeframes.iloc[0]['id'])
+            matching_tf_name = df_timeframes.iloc[0]['name']
+
+        col4.markdown(f'<div style="padding-top: 10px;"><label style="font-size: 14px; font-weight: 600; color: var(--md-on-surface-variant);">Hệ thống tự động nhận diện Năm học</label><div style="font-size: 16px; font-weight: 700; color: var(--md-primary); margin-top: 8px;">📅 {matching_tf_name}</div></div>', unsafe_allow_html=True)
+        
+        with st.expander("⚙️ Thay đổi Năm học thủ công (nếu cần)", expanded=False):
+            tf_list = list(tf_options.keys())
+            default_index = 0
+            for idx, (name, tf_id) in enumerate(tf_options.items()):
+                if tf_id == matching_tf_id:
+                    default_index = idx
+                    break
+            tf_sel = st.selectbox("Chọn Năm học khác", options=tf_list, index=default_index)
 
         with st.form("log_activity_form"):
             is_freeform = (act_info['category'] == 'Chấp hành Nhiệm vụ khác')
@@ -52,35 +137,19 @@ else:
             else:
                 quantity = st.number_input(f"Số lượng gốc ({unit})", min_value=0.0, value=1.0, step=0.5)
 
-            class_level = None
-            class_type = None
-            student_count = 0
+            class_level = "Đại học" if act_info['is_teaching_activity'] and not is_freeform else None
+            class_type = "Lý thuyết" if act_info['is_teaching_activity'] and not is_freeform else None
+            student_count = 40 if act_info['is_teaching_activity'] and not is_freeform else 0
             nckh_level = None
             is_main_author = False
 
             if act_info['is_teaching_activity'] and not is_freeform:
-                st.markdown("""
-<div style="
-    background-color: var(--md-primary-fixed);
-    padding: 8px 16px;
-    border-radius: var(--radius-md);
-    border-left: 4px solid var(--md-primary-container);
-    color: var(--md-on-primary-fixed);
-    font-weight: 700;
-    font-size: 0.9rem;
-    margin: 16px 0 12px 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-">
-    <span class="material-symbols-outlined" style="font-size: 20px;">school</span>
-    Chi tiết Giảng dạy (Làm cơ sở nhân hệ số chuẩn)
-</div>
-                """, unsafe_allow_html=True)
-                col_a, col_b, col_c = st.columns(3)
-                class_level = col_a.selectbox("Cấp học", ["Đại học", "Thạc sĩ", "Tiến sĩ", "LLCT Trung cấp", "LLCT Cao cấp", "Bồi dưỡng"])
-                class_type = col_b.selectbox("Loại hình", ["Lý thuyết", "Thực hành", "Ngoại ngữ/CNTT", "Thảo luận", "Bài tập", "Xêmina"])
-                student_count = col_c.number_input("Sĩ số (quyết định hệ số nhân)", min_value=1, max_value=200, value=40)
+                st.info("💡 Hệ thống mặc định hệ số lớp: Đại học, Lý thuyết, 40 SV. Chỉ thay đổi dưới đây nếu cần.")
+                with st.expander("📐 Chi tiết Lớp học (để tính hệ số)", expanded=False):
+                    col_a_c, col_b_c, col_c_c = st.columns(3)
+                    class_level = col_a_c.selectbox("Cấp học", ["Đại học", "Thạc sĩ", "Tiến sĩ", "LLCT Trung cấp", "LLCT Cao cấp", "Bồi dưỡng"], index=0)
+                    class_type = col_b_c.selectbox("Loại hình", ["Lý thuyết", "Thực hành", "Ngoại ngữ/CNTT", "Thảo luận", "Bài tập", "Xêmina"], index=0)
+                    student_count = col_c_c.number_input("Sĩ số (quyết định hệ số nhân)", min_value=1, max_value=200, value=40)
 
             elif act_info['is_nckh_activity']:
                 st.markdown("""
@@ -105,9 +174,21 @@ else:
                     rate = act_info['base_conversion_rate']
                     st.info(f"Hoạt động này được tính cố định **{rate}h** chuẩn NCKH theo quy định.")
                 else:
-                    col_a, col_b = st.columns(2)
-                    nckh_level = col_a.selectbox("Cấp độ", ["Quốc gia", "Bộ/Tỉnh", "Cơ sở", "Trường"])
-                    is_main_author = col_b.checkbox("Là tác giả chính/Chủ nhiệm", value=True)
+                    nckh_role_options = {
+                        "Cấp Quốc gia (Chủ nhiệm / Tác giả chính)": ("Quốc gia", True),
+                        "Cấp Quốc gia (Thành viên tham gia)": ("Quốc gia", False),
+                        "Cấp Bộ / Tỉnh (Chủ nhiệm / Tác giả chính)": ("Bộ/Tỉnh", True),
+                        "Cấp Bộ / Tỉnh (Thành viên tham gia)": ("Bộ/Tỉnh", False),
+                        "Cấp Cơ sở (Chủ nhiệm / Tác giả chính)": ("Cơ sở", True),
+                        "Cấp Cơ sở (Thành viên tham gia)": ("Cơ sở", False),
+                        "Cấp Trường (Chủ nhiệm / Tác giả chính)": ("Trường", True),
+                        "Cấp Trường (Thành viên tham gia)": ("Trường", False),
+                    }
+                    nckh_role_sel = st.selectbox(
+                        "Vai trò & Cấp độ đề tài/bài báo",
+                        options=list(nckh_role_options.keys())
+                    )
+                    nckh_level, is_main_author = nckh_role_options[nckh_role_sel]
 
             if is_freeform:
                 note = freeform_desc
@@ -133,34 +214,5 @@ else:
                 conn.commit()
                 st.success("Đã lưu nhật ký thành công!")
                 st.rerun()
-
-    st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 24px 0;">', unsafe_allow_html=True)
-    st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">history</span> Lịch sử Hoạt động (Gần đây)</h3>', unsafe_allow_html=True)
-
-    query = """
-    SELECT al.id, t.name as 'Nhà giáo', at.name as 'Hoạt động', tf.name as 'Timeframe',
-           al.log_date as 'Ngày', al.quantity as 'Số lượng', al.class_level as 'Cấp/Lớp',
-           al.student_count as 'Sĩ số', al.note as 'Ghi chú'
-    FROM activity_logs al
-    JOIN teachers t ON al.teacher_id = t.id
-    JOIN activity_types at ON al.activity_type_id = at.id
-    JOIN timeframes tf ON al.timeframe_id = tf.id
-    ORDER BY al.log_date DESC, al.id DESC
-    LIMIT 100
-    """
-    df_logs = pd.read_sql_query(query, conn)
-    if not df_logs.empty:
-        st.dataframe(df_logs, width='stretch', hide_index=True)
-
-        with st.expander("Xoá Nhật ký"):
-            del_id = int(st.selectbox("Chọn ID nhật ký cần xoá", options=df_logs['id'].tolist()))
-            if st.button("Xoá log này", type="primary"):
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM activity_logs WHERE id = ?", (del_id,))
-                conn.commit()
-                st.success("Đã xoá thành công!")
-                st.rerun()
-    else:
-        render_empty_state("Chưa có nhật ký hoạt động nào.")
 
 conn.close()

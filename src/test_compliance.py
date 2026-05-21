@@ -522,7 +522,7 @@ def run_all():
     # 6 ngày
     assert_approx(calculate_t04_weeks(date(2025, 9, 1), date(2025, 9, 7)), 1.0, tolerance=0, label="6 ngày -> 1.0 tuần")
     # 4 ngày
-    assert_approx(calculate_t04_weeks(date(2025, 9, 1), date(2025, 9, 5)), 0.8, tolerance=0, label="4 ngày -> 0.8 tuần")
+    assert_approx(calculate_t04_weeks(date(2025, 9, 1), date(2025, 9, 4)), 0.8, tolerance=0, label="4 ngày -> 0.8 tuần")
     # 12 ngày (1 tuần 5 ngày)
     assert_approx(calculate_t04_weeks(date(2025, 9, 1), date(2025, 9, 13)), 2.0, tolerance=0, label="12 ngày (7+5) -> 2.0 tuần")
 

@@ -63,7 +63,7 @@ border: 1px solid var(--md-outline-variant);
 ">
 <h2 style="margin: 0 0 12px 0; color: var(--md-primary); font-weight: 800;">Hệ thống Quản lý Chế độ Làm việc Nhà giáo T04</h2>
 <p style="margin: 0; color: var(--md-on-surface-variant); font-size: 16px; line-height: 1.6;">
-Hỗ trợ tự động hóa việc tính toán định mức giờ chuẩn giảng dạy và nghiên cứu khoa học (NCKH) theo quy chuẩn T04. Hệ thống tự động phân bổ định mức theo tỷ lệ ngày làm việc thực tế, xử lý các quy tắc miễn giảm và thực hiện quy đổi giờ theo Điều 12.
+Hỗ trợ tự động hóa việc tính toán định mức giờ dạy chuẩn và giờ nghiên cứu khoa học theo Quy định T04. Hệ thống tự động phân bổ định mức theo số ngày làm việc thực tế, tự động áp dụng các quy tắc miễn giảm và hỗ trợ quy đổi bù trừ giữa giờ dạy và giờ nghiên cứu khoa học.
 </p>
 </div>
 
@@ -133,7 +133,7 @@ Ghi nhận các hoạt động thực hiện (Giảng dạy, NCKH, Nghiên cứu
 </div>
 <h4 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; color: var(--md-on-surface);">Theo dõi & Quyết toán</h4>
 <p style="margin: 0; font-size: 14px; color: var(--md-on-surface-variant); line-height: 1.5;">
-Theo dõi mức độ hoàn thành tiến độ. Áp dụng cơ chế **Quy đổi Điều 12** để bù trừ giờ thừa/thiếu giữa Giảng dạy và NCKH khi đủ điều kiện.
+Áp dụng quy tắc bù trừ để tự động đối chiếu và chuyển đổi giờ thừa giữa hai nhiệm vụ Giảng dạy và Nghiên cứu khoa học khi đạt điều kiện tối thiểu.
 </p>
 </div>
 <div style="margin-top: 16px; font-size: 13px; color: var(--md-primary); font-weight: 600;">
@@ -156,7 +156,7 @@ Nguyên tắc cốt lõi của Quy định T04:
 <ul style="margin: 0; padding-left: 20px; color: var(--md-on-surface-variant); font-size: 14px; line-height: 1.6;">
 <li style="margin-bottom: 8px;"><strong>Tính toán theo tỷ lệ (Pro-rata):</strong> Khi nhà giáo thay đổi thông tin (ví dụ: được bổ nhiệm chức vụ quản lý giữa năm học, nghỉ thai sản, đi học), định mức giờ chuẩn sẽ được chia nhỏ thành từng giai đoạn và tính tỷ lệ chính xác theo số ngày thực tế.</li>
 <li style="margin-bottom: 8px;"><strong>Khấu trừ ngày làm việc đột xuất:</strong> Các ngày nghỉ bệnh, đi công tác dài ngày sẽ trực tiếp làm giảm số ngày làm việc định mức, từ đó giảm trừ tương ứng nghĩa vụ giờ dạy và nghiên cứu khoa học.</li>
-<li><strong>Bù trừ Điều 12:</strong> Giờ dạy thừa có thể quy đổi sang giờ NCKH, và ngược lại giờ NCKH thừa có thể dùng để bù cho giờ dạy thiếu, nhưng phải đáp ứng đầy đủ điều kiện quy định tối thiểu của chức danh hiện tại.</li>
+<li><strong>Bù trừ nghĩa vụ giảng dạy và nghiên cứu khoa học:</strong> Giờ giảng dạy thừa có thể quy đổi sang giờ nghiên cứu khoa học, và ngược lại giờ nghiên cứu khoa học thừa có thể dùng để bù đắp cho giờ giảng dạy còn thiếu, giúp nhà giáo hoàn thành tổng nghĩa vụ công tác trong năm học.</li>
 </ul>
 </div>
 """, unsafe_allow_html=True)

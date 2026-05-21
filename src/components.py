@@ -1,36 +1,64 @@
 import streamlit as st
 
-def render_status_bar(name, title, dept, roles_count, events_count):
+def render_status_bar(name, title, dept, roles_count_or_list, events_count_or_list):
+    if isinstance(roles_count_or_list, list):
+        roles = roles_count_or_list
+    elif isinstance(roles_count_or_list, (int, float)):
+        roles = [f"{roles_count_or_list} Chức vụ"] if roles_count_or_list > 0 else []
+    else:
+        roles = [str(roles_count_or_list)] if roles_count_or_list else []
+
+    if isinstance(events_count_or_list, list):
+        events = events_count_or_list
+    elif isinstance(events_count_or_list, (int, float)):
+        events = [f"{events_count_or_list} Sự kiện"] if events_count_or_list > 0 else []
+    else:
+        events = [str(events_count_or_list)] if events_count_or_list else []
+
+    roles_html = ""
+    if roles:
+        for r in roles:
+            roles_html += f"""<span class="md-chip md-chip-primary" style="margin-right: 4px; margin-bottom: 4px; display: inline-flex; align-items: center;"><span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">badge</span> {r}</span>"""
+    else:
+        roles_html = """<span class="md-chip" style="background-color: var(--md-surface-container-high); color: var(--md-on-surface-variant); opacity: 0.8; display: inline-flex; align-items: center;">Không giữ chức vụ</span>"""
+
+    events_html = ""
+    if events:
+        for e in events:
+            events_html += f"""<span class="md-chip md-chip-green" style="margin-right: 4px; margin-bottom: 4px; display: inline-flex; align-items: center;"><span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">event</span> {e}</span>"""
+    else:
+        events_html = """<span class="md-chip" style="background-color: var(--md-surface-container-high); color: var(--md-on-surface-variant); opacity: 0.8; display: inline-flex; align-items: center;">Không có sự kiện miễn giảm</span>"""
+
     st.markdown(f"""
-<div class="md-status-bar">
-    <div style="display: flex; gap: 32px; align-items: center;">
-        <div>
-            <div class="md-section-label">Nhà giáo</div>
-            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1.2rem; margin-top: 2px;">{name}</div>
-        </div>
-        <div style="border-left: 1px solid var(--md-outline-variant); height: 32px;"></div>
-        <div>
-            <div class="md-section-label">Chức danh</div>
-            <div style="color: var(--md-on-surface); font-weight: 600; font-size: 1rem; margin-top: 2px;">{title}</div>
-        </div>
-        <div style="border-left: 1px solid var(--md-outline-variant); height: 32px;"></div>
-        <div>
-            <div class="md-section-label">Đơn vị</div>
-            <div style="color: var(--md-on-surface); font-weight: 600; font-size: 1rem; margin-top: 2px;">{dept}</div>
-        </div>
-    </div>
-    <div style="display: flex; gap: 12px;">
-        <span class="md-chip md-chip-primary">
-            <span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">badge</span>
-            {roles_count} Chức vụ
-        </span>
-        <span class="md-chip md-chip-green">
-            <span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">event</span>
-            {events_count} Sự kiện
-        </span>
-    </div>
+<div class="md-status-bar" style="display: flex; flex-direction: column; gap: 12px; align-items: flex-start; width: 100%;">
+<div style="display: flex; gap: 32px; align-items: center; flex-wrap: wrap; width: 100%;">
+<div>
+<div class="md-section-label">Nhà giáo</div>
+<div style="color: var(--md-on-surface); font-weight: 700; font-size: 1.2rem; margin-top: 2px;">{name}</div>
 </div>
-    """, unsafe_allow_html=True)
+<div style="border-left: 1px solid var(--md-outline-variant); height: 32px;"></div>
+<div>
+<div class="md-section-label">Chức danh</div>
+<div style="color: var(--md-on-surface); font-weight: 600; font-size: 1rem; margin-top: 2px;">{title}</div>
+</div>
+<div style="border-left: 1px solid var(--md-outline-variant); height: 32px;"></div>
+<div>
+<div class="md-section-label">Đơn vị công tác</div>
+<div style="color: var(--md-on-surface); font-weight: 600; font-size: 1rem; margin-top: 2px;">{dept}</div>
+</div>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; width: 100%;">
+<div style="display: flex; align-items: center; gap: 4px; margin-right: 12px; flex-wrap: wrap;">
+<span style="font-size: 0.85rem; font-weight: 600; color: var(--md-on-surface-variant);">Chức vụ:</span>
+{roles_html}
+</div>
+<div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+<span style="font-size: 0.85rem; font-weight: 600; color: var(--md-on-surface-variant);">Miễn giảm hiện tại:</span>
+{events_html}
+</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 def render_empty_state(message):
@@ -239,13 +267,13 @@ def render_sidebar(active_page="home"):
         border-color: var(--md-primary-container) !important;
         box-shadow: 0 0 0 2px var(--md-primary-fixed) !important;
     }
-    .stSelectbox label, .stTextInput label, .stDateInput label, .stNumberInput label {
+    .stSelectbox label, .stTextInput label, .stDateInput label, .stNumberInput label, .stRadio label, .stMultiSelect label, .stSlider label {
         font-family: var(--font-family) !important;
-        font-size: 12px !important;
+        font-size: 14px !important;
         font-weight: 600 !important;
-        letter-spacing: 0.05em !important;
-        color: var(--md-on-surface-variant) !important;
-        text-transform: uppercase !important;
+        color: var(--md-on-surface) !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
     }
 
     .stTabs {
@@ -258,7 +286,11 @@ def render_sidebar(active_page="home"):
     }
     .stTabs button[data-baseweb="tab"] {
         font-family: var(--font-family) !important;
-        font-size: 18px !important;
+        font-size: 16px !important;
+    }
+    .stTabs button p {
+        font-size: 15px !important;
+        font-weight: 600 !important;
     }
 
     .stNumberInput input, .stMultiSelect div[data-baseweb="select"] > div {
@@ -279,17 +311,16 @@ def render_sidebar(active_page="home"):
     .md-chip {
         display: inline-flex !important;
         align-items: center !important;
-        padding: 4px 12px !important;
+        padding: 5px 14px !important;
         border-radius: var(--radius-full) !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.03em !important;
-        text-transform: uppercase !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-transform: none !important;
         white-space: nowrap !important;
     }
     .md-chip-primary {
         background-color: var(--md-primary-fixed) !important;
-        color: var(--md-on-primary-fixed-variant) !important;
+        color: var(--md-primary) !important;
     }
     .md-chip-green {
         background-color: var(--md-green-bg) !important;
@@ -304,8 +335,24 @@ def render_sidebar(active_page="home"):
         color: var(--md-amber) !important;
     }
     .md-chip-tertiary {
-        background-color: var(--md-tertiary-container) !important;
-        color: var(--md-on-primary) !important;
+        background-color: var(--md-secondary-container) !important;
+        color: var(--md-secondary) !important;
+    }
+    
+    .stButton button[aria-label="Xóa"],
+    .stButton button[aria-label*="Xóa"],
+    .stButton button[aria-label*="xóa"],
+    .stButton button[aria-label*="Xoá"],
+    .stButton button[aria-label*="xoá"] {
+        background-color: var(--md-red-bg) !important;
+        color: var(--md-red) !important;
+        border: 1px solid var(--md-red) !important;
+    }
+    .stButton button[aria-label="Xóa"]:hover,
+    .stButton button[aria-label*="Xóa"]:hover,
+    .stButton button[aria-label*="Xoá"]:hover {
+        background-color: var(--md-error-container) !important;
+        color: var(--md-on-error-container) !important;
     }
     .md-status-bar {
         background-color: var(--md-surface-container-low) !important;
@@ -407,13 +454,13 @@ def render_sidebar(active_page="home"):
     background-color: var(--md-primary-fixed);
     border-radius: var(--radius-md);
     font-size: 12px;
-    color: var(--md-on-primary-fixed-variant);
+    color: var(--md-primary);
     line-height: 1.5;
     display: flex;
     align-items: start;
     gap: 8px;
 ">
     <span class="material-symbols-outlined" style="font-size: 16px; margin-top: 1px;">info</span>
-    <div>Phiên bản 2.0 · Giao diện mới<br>Theme: Material Design 3</div>
+    <div>v2.0 — Hệ thống định mức T04</div>
 </div>
 """, unsafe_allow_html=True)

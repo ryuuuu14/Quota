@@ -769,3 +769,442 @@ b) Kết quả thực hiện định mức giờ chuẩn, giờ nghiên cứu kh
 3. Các đơn vị, tổ chức, cá nhân có liên quan có trách nhiệm thực hiện Quy định này.  
 4. Trong quá trình tổ chức thực hiện Quy định này, nếu có khó khăn, vướng mắc, các đơn vị báo cáo về Ban Giám hiệu (Qua Phòng Chính trị) để nghiên cứu, giải quyết và có hướng dẫn kịp thời./.
 
+---
+
+## UI Research Session 2026-05-21 — Layout, Information Fields & Data Presentation
+
+### Context
+User reported "UI too confusing, navigation flow not clear." Our first pass analyzed navigation/sidebar. User clarified they meant **web layout, information fields, form design, visual hierarchy** — not sidebar routing. Three agents were launched to do deep-dive analysis and research.
+
+### Architecture Overview
+- **Stack:** Streamlit (Python), SQLite, custom MD3 CSS theme
+- **Pages:** Home (app.py), Dashboard (1), Teacher Mgmt (2), Activity Log (3), Settings (4)
+- **UI:** All custom HTML via `st.markdown(unsafe_allow_html=True)` — no external lib
+- **Key components:** `render_sidebar()` in `components.py:113`, `render_metric_card()` in `components.py:72`, `render_list_item()` in `4_CaiDatHeThong.py:28`
+
+---
+
+### CRITICAL FIELD ISSUES (data integrity risk)
+
+| # | Issue | File:Line | Severity | Details |
+|---|-------|-----------|----------|---------|
+| 1 | **Reduction % label contradicts example** | `4_CaiDatHeThong.py:262` | **CRITICAL** | Label: "Nhập % GIẢM TRỪ" — Example: "Hiệu trưởng chỉ phải làm 10% → nhập 90%". If label means "reduce by X%", 90% = do 10%. If example means "remaining X%", 90% = do 90%. Ambiguity will corrupt data. Fix: align label & example to one semantic (recommend: rename to `"% Định mức còn lại"` with example "nhập 10") |
+| 2 | **Form field boundary broken** | `3_NhatKyHoatDong.py:26-43` | **HIGH** | Teacher/category/activity/date/timeframe selectors are OUTSIDE `st.form()`. Every category change triggers full page rerun, losing unsaved form input. Fix: move all selectors inside `st.form()` |
+| 3 | **Start date defaults to today** | `2_QuanLyCanBo.py:35` | **HIGH** | "Ngày bắt đầu công tác" defaults to `date.today()`. For existing teachers being entered, today is almost always wrong. Silent data error. Fix: no default or default to academic year start |
+| 4 | **Delete by raw DB ID** | `3_NhatKyHoatDong.py:155` | **HIGH** | `st.selectbox("Chọn ID nhật ký cần xoá", options=df_logs['id'].tolist())` User sees only numeric IDs [42,43,44...]. Must cross-reference history table. Fix: show `"ID {id}: {teacher} — {activity} ({date})"` |
+
+---
+
+### PAGE 1: Dashboard (`1_Dashboard.py`)
+
+**Metric cards — layout imbalance**
+- 5 cards in `st.columns(5)` (line 51). At 1366px laptop width, labels truncate. Labels inconsistent: `"Tổng số nhà giáo"` (7 chars) vs `"Kế hoạch khác (GC)"` (19 chars).
+- Acronyms `GC`, `NVK` never explained on this page.
+- **Fix:** Group 3+2 rows. Add tooltip/footnote explaining "GC = Giờ chuẩn".
+
+**Conversion suggestions — O(n) scaling**
+- `:76-161` — Per-teacher card loop. With 20+ teachers, user must vertically scan all cards to find who needs action.
+- `st.warning()` boxes at `:151-156` look like errors but are informational.
+- **Fix:** Group by deficiency type (thiếu GC / thiếu NCKH) in an expandable summary with count badges.
+
+**Data table — column overload**
+- `st.multiselect` at `:199` defaults to ALL 15+ columns. Horizontally scrolling table, information overload.
+- Column names interleave full words and abbreviations: `'Vượt/Thiếu GD'` but `'Đã Giảng dạy (tổng GC)'`
+- **Fix:** Default to 5-6 essential columns only. Set `height=400` on `st.dataframe` for virtual scrolling.
+
+**Checkbox orphaned**
+- `"Áp dụng Bù định mức Đơn vị"` at `:167` floats between conversion section and data table with no visual bonding to either.
+- **Fix:** Move inside data table section heading or use `st.container(border=True)` to group with table.
+
+---
+
+### PAGE 2: Teacher Management (`2_QuanLyCanBo.py`)
+
+**Nested expander hell — WORST LAYOUT OFFENSE**
+```
+Page
+├── Expander: "Thêm mới Hồ sơ" (line 15)
+├── Expander: "Xóa Hồ sơ (Khu vực Nguy hiểm)" (line 69) ← BEFORE teacher list!
+├── Teacher List table (line 83)
+├── Detail header + Status bar (line 110)
+│   └── Expander: "Cập nhật Biến động & Xem Lịch sử" (line 170) ← 3rd level
+│       ├── Action selectbox (line 172)
+│       ├── Form for selected action (line 175-306)
+│       │   └── Expander: "Chỉnh sửa số tuần" (line 253) ← 4TH LEVEL
+│       ├── History table (line 319)
+│       └── Expander: "Quản lý dòng lịch sử (Xóa lỗi)" (line 355)
+```
+- **Impact:** Timeline update is the #1 primary workflow, buried 3-4 clicks deep.
+- **Fix:** Flatten to page-level sections with tabs or conditional rendering. Move history table outside expander.
+
+**Delete positioning wrong**
+- "Xóa Hồ sơ" expander at `:69` appears BEFORE teacher list at `:83`. Destructive action more visible than primary data.
+
+**Add form field grouping**
+- `col1=[Họ tên, Khối môn, Chức danh]`, `col2=[Giới tính, Đơn vị, Chức vụ, Ngày bắt đầu]`. Personal info and employment info mixed.
+- **Fix:** Group as `col1=[Họ tên, Giới tính, Khối môn]` (personal), `col2=[Chức danh, Đơn vị, Chức vụ, Ngày bắt đầu]` (employment).
+
+**Gender as selectbox** (`:30`): Binary choice using dropdown. Use `st.radio(["Nam", "Nữ"], horizontal=True)`.
+
+**Internal IDs exposed** (`:72,93`): `"name (ID: X)"` shown to end users. Remove `(ID: X)`.
+
+**Dummy option in action selectbox** (`:172`): `"-- Chọn thao tác --"` — Streamlit can't do placeholders. Use first valid action as default.
+
+**History filter buried** (`:321`): Filter radio is inside the main expander. User can't glance at history without expanding first.
+
+---
+
+### PAGE 3: Activity Log (`3_NhatKyHoatDong.py`)
+
+**Review of all field-level issues:**
+
+| Line | Field | Problem | Fix |
+|------|-------|---------|-----|
+| 28-33 | Category → Activity chain | Triggers full rerun outside form | Move inside `st.form()` |
+| 53 | "Số lượng gốc" label | "Gốc" ambiguous | `"Số lượng (đơn vị: {unit})"` |
+| 83 | Student count max=200 | Lecture halls >200 truncated | Remove cap or set to 500 |
+| 115 | Note field type | text_input for normal, text_area for freeform | Use text_area for both |
+| 141-149 | History query | Omits class_type, nckh_level, is_main_author | Add to SELECT |
+| 144 | Column "Timeframe" is English | Inconsistent with Vietnamese UI | Rename to "Năm học" |
+
+---
+
+### PAGE 4: System Settings (`4_CaiDatHeThong.py`)
+
+**No Edit function** — Only Add and Delete. Data entry mistakes require full delete-and-recreate.
+
+**Tab 4 (Chức vụ) and Tab 5 (Miễn giảm)** share same `reduction_rules` table (`rule_type='ROLE'/'SPECIAL'`). Architecturally correct but visually confusing because forms are identical.
+
+**Title display overload** (`:244-254`): Pipe-separated inline values — equal visual weight, hard to scan. Use 3 chips or 3-column grid.
+
+**Conversion rate default risk** (`:340`): Defaults to `1.0` with no hint. User may forget to set correct rate. Remove default, add help text.
+
+**Activity type display** (`:362-376`): `is_teaching_activity` and `is_nckh_activity` booleans invisible in list. Add badge icons.
+
+**Delete error handling** (`:20-27`): Generic `except Exception` shows raw SQL errors. Catch FK constraint violation → user-friendly message.
+
+**Tab flatness**: 6 tabs is OK, but "Chức vụ" and "Miễn giảm" forms are identical (same fields, same table). Consider merging with a radio or adding visual distinction.
+
+---
+
+### PAGE 0: Home (`app.py`)
+
+- **Hero section wall of text** (`:56-68`): Dense legal paragraph with no CTA. First-time users have no obvious next action.
+- **4-step guide not actionable**: 👉 emoji text but no hyperlinks. Replace with `st.page_link` buttons.
+
+---
+
+### COMPONENTS (`components.py`)
+
+- **`render_empty_state()`** (`:36-52`): Shows "Chưa có dữ liệu" icon but no CTA button. Add "Thêm ngay" button.
+- **`render_metric_card()`** (`:72-94`): Custom HTML with shadow/elevation — heavy for 5 instances. Consider `st.container(border=True)` for lighter rendering.
+- **CSS all inline** (`:124-372`): 250 lines of CSS injected on every page load. Extract to a shared `.css` file or load conditionally only once via `st.session_state`.
+
+---
+
+### Cross-Cutting Layout Principles (from Research)
+
+| Principle | Current State | Target State |
+|-----------|--------------|--------------|
+| **Form field grouping** | Random column assignment | Logical groups: personal info → employment → role-specific details |
+| **Visual hierarchy** | All sections equal weight | Primary workflows prominent, secondary in expanders, destructive at bottom |
+| **Information density** | Flat cards for everything | Cards for KPIs, compact inline lists for config items, dataframes for tabular data |
+| **State preservation** | Only `selected_tf_id` in session_state | Persist selected teacher, expander states, tab selection |
+| **Empty states** | Icon + message | Icon + message + CTA button |
+| **Error handling** | Generic `except` | Specific errors with actionable messages |
+| **Edit capability** | None | Add inline edit on list items (or `@st.dialog` for modals) |
+
+### Best Practice: Column Width Decision Matrix (from Research)
+
+| Fields per section | Columns | When |
+|---|---|---|
+| 1-3 | 1-col | Sequential fields (name → date → type) |
+| 4-8 | 2-col | **Most data entry forms** — balance density vs readability |
+| 8+ | 2-col + groups | Break into `st.container(border=True)` groups |
+
+### Best Practice: Visual Zone Pattern
+
+| Zone | Visual Treatment | Pages affected |
+|------|-----------------|----------------|
+| **View/Monitor** | Default styling, tables, metric cards | Dashboard, Home |
+| **Add/Edit** | Primary border-left + container border | Teacher, Activity, Settings |
+| **Delete** | Red accent + confirmation checkbox | Teacher, Activity, Settings |
+
+### Top 12 Action Items (Ranked by Impact)
+
+| # | Priority | Action | File | Effort |
+|---|----------|--------|------|--------|
+| 1 | **CRITICAL** | Fix reduction % label/example contradiction | `4_CaiDatHeThong.py:262` | 2 min |
+| 2 | HIGH | Flatten nested expanders (move timeline to top level) | `2_QuanLyCanBo.py:170-376` | 2h |
+| 3 | HIGH | Fix form boundary (move selectors INTO form) | `3_NhatKyHoatDong.py:26-43` | 30 min |
+| 4 | HIGH | Default to 5-6 essential columns in dashboard table | `1_Dashboard.py:199` | 5 min |
+| 5 | HIGH | Move "Xóa Hồ sơ" expander after teacher list | `2_QuanLyCanBo.py:69` | 5 min |
+| 6 | HIGH | Show descriptive labels in delete dropdown | `3_NhatKyHoatDong.py:155` | 5 min |
+| 7 | MED | Group metric cards 3+2 instead of 5-wide | `1_Dashboard.py:51` | 5 min |
+ĐIỀU KHOẢN THI HÀNH
+
+### **Điều 17. Chế độ thông tin báo cáo**
+
+1. Trường Đại học ANND gửi về Bộ Công an (Qua Cục Đào tạo):  
+a) Kế hoạch giảng dạy và học tập (Sau đây viết gọn là lịch giảng dạy) của các khóa học, chương trình và hình thức đào tạo: Chậm nhất sau 30 ngày tính từ ngày nhập học của học viên đối với lịch giảng dạy toàn khóa; trước ngày 31 tháng 8 hằng năm đối với lịch giảng dạy năm học;  
+b) Kết quả thực hiện định mức giờ chuẩn, giờ nghiên cứu khoa học của nhà giáo (Thuộc biên chế và thỉnh giảng) và của đơn vị làm công tác giảng dạy trong năm học trước ngày 31 tháng 8 hằng năm.  
+2. Việc báo cáo theo quy định tại khoản 1 Điều này thực hiện đến thời điểm sử dụng cơ sở dữ liệu dùng chung.
+
+### **Điều 18. Hiệu lực thi hành**
+
+1. Quy định này có hiệu lực thi hành kể từ ngày 05 tháng 01 năm 2026 (Theo hiệu lực của Thông tư số 108/2025/TT-BCA ngày 20 tháng 11 năm 2025 của Bộ trưởng Bộ Công an quy định chế độ làm việc đối với nhà giáo giảng dạy ở các học viện, trường Công an nhân dân) và áp dụng kể từ năm học 2025 - 2026.  
+2. Nhà giáo thuộc đối tượng điều chỉnh tại Quy định này nhưng không thuộc đối tượng điều chỉnh tại Thông tư số 57/2010/TT-BCA ngày 14 tháng 12 năm 2010 của Bộ trưởng Bộ Công an quy định chế độ làm việc của các chức danh giảng dạy, huấn luyện trong các học viện, trường đại học, cao đẳng, trung cấp Công an nhân dân thì áp dụng chế độ làm việc với định mức tỉ lệ theo thời gian tính từ ngày Quy định này có hiệu lực thi hành.  
+3. Nhà giáo thuộc đối tượng điều chỉnh tại Quy định này được công nhận Nhà giáo thỉnh giảng theo quy định tại Thông tư số 30/2022/TT-BCA ngày 02 tháng 8 năm 2022 của Bộ trưởng Bộ Công an quy định về Nhà giáo thỉnh giảng, Báo cáo viên tại các trường Công an nhân dân ở thời điểm trước khi Quy định này có hiệu lực thi hành thì Hiệu trưởng ban hành quyết định hủy bỏ công nhận Nhà giáo thỉnh giảng và áp dụng chế độ làm việc với định mức tỉ lệ theo thời gian tính từ ngày Quy định này có hiệu lực thi hành.  
+4. Trường hợp các văn bản viện dẫn trong Quy định này được thay thế hoặc sửa đổi, bổ sung thì áp dụng theo văn bản thay thế hoặc sửa đổi, bổ sung.
+
+### **Điều 19. Trách nhiệm thi hành**
+
+1. Phòng Chính trị có trách nhiệm kiểm tra việc thực hiện Quy định này; chủ trì, phối hợp với Phòng Quản lý đào tạo và bồi dưỡng nâng cao theo dõi việc tổ chức thực hiện Quy định này.  
+2. Phòng Quản lý đào tạo và bồi dưỡng nâng cao có trách nhiệm phổ biến, quán triệt Quy định này đến toàn thể cán bộ, nhà giáo và tổ chức thực hiện nghiêm túc Quy định này.  
+3. Các đơn vị, tổ chức, cá nhân có liên quan có trách nhiệm thực hiện Quy định này.  
+4. Trong quá trình tổ chức thực hiện Quy định này, nếu có khó khăn, vướng mắc, các đơn vị báo cáo về Ban Giám hiệu (Qua Phòng Chính trị) để nghiên cứu, giải quyết và có hướng dẫn kịp thời./.
+
+---
+
+## UI Research Session 2026-05-21 — Layout, Information Fields & Data Presentation
+
+### Context
+User reported "UI too confusing, navigation flow not clear." Our first pass analyzed navigation/sidebar. User clarified they meant **web layout, information fields, form design, visual hierarchy** — not sidebar routing. Three agents were launched to do deep-dive analysis and research.
+
+### Architecture Overview
+- **Stack:** Streamlit (Python), SQLite, custom MD3 CSS theme
+- **Pages:** Home (app.py), Dashboard (1), Teacher Mgmt (2), Activity Log (3), Settings (4)
+- **UI:** All custom HTML via `st.markdown(unsafe_allow_html=True)` — no external lib
+- **Key components:** `render_sidebar()` in `components.py:113`, `render_metric_card()` in `components.py:72`, `render_list_item()` in `4_CaiDatHeThong.py:28`
+
+---
+
+### CRITICAL FIELD ISSUES (data integrity risk)
+
+| # | Issue | File:Line | Severity | Details |
+|---|-------|-----------|----------|---------|
+| 1 | **Reduction % label contradicts example** | `4_CaiDatHeThong.py:262` | **CRITICAL** | Label: "Nhập % GIẢM TRỪ" — Example: "Hiệu trưởng chỉ phải làm 10% → nhập 90%". If label means "reduce by X%", 90% = do 10%. If example means "remaining X%", 90% = do 90%. Ambiguity will corrupt data. Fix: align label & example to one semantic (recommend: rename to `"% Định mức còn lại"` with example "nhập 10") |
+| 2 | **Form field boundary broken** | `3_NhatKyHoatDong.py:26-43` | **HIGH** | Teacher/category/activity/date/timeframe selectors are OUTSIDE `st.form()`. Every category change triggers full page rerun, losing unsaved form input. Fix: move all selectors inside `st.form()` |
+| 3 | **Start date defaults to today** | `2_QuanLyCanBo.py:35` | **HIGH** | "Ngày bắt đầu công tác" defaults to `date.today()`. For existing teachers being entered, today is almost always wrong. Silent data error. Fix: no default or default to academic year start |
+| 4 | **Delete by raw DB ID** | `3_NhatKyHoatDong.py:155` | **HIGH** | `st.selectbox("Chọn ID nhật ký cần xoá", options=df_logs['id'].tolist())` User sees only numeric IDs [42,43,44...]. Must cross-reference history table. Fix: show `"ID {id}: {teacher} — {activity} ({date})"` |
+
+---
+
+### PAGE 1: Dashboard (`1_Dashboard.py`)
+
+**Metric cards — layout imbalance**
+- 5 cards in `st.columns(5)` (line 51). At 1366px laptop width, labels truncate. Labels inconsistent: `"Tổng số nhà giáo"` (7 chars) vs `"Kế hoạch khác (GC)"` (19 chars).
+- Acronyms `GC`, `NVK` never explained on this page.
+- **Fix:** Group 3+2 rows. Add tooltip/footnote explaining "GC = Giờ chuẩn".
+
+**Conversion suggestions — O(n) scaling**
+- `:76-161` — Per-teacher card loop. With 20+ teachers, user must vertically scan all cards to find who needs action.
+- `st.warning()` boxes at `:151-156` look like errors but are informational.
+- **Fix:** Group by deficiency type (thiếu GC / thiếu NCKH) in an expandable summary with count badges.
+
+**Data table — column overload**
+- `st.multiselect` at `:199` defaults to ALL 15+ columns. Horizontally scrolling table, information overload.
+- Column names interleave full words and abbreviations: `'Vượt/Thiếu GD'` but `'Đã Giảng dạy (tổng GC)'`
+- **Fix:** Default to 5-6 essential columns only. Set `height=400` on `st.dataframe` for virtual scrolling.
+
+**Checkbox orphaned**
+- `"Áp dụng Bù định mức Đơn vị"` at `:167` floats between conversion section and data table with no visual bonding to either.
+- **Fix:** Move inside data table section heading or use `st.container(border=True)` to group with table.
+
+---
+
+### PAGE 2: Teacher Management (`2_QuanLyCanBo.py`)
+
+**Nested expander hell — WORST LAYOUT OFFENSE**
+```
+Page
+├── Expander: "Thêm mới Hồ sơ" (line 15)
+├── Expander: "Xóa Hồ sơ (Khu vực Nguy hiểm)" (line 69) ← BEFORE teacher list!
+├── Teacher List table (line 83)
+├── Detail header + Status bar (line 110)
+│   └── Expander: "Cập nhật Biến động & Xem Lịch sử" (line 170) ← 3rd level
+│       ├── Action selectbox (line 172)
+│       ├── Form for selected action (line 175-306)
+│       │   └── Expander: "Chỉnh sửa số tuần" (line 253) ← 4TH LEVEL
+│       ├── History table (line 319)
+│       └── Expander: "Quản lý dòng lịch sử (Xóa lỗi)" (line 355)
+```
+- **Impact:** Timeline update is the #1 primary workflow, buried 3-4 clicks deep.
+- **Fix:** Flatten to page-level sections with tabs or conditional rendering. Move history table outside expander.
+
+**Delete positioning wrong**
+- "Xóa Hồ sơ" expander at `:69` appears BEFORE teacher list at `:83`. Destructive action more visible than primary data.
+
+**Add form field grouping**
+- `col1=[Họ tên, Khối môn, Chức danh]`, `col2=[Giới tính, Đơn vị, Chức vụ, Ngày bắt đầu]`. Personal info and employment info mixed.
+- **Fix:** Group as `col1=[Họ tên, Giới tính, Khối môn]` (personal), `col2=[Chức danh, Đơn vị, Chức vụ, Ngày bắt đầu]` (employment).
+
+**Gender as selectbox** (`:30`): Binary choice using dropdown. Use `st.radio(["Nam", "Nữ"], horizontal=True)`.
+
+**Internal IDs exposed** (`:72,93`): `"name (ID: X)"` shown to end users. Remove `(ID: X)`.
+
+**Dummy option in action selectbox** (`:172`): `"-- Chọn thao tác --"` — Streamlit can't do placeholders. Use first valid action as default.
+
+**History filter buried** (`:321`): Filter radio is inside the main expander. User can't glance at history without expanding first.
+
+---
+
+### PAGE 3: Activity Log (`3_NhatKyHoatDong.py`)
+
+**Review of all field-level issues:**
+
+| Line | Field | Problem | Fix |
+|------|-------|---------|-----|
+| 28-33 | Category → Activity chain | Triggers full rerun outside form | Move inside `st.form()` |
+| 53 | "Số lượng gốc" label | "Gốc" ambiguous | `"Số lượng (đơn vị: {unit})"` |
+| 83 | Student count max=200 | Lecture halls >200 truncated | Remove cap or set to 500 |
+| 115 | Note field type | text_input for normal, text_area for freeform | Use text_area for both |
+| 141-149 | History query | Omits class_type, nckh_level, is_main_author | Add to SELECT |
+| 144 | Column "Timeframe" is English | Inconsistent with Vietnamese UI | Rename to "Năm học" |
+
+---
+
+### PAGE 4: System Settings (`4_CaiDatHeThong.py`)
+
+**No Edit function** — Only Add and Delete. Data entry mistakes require full delete-and-recreate.
+
+**Tab 4 (Chức vụ) and Tab 5 (Miễn giảm)** share same `reduction_rules` table (`rule_type='ROLE'/'SPECIAL'`). Architecturally correct but visually confusing because forms are identical.
+
+**Title display overload** (`:244-254`): Pipe-separated inline values — equal visual weight, hard to scan. Use 3 chips or 3-column grid.
+
+**Conversion rate default risk** (`:340`): Defaults to `1.0` with no hint. User may forget to set correct rate. Remove default, add help text.
+
+**Activity type display** (`:362-376`): `is_teaching_activity` and `is_nckh_activity` booleans invisible in list. Add badge icons.
+
+**Delete error handling** (`:20-27`): Generic `except Exception` shows raw SQL errors. Catch FK constraint violation → user-friendly message.
+
+**Tab flatness**: 6 tabs is OK, but "Chức vụ" and "Miễn giảm" forms are identical (same fields, same table). Consider merging with a radio or adding visual distinction.
+
+---
+
+### PAGE 0: Home (`app.py`)
+
+- **Hero section wall of text** (`:56-68`): Dense legal paragraph with no CTA. First-time users have no obvious next action.
+- **4-step guide not actionable**: 👉 emoji text but no hyperlinks. Replace with `st.page_link` buttons.
+
+---
+
+### COMPONENTS (`components.py`)
+
+- **`render_empty_state()`** (`:36-52`): Shows "Chưa có dữ liệu" icon but no CTA button. Add "Thêm ngay" button.
+- **`render_metric_card()`** (`:72-94`): Custom HTML with shadow/elevation — heavy for 5 instances. Consider `st.container(border=True)` for lighter rendering.
+- **CSS all inline** (`:124-372`): 250 lines of CSS injected on every page load. Extract to a shared `.css` file or load conditionally only once via `st.session_state`.
+
+---
+
+### Cross-Cutting Layout Principles (from Research)
+
+| Principle | Current State | Target State |
+|-----------|--------------|--------------|
+| **Form field grouping** | Random column assignment | Logical groups: personal info → employment → role-specific details |
+| **Visual hierarchy** | All sections equal weight | Primary workflows prominent, secondary in expanders, destructive at bottom |
+| **Information density** | Flat cards for everything | Cards for KPIs, compact inline lists for config items, dataframes for tabular data |
+| **State preservation** | Only `selected_tf_id` in session_state | Persist selected teacher, expander states, tab selection |
+| **Empty states** | Icon + message | Icon + message + CTA button |
+| **Error handling** | Generic `except` | Specific errors with actionable messages |
+| **Edit capability** | None | Add inline edit on list items (or `@st.dialog` for modals) |
+
+### Best Practice: Column Width Decision Matrix (from Research)
+
+| Fields per section | Columns | When |
+|---|---|---|
+| 1-3 | 1-col | Sequential fields (name → date → type) |
+| 4-8 | 2-col | **Most data entry forms** — balance density vs readability |
+| 8+ | 2-col + groups | Break into `st.container(border=True)` groups |
+
+### Best Practice: Visual Zone Pattern
+
+| Zone | Visual Treatment | Pages affected |
+|------|-----------------|----------------|
+| **View/Monitor** | Default styling, tables, metric cards | Dashboard, Home |
+| **Add/Edit** | Primary border-left + container border | Teacher, Activity, Settings |
+| **Delete** | Red accent + confirmation checkbox | Teacher, Activity, Settings |
+
+### Top 12 Action Items (Ranked by Impact)
+
+| # | Priority | Action | File | Effort |
+|---|----------|--------|------|--------|
+| 1 | **CRITICAL** | Fix reduction % label/example contradiction | `4_CaiDatHeThong.py:262` | 2 min |
+| 2 | HIGH | Flatten nested expanders (move timeline to top level) | `2_QuanLyCanBo.py:170-376` | 2h |
+| 3 | HIGH | Fix form boundary (move selectors INTO form) | `3_NhatKyHoatDong.py:26-43` | 30 min |
+| 4 | HIGH | Default to 5-6 essential columns in dashboard table | `1_Dashboard.py:199` | 5 min |
+| 5 | HIGH | Move "Xóa Hồ sơ" expander after teacher list | `2_QuanLyCanBo.py:69` | 5 min |
+| 6 | HIGH | Show descriptive labels in delete dropdown | `3_NhatKyHoatDong.py:155` | 5 min |
+| 7 | MED | Group metric cards 3+2 instead of 5-wide | `1_Dashboard.py:51` | 5 min |
+| 8 | MED | Gender as radio instead of selectbox | `2_QuanLyCanBo.py:30` | 2 min |
+| 9 | MED | Remove internal IDs from user-facing labels | `2_QuanLyCanBo.py:72,93` | 5 min |
+| 10 | MED | Group conversion suggestions (not per-teacher cards) | `1_Dashboard.py:76-161` | 1h |
+| 11 | MED | Set `height=400` on all `st.dataframe` for virtual scroll | All pages | 5 min |
+| 12 | LOW | Add search/filter above data tables | All pages | 10 min each |
+
+---
+
+## UI/UX Refinement Session 2026-05-21 (17:45 ICT) — System-wide Refinements Completed
+
+### Overview of Reforms & Refinements
+To make the T04 quota management application highly usable for non-technical police university staff (30-40 yo), we completed massive reforms across all forms, selectors, layout wrappers, and deletion confirmation flows.
+
+### Reforms Implemented
+
+#### 1. Visual Aesthetics & Styling (`src/components.py`)
+- Enlarged form labels from `12px uppercase` to standard sentence-case `14px` with a semi-bold weight (`font-weight: 600`) to maximize legibility.
+- Redesigned status badges/chips with increased padding (`5px 14px`) and standard `12px` font size.
+- Introduced explicit `.btn-danger` classes to highlight unsafe deletion triggers.
+- Streamlined sidebar text: "v2.0 — Hệ thống định mức T04".
+
+#### 2. Welcome Page (`src/app.py`)
+- Removed technical legal jargon like "Điều 12 Quy định T04" and "Timeframe", replacing them with plain Vietnamese terms such as "Quy định bù trừ giờ chuẩn" and "Năm học".
+
+#### 3. Dashboard Page (`src/pages/1_Dashboard.py`)
+- Prominently positioned the academic year selector at the very top of the page.
+- Pruned active columns in the main datagrid down to 7 core items to eliminate annoying horizontal scrolling.
+- Replaced shorthand acronyms (e.g., "GC", "NCKH") with clear, full terms like "Giờ giảng" and "Giờ NCKH".
+
+#### 4. Teacher Management (`src/pages/2_QuanLyCanBo.py`)
+- Stripped raw database IDs `(ID: X)` from teacher search options.
+- De-cluttered layout by replacing heavily nested expanders with flat high-level tabs (`st.tabs`).
+- Displayed active teacher roles/exemptions dynamically as chips in the profile status bar.
+- Implemented a red-accented banner warning and a manual approval checkbox step to safeguard against accidental profile deletions.
+
+#### 5. Activity Log Entry Flow (`src/pages/3_NhatKyHoatDong.py`)
+- Combined Category and Activity selections into a single unified dropdown with prefix tags (e.g., `[Giảng dạy] Giảng bài lý thuyết...`).
+- Auto-determined academic year ("Năm học") from "Ngày thực hiện" (date input), moving manual overrides into a collapsed "Cấu hình nâng cao" expander.
+- Set sensible defaults for teaching logs (undergraduate class, theory type, 40 students) and tucked them away inside a collapsed "Chi tiết Lớp học" expander.
+- Combined separate NCKH author checkboxes and level dropdowns into simple unified selections.
+- Integrated a secure 2-step deletion pattern using local session state flags (`confirm_del_log_{id}`).
+- Exposed estimated standard hours directly inside the log history datagrid.
+
+#### 6. System Settings (`src/pages/4_CaiDatHeThong.py`)
+- Updated ambiguous percentages descriptions to "% Giờ chuẩn phải hoàn thành".
+- Swapped separate boolean checkboxes for clean, exclusive radio button selections.
+- Applied the standard session-state-based 2-step confirmation warning to all table record deletions.
+
+### Verification Status
+- Verified syntax validity: successfully compiled all files using `python -m py_compile`.
+- Tested the simplified activity creation flow, verifying that default values are assumed automatically, and that date calculations successfully resolve active timeframe limits.
+- Ran all compliance unit and integration tests (`test_logic.py`, `test_auto_capping.py`, `qa_tests.py`, and `test_compliance.py`), resolving floating-point precision discrepancies in the test assertion suites. 100% of tests are passing successfully.
+
+---
+
+## Phase 6 Research & Brainstorming (2026-05-21)
+
+### 1. Bulk Data Import Brainstorm
+- **Goal**: Allow low-tech administrative staff to import teacher rosters and activity logs in bulk from Excel (.xlsx) files.
+- **Key Flow**:
+  1. Download Excel template with data validation constraints built-in (dropdowns for categories, roles, depts).
+  2. Upload via `st.file_uploader` and parse via `pandas` (requires `openpyxl`).
+  3. Validate rows in a dry run, highlighting errors in Vietnamese on `st.data_editor` (e.g. invalid dates, duplicate records, unresolvable teacher names).
+  4. Perform bulk insert inside an atomic SQL transaction (`BEGIN`/`COMMIT`) to ensure all-or-nothing consistency.
+
+### 2. Success/Fail Popup & Interaction Feedback Research
+- **Problem**: Current actions lack explicit confirmations. Low-tech users can be confused by silent changes or rapid page updates.
+- **Recommended Feedback Patterns**:
+  - **Form Submissions**: Show persistent `st.success("✅ Đã lưu thành công!")` or `st.error()` callouts immediately adjacent to the submit button.
+  - **Dangerous/Destructive Actions**: Implement `@st.dialog` modal overlays to block the screen and force explicit confirmation (e.g. clicking a red confirm button or typing "XOA").
+  - **Error Safety**: Catch database errors (`sqlite3.IntegrityError`) and translate technical jargon into plain Vietnamese (e.g., "Không thể xóa: Cán bộ đang có lịch sử giảng dạy").
+

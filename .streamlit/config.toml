@@ -10,3 +10,7 @@ showErrorDetails = true
 
 [theme]
 base = "light"
+primaryColor = "#003f87"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f2f3fc"
+textColor = "#191c21"
