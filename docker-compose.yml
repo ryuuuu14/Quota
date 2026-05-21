@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount a volume for the database so data persists across container restarts
+      - ./data:/app/data
+    environment:
+      # Pass the database path as an environment variable to override the default location
+      - DB_PATH=/app/data/database.sqlite
+    restart: always

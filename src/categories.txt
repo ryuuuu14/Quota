@@ -1,0 +1,1 @@
+[('Giảng dạy', 1, 0), ('Bồi dưỡng', 1, 0), ('Nhiệm vụ khác', 0, 0), ('NCKH', 0, 1), ('NCKH - Hướng dẫn thi đấu', 0, 1)]

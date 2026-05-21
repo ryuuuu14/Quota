@@ -1,0 +1,20 @@
+{
+  "name": "projects/16682207781060267797",
+  "projectId": "16682207781060267797",
+  "title": "T04 ANND — Quản lý Chế độ Làm việc Nhà giáo",
+  "visibility": "PRIVATE",
+  "projectType": "PROJECT_DESIGN",
+  "origin": "STITCH",
+  "deviceType": "DESKTOP",
+  "designTheme": {
+    "colorMode": "LIGHT",
+    "font": "OUTFIT",
+    "roundness": "ROUND_EIGHT",
+    "customColor": "#0056B3",
+    "saturation": 2
+  },
+  "screens": {},
+  "metadata": {
+    "userRole": "OWNER"
+  }
+}
