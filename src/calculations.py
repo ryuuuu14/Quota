@@ -73,7 +73,7 @@ def calculate_activity_hours(log_row, activity_type_row):
                 if 41 <= log_row['student_count'] <= 60: multiplier = 1.2
                 elif 61 <= log_row['student_count'] <= 80: multiplier = 1.4
                 elif log_row['student_count'] > 80: multiplier = 1.5
-            elif log_row['class_type'] == 'Ngoại ngữ/CNTT':
+            elif log_row['class_type'] in ['Ngoại ngữ/CNTT', 'Kỹ thuật hình sự']:
                 if 26 <= log_row['student_count'] <= 40: multiplier = 1.2
                 elif 41 <= log_row['student_count'] <= 60: multiplier = 1.4
                 elif log_row['student_count'] > 60: multiplier = 1.5
@@ -400,6 +400,18 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
                     point3_leaves.append((r, rule))
                     
         # Apply Point (2) leaves — merge overlapping intervals to avoid double-count
+        max_flat_nckh_pct = 0.0
+        for r, rule in point2_leaves:
+            nckh_pct = rule['nckh_reduction_pct']
+            if nckh_pct > 0:
+                r_start_full = pd.to_datetime(r['start_date'])
+                r_end_full = pd.to_datetime(r['end_date'])
+                if nckh_pct == 60.0:
+                    if r_start_full < pd.to_datetime(tf_start) or r_end_full > pd.to_datetime(tf_end):
+                        nckh_pct = 30.0
+                if nckh_pct > max_flat_nckh_pct:
+                    max_flat_nckh_pct = nckh_pct
+
         for seg in seg_data:
             seg_intervals = []
             for r, rule in point2_leaves:
@@ -443,12 +455,9 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
                     inter_weeks = calculate_t04_weeks(m_start, m_end, holidays_list)
                 if seg['weeks'] > 0:
                     red_gc = seg['req_gc'] * (inter_weeks / seg['weeks'])
-                    red_nckh = seg['req_nckh'] * (rule['nckh_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
                 else:
                     red_gc = 0.0
-                    red_nckh = 0.0
                 total_reduced_gc += red_gc
-                total_reduced_nckh += red_nckh
 
         for r, rule in point2_leaves:
             desc = f"{rule['name']} ({rule['rule_type']})"
@@ -546,6 +555,13 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             if desc not in applied_reductions:
                 applied_reductions.append(desc)
                 
+        if max_flat_nckh_pct > 0:
+            flat_red_nckh = total_required_nckh * (max_flat_nckh_pct / 100.0)
+            total_reduced_nckh += flat_red_nckh
+            desc_nckh = f"Giảm NCKH theo năm ({max_flat_nckh_pct}%)"
+            if desc_nckh not in applied_reductions:
+                applied_reductions.append(desc_nckh)
+
         total_weeks = sum(s['weeks'] for s in seg_data) if seg_data else 0
         if total_weeks > std_weeks:
             cap = std_weeks / total_weeks
@@ -586,6 +602,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
     gc_dict = {}
     nckh_dict = {}
     nvk_dict = {}  # Hoạt động chuyên môn + Bồi dưỡng — tracked separately for display, counts toward GC
+    direct_teaching_dict = {}
     
     # Per Điều 9 TT108/2025: Hoạt động chuyên môn + Bồi dưỡng count toward GC quota
     GC_CATEGORIES = {'Giảng dạy', 'Hoạt động chuyên môn', 'Bồi dưỡng'}
@@ -600,10 +617,12 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             gc_dict[tid] = group[group['category'].isin(GC_CATEGORIES)]['calculated_hours'].sum()
             nckh_dict[tid] = group[group['category'].isin(NCKH_CATEGORIES)]['calculated_hours'].sum()
             nvk_dict[tid] = group[group['category'].isin({'Hoạt động chuyên môn', 'Bồi dưỡng'})]['calculated_hours'].sum()
+            direct_teaching_dict[tid] = group[group['category'] == 'Giảng dạy']['calculated_hours'].sum()
             
     df_out['tổng_gc_da_thuc_hien'] = df_out['id'].map(gc_dict).fillna(0)
     df_out['nckh_da_thuc_hien'] = df_out['id'].map(nckh_dict).fillna(0)
     df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)  # HĐCM + Bồi dưỡng hours (subset of gc)
+    df_out['giang_day_truc_tiep'] = df_out['id'].map(direct_teaching_dict).fillna(0)
     
     df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - (df_out['dinh_muc_gc_phai_thuc_hien'] - df_out['so_gio_duoc_mien_giam'])
     df_out['nckh_vuot_thieu'] = df_out['nckh_da_thuc_hien'] - df_out['dinh_muc_nckh_phai_thuc_hien']
@@ -680,7 +699,7 @@ def get_conversion_limits(teacher_id, timeframe_id):
         # so this rule means "You must have actually taught at least 50% of the norm before you can compensate the rest".
         min_required_teaching = row['dinh_muc_gc_phai_thuc_hien'] * 0.5
 
-        if row['tổng_gc_da_thuc_hien'] >= min_required_teaching:
+        if row['giang_day_truc_tiep'] >= min_required_teaching:
             nckh_needed = gc_deficit * 3
             if nckh_excess >= nckh_needed:
                 res['max_nckh_to_spend'] = nckh_needed
@@ -690,7 +709,7 @@ def get_conversion_limits(teacher_id, timeframe_id):
                 res['gc_gained'] = nckh_excess / 3.0
         else:
             res['can_convert_nckh_to_gc'] = False
-            res['warning'] = f"Không đủ điều kiện: Số giờ giảng trực tiếp ({row['tổng_gc_da_thuc_hien']:.1f}) chưa đạt 50% định mức ({min_required_teaching:.1f})."
+            res['warning'] = f"Không đủ điều kiện: Số giờ giảng trực tiếp ({row['giang_day_truc_tiep']:.1f}) chưa đạt 50% định mức ({min_required_teaching:.1f})."
             
     # Giảng dạy -> NCKH (1 GC = 3 NCKH)
     if row['gc_vuot_thieu_sau_quy_doi'] > 0 and row['nckh_vuot_thieu_sau_quy_doi'] < 0:

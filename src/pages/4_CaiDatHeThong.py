@@ -102,7 +102,7 @@ miễn giảm của giáo viên (như thai sản, ốm đau) trùng vào kỳ ng
     """, unsafe_allow_html=True)
 
     df_holidays = pd.read_sql_query("""
-        SELECT h.id, h.name, h.start_date, h.end_date, t.name as timeframe_name
+        SELECT h.id, h.timeframe_id, h.name, h.start_date, h.end_date, t.name as timeframe_name
         FROM academic_holidays h
         JOIN timeframes t ON h.timeframe_id = t.id
     """, conn)
@@ -110,6 +110,11 @@ miễn giảm của giáo viên (như thai sản, ốm đau) trùng vào kỳ ng
     if df_holidays.empty:
         render_empty_state("Chưa có ngày nghỉ nào được cấu hình. Vui lòng thêm các kỳ nghỉ (Tết, Hè, Lễ).")
     else:
+        for tf_name, group in df_holidays.groupby('timeframe_name'):
+            total_days = sum((pd.to_datetime(row['end_date']) - pd.to_datetime(row['start_date'])).days + 1 for _, row in group.iterrows())
+            if total_days < 40:
+                st.warning(f"⚠️ Cảnh báo: Năm học **{tf_name}** hiện chỉ có {total_days} ngày nghỉ. Tính toán miễn giảm (như thai sản, đi học) sẽ bị sai lệch nếu chưa cấu hình đủ Nghỉ hè và Tết (cần tối thiểu ~40 ngày).")
+
         for _, row in df_holidays.iterrows():
             days_count = (pd.to_datetime(row['end_date']) - pd.to_datetime(row['start_date'])).days + 1
             badge_html = f'<span class="md-chip md-chip-amber"><span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">block</span>{days_count} ngày bị loại</span>'
