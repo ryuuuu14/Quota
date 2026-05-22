@@ -223,8 +223,10 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
                 
         total_required_gc = 0.0
         total_required_nckh = 0.0
+        total_required_nvk = 0.0
         total_reduced_gc = 0.0
         total_reduced_nckh = 0.0
+        total_reduced_nvk = 0.0
         applied_reductions = []
         
         seg_data = []
@@ -338,11 +340,15 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             req_gc = seg_base_gc * (1 - role_t_red / 100.0) * (seg_weeks / std_weeks)
             req_nckh = seg_base_nckh * nckh_factor * (1 - role_n_red / 100.0) * (seg_weeks / std_weeks)
             
+            seg_yearly_nvk = 1760.0 - (seg_base_gc * (1 - role_t_red / 100.0) * 3.0) - (seg_base_nckh * nckh_factor * (1 - role_n_red / 100.0))
+            req_nvk = seg_yearly_nvk * (seg_weeks / std_weeks)
+            
             if role_desc and role_desc not in applied_reductions:
                 applied_reductions.append(role_desc)
                 
             total_required_gc += req_gc
             total_required_nckh += req_nckh
+            total_required_nvk += req_nvk
             
             seg_data.append({
                 'start': seg_start,
@@ -350,6 +356,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
                 'weeks': seg_weeks,
                 'req_gc': req_gc,
                 'req_nckh': req_nckh,
+                'req_nvk': req_nvk,
                 'title_name': title_name,
                 'dept_name': dept_name
             })
@@ -455,9 +462,12 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
                     inter_weeks = calculate_t04_weeks(m_start, m_end, holidays_list)
                 if seg['weeks'] > 0:
                     red_gc = seg['req_gc'] * (inter_weeks / seg['weeks'])
+                    red_nvk = seg['req_nvk'] * (inter_weeks / seg['weeks'])
                 else:
                     red_gc = 0.0
+                    red_nvk = 0.0
                 total_reduced_gc += red_gc
+                total_reduced_nvk += red_nvk
 
         for r, rule in point2_leaves:
             desc = f"{rule['name']} ({rule['rule_type']})"
@@ -567,17 +577,29 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             cap = std_weeks / total_weeks
             total_required_gc *= cap
             total_required_nckh *= cap
+            total_required_nvk *= cap
             total_reduced_gc *= cap
             total_reduced_nckh *= cap
+            total_reduced_nvk *= cap
+
+        def get_nvk_base_min(title):
+            if title in ['Giáo sư', 'Phó Giáo sư']: return 170
+            if title == 'Giảng viên chính': return 260
+            if title == 'Giảng viên': return 350
+            if title == 'Trợ giảng': return 740
+            return 0
 
         results.append({
             'id': tid,
             'title_name': latest_title_name,
             'base_gc': latest_base_gc,
             'base_nckh': latest_base_nckh,
+            'dinh_muc_nvk_goc': get_nvk_base_min(latest_title_name),
             'dinh_muc_gc_phai_thuc_hien': total_required_gc,
             'dinh_muc_nckh_phai_thuc_hien': max(0.0, total_required_nckh - total_reduced_nckh),
+            'dinh_muc_nvk_phai_thuc_hien': total_required_nvk,
             'so_gio_duoc_mien_giam': total_reduced_gc,
+            'so_gio_nvk_duoc_mien_giam': total_reduced_nvk,
             'applied_reductions': ", ".join(applied_reductions) if applied_reductions else "Không có"
         })
         
@@ -601,7 +623,8 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
     
     gc_dict = {}
     nckh_dict = {}
-    nvk_dict = {}  # Hoạt động chuyên môn + Bồi dưỡng — tracked separately for display, counts toward GC
+    hdcm_bd_dict = {}  # Hoạt động chuyên môn + Bồi dưỡng
+    nvk_dict = {} # Nhiệm vụ khác
     direct_teaching_dict = {}
     
     # Per Điều 9 TT108/2025: Hoạt động chuyên môn + Bồi dưỡng count toward GC quota
@@ -616,16 +639,29 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
         for tid, group in df_logs.groupby('teacher_id'):
             gc_dict[tid] = group[group['category'].isin(GC_CATEGORIES)]['calculated_hours'].sum()
             nckh_dict[tid] = group[group['category'].isin(NCKH_CATEGORIES)]['calculated_hours'].sum()
-            nvk_dict[tid] = group[group['category'].isin({'Hoạt động chuyên môn', 'Bồi dưỡng'})]['calculated_hours'].sum()
+            hdcm_bd_dict[tid] = group[group['category'].isin({'Hoạt động chuyên môn', 'Bồi dưỡng'})]['calculated_hours'].sum()
+            nvk_dict[tid] = group[group['category'] == 'Chấp hành Nhiệm vụ khác']['calculated_hours'].sum()
             direct_teaching_dict[tid] = group[group['category'] == 'Giảng dạy']['calculated_hours'].sum()
             
     df_out['tổng_gc_da_thuc_hien'] = df_out['id'].map(gc_dict).fillna(0)
     df_out['nckh_da_thuc_hien'] = df_out['id'].map(nckh_dict).fillna(0)
-    df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)  # HĐCM + Bồi dưỡng hours (subset of gc)
+    df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)
+    df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
     df_out['giang_day_truc_tiep'] = df_out['id'].map(direct_teaching_dict).fillna(0)
     
     df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - (df_out['dinh_muc_gc_phai_thuc_hien'] - df_out['so_gio_duoc_mien_giam'])
     df_out['nckh_vuot_thieu'] = df_out['nckh_da_thuc_hien'] - df_out['dinh_muc_nckh_phai_thuc_hien']
+    df_out['nvk_vuot_thieu'] = df_out['nvk_da_thuc_hien'] - (df_out['dinh_muc_nvk_phai_thuc_hien'] - df_out['so_gio_nvk_duoc_mien_giam'])
+    df_out['hoan_thanh_gd'] = df_out['gc_vuot_thieu'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
+    df_out['hoan_thanh_nckh'] = df_out['nckh_vuot_thieu'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
+    df_out['hoan_thanh_nvk'] = df_out['nvk_vuot_thieu'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
+    
+    def overall_status(row):
+        if row['hoan_thanh_gd'] == "Đạt" and row['hoan_thanh_nckh'] == "Đạt" and row['hoan_thanh_nvk'] == "Đạt":
+            return "Đạt"
+        return "Không đạt"
+        
+    df_out['trang_thai_chung'] = df_out.apply(overall_status, axis=1)
     
     # Điều 12: Bù trừ tự động giữa Giảng dạy và NCKH
     def apply_auto_compensation(row):

@@ -75,10 +75,17 @@ if selected_tf_id:
             df_display = calculate_department_compensation(df_display)
             st.info("Đã áp dụng chia sẻ giờ giảng thừa. Giờ giảng thừa của giảng viên này sẽ được bù đắp cho giảng viên thiếu trong cùng đơn vị.")
 
-        df_display['Trạng thái'] = df_display.apply(
-            lambda row: "Đạt" if row['gc_vuot_thieu_sau_quy_doi'] >= 0 and row['nckh_vuot_thieu_sau_quy_doi'] >= 0 else "Không đạt",
+        df_display['hoan_thanh_gd'] = df_display['gc_vuot_thieu_sau_quy_doi'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
+        df_display['hoan_thanh_nckh'] = df_display['nckh_vuot_thieu_sau_quy_doi'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
+        
+        df_display['Trạng thái Chung'] = df_display.apply(
+            lambda row: "Đạt" if row['hoan_thanh_gd'] == "Đạt" and row['hoan_thanh_nckh'] == "Đạt" and row['hoan_thanh_nvk'] == "Đạt" else "Không đạt",
             axis=1
         )
+
+        filter_status = st.selectbox("Lọc theo Trạng thái Chung:", ["Tất cả", "Đạt", "Không đạt"])
+        if filter_status != "Tất cả":
+            df_display = df_display[df_display['Trạng thái Chung'] == filter_status]
 
         col_mapping = {
             'id': 'ID',
@@ -90,19 +97,26 @@ if selected_tf_id:
             'dinh_muc_gc_phai_thuc_hien': 'Định mức thực tế GD',
             'so_gio_duoc_mien_giam': 'Số giờ được miễn giảm',
             'tổng_gc_da_thuc_hien': 'Đã Giảng dạy (tổng GC)',
-            'nvk_da_thuc_hien': 'Trong đó: Kế hoạch khác',
+            'hdcm_bd_da_thuc_hien': 'Trong đó: Kế hoạch khác',
             'gc_vuot_thieu_sau_quy_doi': 'Vượt/Thiếu GD',
             'base_nckh': 'Định mức gốc NCKH',
             'dinh_muc_nckh_phai_thuc_hien': 'Định mức thực tế NCKH',
             'nckh_da_thuc_hien': 'Đã NCKH',
             'nckh_vuot_thieu_sau_quy_doi': 'Vượt/Thiếu NCKH',
-            'Trạng thái': 'Trạng thái'
+            'dinh_muc_nvk_goc': 'Định mức gốc NVK',
+            'dinh_muc_nvk_phai_thuc_hien': 'Định mức NVK',
+            'nvk_da_thuc_hien': 'Đã làm NVK',
+            'nvk_vuot_thieu': 'Vượt/Thiếu NVK',
+            'hoan_thanh_gd': 'Hoàn thành GD',
+            'hoan_thanh_nckh': 'Hoàn thành NCKH',
+            'hoan_thanh_nvk': 'Hoàn thành NVK',
+            'Trạng thái Chung': 'Trạng thái Chung'
         }
         if 'gc_give_to_dept' in df_display.columns and apply_dept_comp:
             col_mapping['gc_give_to_dept'] = 'Nhường cho Đơn vị'
             col_mapping['gc_receive_from_dept'] = 'Nhận từ Đơn vị'
 
-        default_cols = ['Họ và tên', 'Chức danh', 'Đơn vị', 'Định mức thực tế GD', 'Đã Giảng dạy (tổng GC)', 'Vượt/Thiếu GD', 'Trạng thái']
+        default_cols = ['Họ và tên', 'Chức danh', 'Đơn vị', 'Định mức thực tế GD', 'Vượt/Thiếu GD', 'Hoàn thành GD', 'Hoàn thành NCKH', 'Hoàn thành NVK', 'Trạng thái Chung']
         selected_col_names = st.multiselect("Chọn cột hiển thị", options=list(col_mapping.values()), default=default_cols)
 
         selected_cols = [k for k, v in col_mapping.items() if v in selected_col_names]
@@ -140,6 +154,7 @@ if selected_tf_id:
             'Định mức gốc GD', 'Định mức thực tế GD', 'Số giờ được miễn giảm', 
             'Đã Giảng dạy (tổng GC)', 'Trong đó: Kế hoạch khác', 'Vượt/Thiếu GD', 
             'Định mức gốc NCKH', 'Định mức thực tế NCKH', 'Đã NCKH', 'Vượt/Thiếu NCKH',
+            'Định mức NVK', 'Đã làm NVK', 'Vượt/Thiếu NVK',
             'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
         ] if col in df_table.columns]
 
@@ -147,7 +162,8 @@ if selected_tf_id:
 
         style_cols = [col for col in [
             'Số giờ được miễn giảm', 'Đã Giảng dạy (tổng GC)', 'Trong đó: Kế hoạch khác',
-            'Vượt/Thiếu GD', 'Đã NCKH', 'Vượt/Thiếu NCKH', 'Trạng thái',
+            'Vượt/Thiếu GD', 'Đã NCKH', 'Vượt/Thiếu NCKH', 'Vượt/Thiếu NVK', 
+            'Hoàn thành GD', 'Hoàn thành NCKH', 'Hoàn thành NVK', 'Trạng thái Chung',
             'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
         ] if col in df_table.columns]
 
