@@ -1,7 +1,6 @@
 import sqlite3
 import os
-
-DB_PATH = 'database.sqlite'
+from database import get_connection
 
 REDUCTIONS = [
     # Core Roles from Điều 7
@@ -81,7 +80,7 @@ REDUCTIONS = [
 ]
 
 def run():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     cursor = conn.cursor()
     added, skipped = 0, 0
     for r in REDUCTIONS:

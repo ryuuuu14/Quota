@@ -559,7 +559,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             'title_name': latest_title_name,
             'base_gc': latest_base_gc,
             'base_nckh': latest_base_nckh,
-            'dinh_muc_gc_phai_thuc_hien': max(0.0, total_required_gc - total_reduced_gc),
+            'dinh_muc_gc_phai_thuc_hien': total_required_gc,
             'dinh_muc_nckh_phai_thuc_hien': max(0.0, total_required_nckh - total_reduced_nckh),
             'so_gio_duoc_mien_giam': total_reduced_gc,
             'applied_reductions': ", ".join(applied_reductions) if applied_reductions else "Không có"
@@ -605,7 +605,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
     df_out['nckh_da_thuc_hien'] = df_out['id'].map(nckh_dict).fillna(0)
     df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)  # HĐCM + Bồi dưỡng hours (subset of gc)
     
-    df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - df_out['dinh_muc_gc_phai_thuc_hien']
+    df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - (df_out['dinh_muc_gc_phai_thuc_hien'] - df_out['so_gio_duoc_mien_giam'])
     df_out['nckh_vuot_thieu'] = df_out['nckh_da_thuc_hien'] - df_out['dinh_muc_nckh_phai_thuc_hien']
     
     # Điều 12: Bù trừ tự động giữa Giảng dạy và NCKH

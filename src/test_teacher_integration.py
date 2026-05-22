@@ -18,6 +18,13 @@ Run:  python src/test_teacher_integration.py
 import sys, os, tempfile, sqlite3
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
 # ─── Test infrastructure ───────────────────────────────────────────────────
 
 PASS = 0
