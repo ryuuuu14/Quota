@@ -107,7 +107,12 @@ def calculate_activity_hours(log_row, activity_type_row):
             return base  # multiplier stays 1.0, DB rate encodes the coefficient
 
         if log_row.get('is_foreign_language_instruction'):
-            multiplier *= 1.5
+            if log_row['student_count'] <= 40:
+                multiplier = 1.5
+            elif log_row['student_count'] <= 60:
+                multiplier = 1.7
+            else:
+                multiplier = 2.0
 
         return base * multiplier
 
@@ -450,64 +455,93 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             if desc not in applied_reductions:
                 applied_reductions.append(desc)
                 
-        # Apply Point (3) leaves
-        for r, rule in point3_leaves:
-            rid = r['reduction_rule_id']
-            r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
-            r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date']))
-            if r_start > r_end: continue
-            
-            for seg in seg_data:
+        # Apply Point (3) leaves — merge overlapping intervals to take max reduction (Điều 10.1.c)
+        for seg in seg_data:
+            seg_intervals = []
+            for r, rule in point3_leaves:
+                r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
+                r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date']))
+                if r_start > r_end: continue
+
+                has_override = pd.notnull(r.get('actual_weeks_override')) and str(r.get('actual_weeks_override')).strip() != ''
+                override_val = float(r['actual_weeks_override']) if has_override else None
+                total_leaf_days = max(1, (r_end - r_start).days + 1) if has_override else 0
+
                 inter_start = max(seg['start'], r_start)
                 inter_end = min(seg['end'], r_end)
                 if inter_start <= inter_end:
-                    # Collect working days in the segment intersection
-                    working_days = []
-                    curr_date = inter_start
-                    while curr_date <= inter_end:
-                        overlap = False
-                        for p2_r, _ in point2_leaves:
-                            p2_start = max(pd.to_datetime(tf_start), pd.to_datetime(p2_r['start_date']))
-                            p2_end = min(pd.to_datetime(tf_end), pd.to_datetime(p2_r['end_date']))
-                            if p2_start <= curr_date <= p2_end:
-                                overlap = True
-                                break
-                        if not overlap:
-                            working_days.append(curr_date)
-                        curr_date += pd.Timedelta(days=1)
-                        
-                    if working_days:
-                        blocks = []
-                        block_start = working_days[0]
-                        prev_day = working_days[0]
-                        for day in working_days[1:]:
-                            if day == prev_day + pd.Timedelta(days=1):
-                                prev_day = day
-                            else:
-                                blocks.append((block_start, prev_day))
-                                block_start = day
-                                prev_day = day
-                        blocks.append((block_start, prev_day))
-                        
-                        inter_weeks = 0.0
-                        if pd.notnull(r.get('actual_weeks_override')) and r.get('actual_weeks_override') != '':
-                            override = float(r['actual_weeks_override'])
-                            total_days = max(1, (r_end - r_start).days + 1)
-                            inter_weeks = override * (len(working_days) / total_days)
+                    seg_days = (inter_end - inter_start).days + 1
+                    seg_override = (override_val * (seg_days / total_leaf_days)) if has_override else None
+                    seg_intervals.append((inter_start, inter_end, rule, r_end, seg_override))
+
+            if not seg_intervals:
+                continue
+
+            seg_intervals.sort(key=lambda x: x[0])
+            merged = []
+            cur_start, cur_end, cur_rule, cur_r_end, cur_override = seg_intervals[0]
+            for s, e, rule, r_end, seg_override in seg_intervals[1:]:
+                if s <= cur_end:
+                    cur_end = max(cur_end, e)
+                    cur_r_end = max(cur_r_end, r_end)
+                    merged_rule = dict(cur_rule)
+                    merged_rule['teaching_reduction_pct'] = max(cur_rule['teaching_reduction_pct'], rule['teaching_reduction_pct'])
+                    merged_rule['nckh_reduction_pct'] = max(cur_rule['nckh_reduction_pct'], rule['nckh_reduction_pct'])
+                    cur_rule = merged_rule
+                    if cur_override is not None or seg_override is not None:
+                        cur_override = max(cur_override or 0, seg_override or 0)
+                else:
+                    merged.append((cur_start, cur_end, cur_rule, cur_r_end, cur_override))
+                    cur_start, cur_end, cur_rule, cur_r_end, cur_override = s, e, rule, r_end, seg_override
+            merged.append((cur_start, cur_end, cur_rule, cur_r_end, cur_override))
+
+            for m_start, m_end, rule, m_r_end, m_override in merged:
+                # Collect working days (skip Point 2 leaves)
+                working_days = []
+                curr_date = m_start
+                while curr_date <= m_end:
+                    overlap = False
+                    for p2_r, _ in point2_leaves:
+                        p2_start = max(pd.to_datetime(tf_start), pd.to_datetime(p2_r['start_date']))
+                        p2_end = min(pd.to_datetime(tf_end), pd.to_datetime(p2_r['end_date']))
+                        if p2_start <= curr_date <= p2_end:
+                            overlap = True
+                            break
+                    if not overlap:
+                        working_days.append(curr_date)
+                    curr_date += pd.Timedelta(days=1)
+
+                if working_days:
+                    blocks = []
+                    block_start = working_days[0]
+                    prev_day = working_days[0]
+                    for day in working_days[1:]:
+                        if day == prev_day + pd.Timedelta(days=1):
+                            prev_day = day
                         else:
-                            for b_start, b_end in blocks:
-                                inter_weeks += calculate_t04_weeks(b_start, b_end, holidays_list)
-                                
-                        if seg['weeks'] > 0:
-                            red_gc = seg['req_gc'] * (rule['teaching_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
-                            red_nckh = seg['req_nckh'] * (rule['nckh_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
-                        else:
-                            red_gc = 0.0
-                            red_nckh = 0.0
-                            
-                        total_reduced_gc += red_gc
-                        total_reduced_nckh += red_nckh
-                        
+                            blocks.append((block_start, prev_day))
+                            block_start = day
+                            prev_day = day
+                    blocks.append((block_start, prev_day))
+
+                    inter_weeks = 0.0
+                    if m_override is not None:
+                        inter_weeks = m_override * (len(working_days) / ((m_end - m_start).days + 1))
+                    else:
+                        for b_start, b_end in blocks:
+                            inter_weeks += calculate_t04_weeks(b_start, b_end, holidays_list)
+
+                    if seg['weeks'] > 0:
+                        red_gc = seg['req_gc'] * (rule['teaching_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
+                        red_nckh = seg['req_nckh'] * (rule['nckh_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
+                    else:
+                        red_gc = 0.0
+                        red_nckh = 0.0
+
+                    total_reduced_gc += red_gc
+                    total_reduced_nckh += red_nckh
+
+        for r, rule in point3_leaves:
             desc = f"{rule['name']} ({rule['rule_type']})"
             if desc not in applied_reductions:
                 applied_reductions.append(desc)
@@ -525,7 +559,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
             'title_name': latest_title_name,
             'base_gc': latest_base_gc,
             'base_nckh': latest_base_nckh,
-            'dinh_muc_gc_phai_thuc_hien': total_required_gc,
+            'dinh_muc_gc_phai_thuc_hien': max(0.0, total_required_gc - total_reduced_gc),
             'dinh_muc_nckh_phai_thuc_hien': max(0.0, total_required_nckh - total_reduced_nckh),
             'so_gio_duoc_mien_giam': total_reduced_gc,
             'applied_reductions': ", ".join(applied_reductions) if applied_reductions else "Không có"

@@ -94,10 +94,10 @@ with tab1:
     st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">edit_calendar</span> Điều chỉnh ngày làm việc đột xuất</h3>', unsafe_allow_html=True)
     st.markdown("""
 <p style="color: var(--md-on-surface-variant); font-size: 14px;">
-Ghi nhận các thay đổi bất thường trong năm học: nghỉ bù, nghỉ do bão lũ,
-đóng cửa đột xuất làm giảm ngày làm việc thực tế. Các ngày nghỉ chuẩn
-(Tết Nguyên đán, 2/9, 30/4+1/5, nghỉ hè) đã được tính sẵn trong khung
-thời gian năm học và không cần nhập tại đây.
+Ghi nhận các ngày nghỉ trong năm học (Tết Nguyên đán, Nghỉ hè, 30/4, nghỉ do bão lũ, v.v.).
+<b>QUAN TRỌNG:</b> Bắt buộc phải nhập chính xác thời gian nghỉ Tết và nghỉ hè. 
+Hệ thống cần dữ liệu này để tự động khấu trừ (không tính) các tuần nghỉ lễ nếu khoảng thời gian 
+miễn giảm của giáo viên (như thai sản, ốm đau) trùng vào kỳ nghỉ.
 </p>
     """, unsafe_allow_html=True)
 
@@ -108,7 +108,7 @@ thời gian năm học và không cần nhập tại đây.
     """, conn)
 
     if df_holidays.empty:
-        render_empty_state("Chưa có điều chỉnh nào. Các ngày nghỉ chuẩn (Tết, 2/9, hè) đã được tính sẵn trong khung thời gian.")
+        render_empty_state("Chưa có ngày nghỉ nào được cấu hình. Vui lòng thêm các kỳ nghỉ (Tết, Hè, Lễ).")
     else:
         for _, row in df_holidays.iterrows():
             days_count = (pd.to_datetime(row['end_date']) - pd.to_datetime(row['start_date'])).days + 1
