@@ -612,42 +612,63 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
     df_out['dinh_muc_nckh_phai_thuc_hien'] = df_out['dinh_muc_nckh_phai_thuc_hien'].fillna(0)
     
     # Tính Logs
-    query_logs = """
-    SELECT 
-        al.*, at.category, at.base_conversion_rate, at.is_teaching_activity, at.is_nckh_activity
-    FROM activity_logs al
-    JOIN activity_types at ON al.activity_type_id = at.id
-    WHERE al.timeframe_id = ?
-    """
-    df_logs = pd.read_sql_query(query_logs, conn, params=[tf_id])
+    df_session = pd.read_sql_query(
+        "SELECT * FROM session_teacher_totals WHERE timeframe_id = ?",
+        conn, params=[tf_id]
+    )
     
-    gc_dict = {}
-    nckh_dict = {}
-    hdcm_bd_dict = {}  # Hoạt động chuyên môn + Bồi dưỡng
-    nvk_dict = {} # Nhiệm vụ khác
-    direct_teaching_dict = {}
-    
-    # Per Điều 9 TT108/2025: Hoạt động chuyên môn + Bồi dưỡng count toward GC quota
-    GC_CATEGORIES = {'Giảng dạy', 'Hoạt động chuyên môn', 'Bồi dưỡng'}
-    NCKH_CATEGORIES = {'NCKH', 'NCKH - Hướng dẫn thi đấu'}
-    
-    if not df_logs.empty:
-        for i, row in df_logs.iterrows():
-            hours = calculate_activity_hours(row, row)
-            df_logs.at[i, 'calculated_hours'] = hours
-            
-        for tid, group in df_logs.groupby('teacher_id'):
-            gc_dict[tid] = group[group['category'].isin(GC_CATEGORIES)]['calculated_hours'].sum()
-            nckh_dict[tid] = group[group['category'].isin(NCKH_CATEGORIES)]['calculated_hours'].sum()
-            hdcm_bd_dict[tid] = group[group['category'].isin({'Hoạt động chuyên môn', 'Bồi dưỡng'})]['calculated_hours'].sum()
-            nvk_dict[tid] = group[group['category'] == 'Chấp hành Nhiệm vụ khác']['calculated_hours'].sum()
-            direct_teaching_dict[tid] = group[group['category'] == 'Giảng dạy']['calculated_hours'].sum()
-            
-    df_out['tổng_gc_da_thuc_hien'] = df_out['id'].map(gc_dict).fillna(0)
-    df_out['nckh_da_thuc_hien'] = df_out['id'].map(nckh_dict).fillna(0)
-    df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)
-    df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
-    df_out['giang_day_truc_tiep'] = df_out['id'].map(direct_teaching_dict).fillna(0)
+    if not df_session.empty:
+        gc_dict = df_session.set_index('teacher_id')['giang_day_truc_tiep'].to_dict()
+        hdcm_bd_dict = df_session.set_index('teacher_id')['hdcm_bd'].to_dict()
+        tổng_gc_dict = {
+            tid: gc_dict.get(tid, 0.0) + hdcm_bd_dict.get(tid, 0.0)
+            for tid in df_session['teacher_id']
+        }
+        nckh_dict = df_session.set_index('teacher_id')['nckh_total'].to_dict()
+        nvk_dict = df_session.set_index('teacher_id')['nvk_total'].to_dict()
+        
+        df_out['tổng_gc_da_thuc_hien'] = df_out['id'].map(tổng_gc_dict).fillna(0)
+        df_out['nckh_da_thuc_hien'] = df_out['id'].map(nckh_dict).fillna(0)
+        df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)
+        df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
+        df_out['giang_day_truc_tiep'] = df_out['id'].map(gc_dict).fillna(0)
+    else:
+        query_logs = """
+        SELECT 
+            al.*, at.category, at.base_conversion_rate, at.is_teaching_activity, at.is_nckh_activity
+        FROM activity_logs al
+        JOIN activity_types at ON al.activity_type_id = at.id
+        WHERE al.timeframe_id = ?
+        """
+        df_logs = pd.read_sql_query(query_logs, conn, params=[tf_id])
+        
+        gc_dict = {}
+        nckh_dict = {}
+        hdcm_bd_dict = {}  # Hoạt động chuyên môn + Bồi dưỡng
+        nvk_dict = {} # Nhiệm vụ khác
+        direct_teaching_dict = {}
+        
+        # Per Điều 9 TT108/2025: Hoạt động chuyên môn + Bồi dưỡng count toward GC quota
+        GC_CATEGORIES = {'Giảng dạy', 'Hoạt động chuyên môn', 'Bồi dưỡng'}
+        NCKH_CATEGORIES = {'NCKH', 'NCKH - Hướng dẫn thi đấu'}
+        
+        if not df_logs.empty:
+            for i, row in df_logs.iterrows():
+                hours = calculate_activity_hours(row, row)
+                df_logs.at[i, 'calculated_hours'] = hours
+                
+            for tid, group in df_logs.groupby('teacher_id'):
+                gc_dict[tid] = group[group['category'].isin(GC_CATEGORIES)]['calculated_hours'].sum()
+                nckh_dict[tid] = group[group['category'].isin(NCKH_CATEGORIES)]['calculated_hours'].sum()
+                hdcm_bd_dict[tid] = group[group['category'].isin({'Hoạt động chuyên môn', 'Bồi dưỡng'})]['calculated_hours'].sum()
+                nvk_dict[tid] = group[group['category'] == 'Chấp hành Nhiệm vụ khác']['calculated_hours'].sum()
+                direct_teaching_dict[tid] = group[group['category'] == 'Giảng dạy']['calculated_hours'].sum()
+                
+        df_out['tổng_gc_da_thuc_hien'] = df_out['id'].map(gc_dict).fillna(0)
+        df_out['nckh_da_thuc_hien'] = df_out['id'].map(nckh_dict).fillna(0)
+        df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)
+        df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
+        df_out['giang_day_truc_tiep'] = df_out['id'].map(direct_teaching_dict).fillna(0)
     
     df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - (df_out['dinh_muc_gc_phai_thuc_hien'] - df_out['so_gio_duoc_mien_giam'])
     df_out['nckh_vuot_thieu'] = df_out['nckh_da_thuc_hien'] - df_out['dinh_muc_nckh_phai_thuc_hien']

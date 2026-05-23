@@ -1358,3 +1358,151 @@ The `architecture_critic` subagent was defined to audit:
 4. **Foreign language multiplier is an OVERRIDE, not a COMPOUND** — the regulation specifies exact values (1.5/1.7/2.0), not a scaling factor.
 5. **Overlapping partial reductions take MAX, not SUM** — Điều 10.1.c is explicit about this.
 
+### BUG 3 - Missing "Nhiệm vụ khác" (NVK) Quota and Completion Math
+**Date:** 2026-05-22
+**Finding:** The regulation TT108 dictates a specific statutory base for "Nhiệm vụ khác" (170 for GS/PGS, 260 for GVC, 350 for GV, 740 for TG). This is not just a soft recommendation, but a residual quota that expands when leadership roles reduce teaching hours. Furthermore, NVK is reduced proportionally when full-time leaves (Point 2, e.g., Thai Sản) occur.
+**Fix Implemented:** 
+1. Added calculation for `req_nvk`: `1760.0 - (seg_base_gc * (1 - role_t_red / 100.0) * 3.0) - (seg_base_nckh * nckh_factor * (1 - role_n_red / 100.0))`
+2. Scaled `req_nvk` by `(seg_weeks / std_weeks)` and `red_nvk` proportionally for Point 2 leaves.
+3. Mapped activities marked as `Chấp hành Nhiệm vụ khác` to `nvk_da_thuc_hien`.
+4. Status tracking is explicitly separated into `Hoàn thành GD`, `Hoàn thành NCKH`, `Hoàn thành NVK`, and a master `Trạng thái Chung` (requires "Đạt" in all three).
+
+### BUG 4 - Incorrect NCKH Reduction Logic
+**Finding:** NCKH reductions (e.g. 60% for Thai Sản) were being applied proportionally inside segment overlap loops (like GC). However, the regulation specifies these as FLAT YEARLY percentages (e.g., Thai sản under 12 months = 60% flat reduction of yearly NCKH base, regardless of calendar overlap).
+**Fix Implemented:** 
+1. Extracted flat NCKH reduction percent from Point 2 leaves into `max_flat_nckh_pct`.
+2. Handled boundary overlap for Thai sản crossing timeframes (scales down to 30% dynamically).
+3. Applied flat reduction to `total_required_nckh` outside the segment loop. Point 3 (partial) NCKH reductions remain natively proportional if any.
+
+---
+
+## Session 2026-05-23 — Excel Bulk Upload Feature Plan & App Scope Redefinition
+
+### Context
+User wants to shift the app from "per-activity recording throughout the year" to "end-of-year Excel upload + dashboard display". Excel becomes the source of truth; DB becomes a temporary working cache.
+
+### Core Paradigm Shift
+| Aspect | Old | New |
+|--------|-----|-----|
+| Data entry | Individual activities via `3_NhatKyHoatDong.py` | Upload annual Excel totals (grand sums) |
+| Primary storage | SQLite (`data/database.sqlite`) | Excel files (`data/excel_archive/`) |
+| DB role | Permanent warehouse | Working cache per session |
+| Per-activity entry | Enabled | **Locked** after upload |
+| Multi-year | Single active year | Dropdown — switch years (loads corresponding Excel) |
+
+### Key Design Decisions (confirmed by user)
+1. **3 columns only** in Excel: `Họ tên`, `Tổng GC`, `Tổng NCKH`, `Tổng NVK` — no breakdown needed. Điều 12 50% rule is a *quota comparison* concept, not about actual hours breakdown. Existing engine handles it.
+2. **Replace each upload** — `DELETE FROM session_teacher_totals WHERE timeframe_id=?` then `INSERT` new data. No history kept in DB.
+3. **Lock timeframe** after upload — `3_NhatKyHoatDong.py` shows banner: *"Đã khóa: chỉnh sửa qua file Excel"*
+4. **Multi-year support** — dropdown to select year, loads corresponding Excel from archive
+5. **Both upload and archive** — user can upload new file OR pick from previously uploaded files in `data/excel_archive/`
+
+### Architecture
+
+```
+User flow:
+  Select school year → Upload .xlsx (or pick from archive)
+    → LangGraph validate (teacher names, numeric ranges, duplicates)
+    → Preview in st.data_editor
+    → [Xác nhận nhập liệu] → atomic COMMIT into session_teacher_totals
+    → timeframe locked → Dashboard recalculates
+```
+
+### Files to Create
+
+| File | Purpose |
+|---|---|
+| `src/bulk_import/__init__.py` | Package |
+| `src/bulk_import/templates.py` | Generate .xlsx template with dropdown validation |
+| `src/bulk_import/parser.py` | `pandas.read_excel()` → structured dicts |
+| `src/bulk_import/validator_graph.py` | LangGraph pipeline: 4 validation nodes + conditional router |
+| `src/bulk_import/importer.py` | Atomic `CLEAR + INSERT` into `session_teacher_totals` |
+| `src/pages/5_NhapDuLieu.py` | Upload UI: year select, upload/pick archive, preview, confirm |
+| `data/excel_archive/` | Directory for archived Excel files |
+
+### Files to Modify
+
+| File | Change |
+|---|---|
+| `src/database.py` | Add `session_teacher_totals` table (ephemeral, no FK) |
+| `src/calculations.py` | ~20 lines — check `session_teacher_totals` first, fallback to `activity_logs` |
+| `src/pages/3_NhatKyHoatDong.py` | Add locked banner + disable when session data exists |
+| `src/pages/1_Dashboard.py` | Add "data source" badge column (Excel / Nhập lẻ) |
+| `requirements.txt` | Add `openpyxl` |
+
+### DB Schema Addition
+
+```sql
+CREATE TABLE IF NOT EXISTS session_teacher_totals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timeframe_id INTEGER NOT NULL,
+    teacher_id INTEGER NOT NULL,
+    gc_total REAL NOT NULL DEFAULT 0,
+    nckh_total REAL NOT NULL DEFAULT 0,
+    nvk_total REAL NOT NULL DEFAULT 0,
+    UNIQUE(timeframe_id, teacher_id)
+);
+```
+
+No FKs — ephemeral cache, intentionally loose.
+
+### LangGraph Validator (`validator_graph.py`)
+
+```
+START
+  ↓
+[ParseExcel] → Read all rows + sheet metadata
+  ↓
+[ValidateNames] → Check each Họ tên exists in teachers table
+  ↓ (parallel rows)
+[ValidateNumbers] → Check non-negative, reasonable range
+  ↓ (parallel rows)  
+[ValidateTimeframe] → Ensure year dropdown matches sheet
+  ↓
+[ValidateDuplicates] → No duplicate teacher names in file
+  ↓
+[Route] ── ALL pass ──→ [APPROVED] → return clean records for preview
+         └── ANY error ─→ [REJECTED] → return all errors to UI
+```
+
+### Excel Template
+
+| Họ tên* | Tổng GC* | Tổng NCKH* | Tổng NVK* | Ghi chú |
+|---|---|---|---|---|
+3 required columns + 1 optional note. Admin enters grand total worked hours per category.
+
+### LangGraph Dev Pipeline (separate module) — `src/dev_pipeline/`
+
+A **build → test → validate** development automation loop with 3 human-in-loop checkpoints.
+
+**Usage:** `python -m src.dev_pipeline "Add Excel upload with 3 columns"`
+
+**Graph flow:**
+```
+[Plan] → interrupt (human approves/rejects plan)
+  → [Build] → implements code via LLM + file tools
+  → [Test] → runs test_compliance.py + test_teacher_integration.py → interrupt
+  → [Validate] → code quality review → interrupt (human approves/rejects)
+  → END
+```
+
+**3 checkpoints:** Plan, Test results, Validation. User types `approve`, `abort`, or revision feedback.
+
+**Files:** `state.py`, `prompts.py`, `tools.py`, `agents.py`, `graph.py`, `__main__.py`
+
+**Tested:** Full loop runs with mock LLM (no API key). Real tests execute: PASS=78 FAIL=0 (70 compliance + 8 integration).
+
+**With API key (GEMINI_API_KEY):** Agents use Gemini to generate real plans, write actual files, review real code.
+**Without key:** Mock agents demonstrate graph structure, routing, and human-in-loop flow.
+
+### Deprecation Path
+- `3_NhatKyHoatDong.py` becomes read-only / locked after any upload
+- `activity_logs` table still exists for backward compat but is no longer the primary data source
+- New features should target `bulk_import/` module pattern
+
+### Blockers
+- Need `openpyxl` installed (not yet in requirements.txt)
+- `validator_graph.py` needs to be built with actual LangGraph nodes
+- `calculate_teacher_metrics()` needs the 20-line modification to check `session_teacher_totals` first
+- Dashboard needs minor update to show "Nguồn" column
+

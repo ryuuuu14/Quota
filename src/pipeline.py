@@ -1,282 +1,152 @@
-"""
-Pipeline UI Design & Debugging
-LangGraph state machine: Editor (Stitch) -> Validator (3-tier) -> Critic (Gemini Vision) -> Router
-"""
-from typing import TypedDict, Optional, List
-import re
 import os
-
+import requests
+from typing import TypedDict, Annotated, Literal
 from langgraph.graph import StateGraph, END
+from google import genai
+from pydantic import BaseModel, Field
 
-USE_REAL_STITCH = False
+MAX_RETRIES = 2
 
-STITCH_PROJECT_ID = "16682207781060267797"
-STITCH_DESIGN_SYSTEM = "assets/e8ae041a1de943d2b4b5bb898f6bd031"
-STITCH_SCREEN_IDS: List[str] = []
+# Check for Gemini API key for the agents (Designer, QA, Review)
+# Assumes GEMINI_API_KEY is set in environment for the LLM agents.
+try:
+    client = genai.Client()
+except Exception:
+    client = None
 
+# Define State
+class PipelineState(TypedDict):
+    prompt: str
+    style_guide: str
+    code: str
+    qa_passed: bool
+    qa_feedback: str
+    review_passed: bool
+    review_feedback: str
+    retry_count: int
 
-class AgentState(TypedDict):
-    task: str
-    stitch_output: str
-    local_code_state: str
-    feedback: Optional[str]
-    iterations: int
-    logs: List[str]
-    screen_id: Optional[str]
-    design_md_rules: str
-
-
-def _call_stitch_real(task: str, current_code: str) -> str:
-    """Real Stitch API path — uses stitch_edit_screens via tooling."""
-    screen_ids = STITCH_SCREEN_IDS
-    if not screen_ids:
-        return "# NO_SCREEN_IDS: pipeline cannot call Stitch without target screens"
+# Agent Implementations
+def call_llm(system_instruction: str, user_prompt: str) -> str:
+    """Helper to call Gemini for agent tasks."""
+    if not client:
+        return "LLM Mock Response. Set GEMINI_API_KEY to enable."
     try:
-        from stitch_tool_adapter import edit_screens_blocking
-        result = edit_screens_blocking(
-            project_id=STITCH_PROJECT_ID,
-            screen_ids=screen_ids,
-            prompt=task,
-        )
-        return result
-    except ImportError:
-        return f"# Stitch tool adapter not available, falling back. Task: {task}"
-    except Exception as e:
-        return f"# STITCH_ERROR: {e}"
-
-
-def _call_stitch_mock(task: str, current_code: str, iteration: int) -> str:
-    """Mock Stitch API — simulates lazy/genuine responses."""
-    if iteration == 0:
-        return current_code
-    return "<div>Updated Layout with New Structural Matrix Grid</div>"
-
-
-def call_stitch_editor(state: AgentState) -> dict:
-    logs = list(state.get("logs", []))
-    iteration = state.get("iterations", 0)
-    task = state.get("task", "")
-    current_code = state.get("local_code_state", "")
-
-    logs.append(f"Editor iteration {iteration + 1} ({'real' if USE_REAL_STITCH else 'mock'} mode)")
-
-    if USE_REAL_STITCH:
-        output = _call_stitch_real(task, current_code)
-    else:
-        output = _call_stitch_mock(task, current_code, iteration)
-
-    logs.append(f"Editor output length: {len(output)} chars")
-    return {
-        "stitch_output": output,
-        "iterations": iteration + 1,
-        "logs": logs,
-    }
-
-
-def _tier1_no_change(stitch_output: str, local_code_state: str) -> Optional[str]:
-    if stitch_output.strip() == local_code_state.strip():
-        return "CRITICAL: Generated code matches original source. No impactful changes."
-    return None
-
-
-def _tier2_structure(stitch_output: str) -> Optional[str]:
-    if "Error" in stitch_output or not stitch_output.strip():
-        return "BUGGY: Payload contains compilation or structural errors."
-    has_element = bool(re.search(r'<[a-z]+[^>]*>', stitch_output))
-    if not has_element:
-        return "STRUCTURAL: No HTML elements found in output."
-    return None
-
-
-def _tier3_html_valid(stitch_output: str) -> Optional[str]:
-    try:
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(stitch_output, "html.parser")
-        if soup.find() is None and len(stitch_output.strip()) > 0:
-            return "MALFORMED: BeautifulSoup parsed nothing from non-empty output."
-    except ImportError:
-        pass
-    return None
-
-
-def validate_code_impact(state: AgentState) -> dict:
-    logs = list(state.get("logs", []))
-    logs.append("Validator running 3-tier analysis...")
-
-    stitch_output = state.get("stitch_output", "")
-    local_code_state = state.get("local_code_state", "")
-
-    feedback = None
-
-    # Tier 1: string comparison
-    feedback = _tier1_no_change(stitch_output, local_code_state)
-    if feedback:
-        logs.append(f"Validator tier1 FAIL: {feedback}")
-        return {"feedback": feedback, "logs": logs}
-
-    # Tier 2: regex structure check
-    feedback = _tier2_structure(stitch_output)
-    if feedback:
-        logs.append(f"Validator tier2 FAIL: {feedback}")
-        return {"feedback": feedback, "logs": logs}
-
-    # Tier 3: BeautifulSoup parse
-    feedback = _tier3_html_valid(stitch_output)
-    if feedback:
-        logs.append(f"Validator tier3 FAIL: {feedback}")
-        return {"feedback": feedback, "logs": logs}
-
-    logs.append("Validator ALL TIERS PASSED")
-    return {"feedback": None, "logs": logs}
-
-
-def visual_ui_debug(state: AgentState) -> dict:
-    """Node 3: Gemini Vision analyzes UI screenshot for visual bugs."""
-    logs = list(state.get("logs", []))
-    logs.append("Critic running visual UI analysis...")
-
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        logs.append("Critic SKIPPED: no GOOGLE_API_KEY env var set")
-        return {"feedback": None, "logs": logs}
-
-    screenshot_path = "ui_snapshot.png"
-    if not os.path.exists(screenshot_path):
-        logs.append(f"Critic SKIPPED: screenshot not found at {screenshot_path}")
-        return {"feedback": None, "logs": logs}
-
-    try:
-        from google import genai
-        from google.genai.types import Part
-
-        client = genai.Client(api_key=api_key)
-
-        with open(screenshot_path, "rb") as f:
-            image_data = f.read()
-
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                Part.from_bytes(data=image_data, mime_type="image/png"),
-                (
-                    "Analyze this generated UI screenshot for visual bugs, "
-                    "alignment failures, or missing components.\n\n"
-                    f"Design Rules: {state.get('design_md_rules', 'Standard Layout')}\n"
-                    f"Task: {state['task']}\n\n"
-                    "Respond in this exact format:\n"
-                    "STATUS: [PASSED or FAILED]\n"
-                    "CRITIQUE: [if FAILED, describe overlapping elements, "
-                    "broken padding, or incorrect colors]"
-                ),
-            ],
+            model='gemini-2.5-flash',
+            contents=user_prompt,
+            config={'system_instruction': system_instruction}
         )
-
-        critique = response.text.strip()
-        logs.append(f"Critic response ({len(critique)} chars)")
-
-        if "STATUS: FAILED" in critique:
-            bug_report = critique
-            if "CRITIQUE:" in critique:
-                bug_report = critique.split("CRITIQUE:", 1)[1].strip()
-            feedback = f"Visual Bug Detected: {bug_report[:200]}"
-            logs.append(f"Critic FAILED: visual bugs found")
-            return {"feedback": feedback, "logs": logs}
-
-        logs.append("Critic PASSED: no visual bugs detected")
-        return {"feedback": None, "logs": logs}
-
+        return response.text
     except Exception as e:
-        logs.append(f"Critic ERROR: {type(e).__name__}: {e}")
-        return {"feedback": None, "logs": logs}
+        return f"Error calling LLM: {str(e)}"
 
+def designer_agent(state: PipelineState) -> PipelineState:
+    print("Designer Agent analyzing taste...")
+    system_prompt = "You are a UI Designer Agent. Given a user request, output a terse, bulleted style guide for a Streamlit app. Focus on layout, colors, elements, and modern taste."
+    style_guide = call_llm(system_prompt, f"User request: {state['prompt']}")
+    state["style_guide"] = style_guide
+    print("Style guide generated.")
+    return state
 
-def route_next_step(state: AgentState) -> str:
-    if state.get("iterations", 0) >= 3:
-        return "abort"
-    if state.get("feedback"):
-        return "retry"
-    return "to_critic"
+def coder_agent(state: PipelineState) -> PipelineState:
+    state["retry_count"] = state.get("retry_count", 0) + 1
+    print("Coder Agent writing Streamlit UI...")
+    
+    # Construct full context prompt
+    context = f"Build a Streamlit app. Context: {state['prompt']}\\n\\nStyle:\\n{state['style_guide']}"
+    if not state.get("qa_passed", True):
+        context += f"\\nFix QA issues: {state.get('qa_feedback')}"
+    if not state.get("review_passed", True):
+        context += f"\\nFix Review issues: {state.get('review_feedback')}"
+        
+    system_prompt = "You are an expert Python Streamlit developer. Output ONLY valid Python code block with the Streamlit app. Do not include explanations."
+    generated_code = call_llm(system_prompt, context)
+    
+    # Strip markdown block quotes if present
+    if generated_code.startswith("```python"):
+        generated_code = generated_code.split("```python")[1].split("```")[0].strip()
+    elif generated_code.startswith("```"):
+        generated_code = generated_code.split("```")[1].split("```")[0].strip()
+        
+    state["code"] = generated_code
+    print("Code built successfully via LLM.")
+    return state
 
+def qa_agent(state: PipelineState) -> PipelineState:
+    print("QA Agent checking functionality...")
+    system_prompt = "You are a QA Agent. Review this Streamlit code. If it has syntax errors, missing imports, or lacks functionality, reply with 'FAIL: <reason>'. If good, reply 'PASS'."
+    response = call_llm(system_prompt, f"Code:\\n```python\\n{state['code']}\\n```")
+    
+    if response.startswith("PASS"):
+        state["qa_passed"] = True
+        state["qa_feedback"] = ""
+    else:
+        state["qa_passed"] = False
+        state["qa_feedback"] = response
+    return state
 
-def route_critic(state: AgentState) -> str:
-    if state.get("iterations", 0) >= 3:
-        return "abort"
-    if state.get("feedback"):
-        return "retry"
-    return "approve"
+def review_agent(state: PipelineState) -> PipelineState:
+    print("Review Agent checking code quality...")
+    system_prompt = "You are a Code Review Agent. Review this Streamlit code for best practices and security. If bad, reply 'FAIL: <reason>'. If good, reply 'PASS'."
+    response = call_llm(system_prompt, f"Code:\\n```python\\n{state['code']}\\n```")
+    
+    if response.startswith("PASS"):
+        state["review_passed"] = True
+        state["review_feedback"] = ""
+    else:
+        state["review_passed"] = False
+        state["review_feedback"] = response
+    return state
 
+def router(state: PipelineState) -> Literal["build", "end"]:
+    """Route back to build if QA/Review fail, else end."""
+    if state.get("qa_passed", True) and state.get("review_passed", True):
+        print("All checks passed.")
+        return "end"
+    
+    if state.get("retry_count", 0) > MAX_RETRIES:
+        print("Max retries reached. Forcing end to save tokens.")
+        return "end"
+        
+    print(f"Checks failed. Retrying (Attempt {state.get('retry_count', 0)} / {MAX_RETRIES})...")
+    return "build"
 
-def build_pipeline():
-    workflow = StateGraph(AgentState)
-    workflow.add_node("editor", call_stitch_editor)
-    workflow.add_node("validator", validate_code_impact)
-    workflow.add_node("critic", visual_ui_debug)
-    workflow.set_entry_point("editor")
-    workflow.add_edge("editor", "validator")
-    workflow.add_conditional_edges(
-        "validator",
-        route_next_step,
-        {"retry": "editor", "abort": END, "to_critic": "critic"},
-    )
-    workflow.add_conditional_edges(
-        "critic",
-        route_critic,
-        {"retry": "editor", "abort": END, "approve": END},
-    )
-    return workflow.compile()
+# Build LangGraph
+workflow = StateGraph(PipelineState)
 
+workflow.add_node("designer", designer_agent)
+workflow.add_node("coder", coder_agent)
+workflow.add_node("qa", qa_agent)
+workflow.add_node("review", review_agent)
 
-def run_pipeline(
-    task: str,
-    local_code_state: str,
-    use_real_stitch: bool = False,
-    screen_ids: Optional[List[str]] = None,
-    screen_id: Optional[str] = None,
-    design_md_rules: str = "Standard Layout",
-) -> dict:
-    global USE_REAL_STITCH, STITCH_SCREEN_IDS
-    USE_REAL_STITCH = use_real_stitch
-    if screen_ids is not None:
-        STITCH_SCREEN_IDS.extend(screen_ids)
+workflow.set_entry_point("designer")
+workflow.add_edge("designer", "coder")
+workflow.add_edge("coder", "qa")
+workflow.add_edge("qa", "review")
+workflow.add_conditional_edges(
+    "review",
+    router,
+    {"build": "coder", "end": END}
+)
 
-    app = build_pipeline()
-    initial: AgentState = {
-        "task": task,
-        "local_code_state": local_code_state,
-        "stitch_output": "",
-        "feedback": None,
-        "iterations": 0,
-        "logs": [],
-        "screen_id": screen_id,
-        "design_md_rules": design_md_rules,
-    }
-    result = app.invoke(initial)
-
-    summary_status = "approved"
-    if result.get("iterations", 0) >= 3 and result.get("feedback"):
-        summary_status = "aborted"
-
-    logs = result.get("logs", [])
-    final_code = result.get("stitch_output", "")
-
-    return {
-        "code": final_code,
-        "summary": {
-            "iterations": result.get("iterations", 0),
-            "status": summary_status,
-            "logs": logs,
-        },
-    }
-
+pipeline_app = workflow.compile()
 
 if __name__ == "__main__":
-    print("=== Pipeline Test: No-change (retry) -> Critic (skip no screenshot) ===")
-    out = run_pipeline(
-        task="Refactor root view matrix layout",
-        local_code_state="<div>Original Base Template Layout Structure</div>",
-    )
-    print(f"Status: {out['summary']['status']}")
-    print(f"Iterations: {out['summary']['iterations']}")
-    for log in out['summary']['logs']:
-        print(f"  - {log}")
-    print(f"\nFinal code length: {len(out['code'])} chars")
+    initial_state = {
+        "prompt": "Create a data dashboard showing user metrics.",
+        "style_guide": "",
+        "code": "",
+        "qa_passed": True,
+        "qa_feedback": "",
+        "review_passed": True,
+        "review_feedback": "",
+        "retry_count": 0
+    }
+    
+    print("Starting LangGraph Pipeline...")
+    final_state = pipeline_app.invoke(initial_state)
+    print("\\nPipeline Finished.")
+    print("Final Code Output:")
+    print("--------------------------------------------------")
+    print(final_state["code"])
+    print("--------------------------------------------------")

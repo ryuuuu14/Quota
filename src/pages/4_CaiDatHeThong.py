@@ -283,9 +283,12 @@ with tab4:
     with st.expander("Thêm Chức vụ Quản lý"):
         with st.form("add_role_form"):
             r_name = st.text_input("Tên chức vụ (VD: Trưởng phòng)")
-            st.info("Cấu hình tỷ lệ phần trăm định mức nghĩa vụ được miễn giảm. Ví dụ: Nếu chức vụ được giảm 90% nghĩa vụ (chỉ cần thực hiện 10%), hãy nhập 90%.")
-            r_teach = st.number_input("% Giờ chuẩn giảng dạy được miễn giảm", min_value=0.0, max_value=100.0, step=5.0)
-            r_nckh = st.number_input("% Giờ NCKH được miễn giảm", min_value=0.0, max_value=100.0, step=5.0)
+            st.info("💡 **Hướng dẫn tỷ lệ miễn giảm:**\n"
+                    "- Nhập **100** nếu được miễn hoàn toàn nghĩa vụ (không cần thực hiện).\n"
+                    "- Nhập **20** nếu được giảm 20% nghĩa vụ (chỉ cần thực hiện 80% định mức).\n"
+                    "- Nhập **0** nếu không được miễn giảm.")
+            r_teach = st.number_input("Tỷ lệ miễn giảm định mức Giờ giảng dạy (%)", min_value=0.0, max_value=100.0, step=5.0, help="Phần trăm định mức giờ giảng dạy được giảm trừ.")
+            r_nckh = st.number_input("Tỷ lệ miễn giảm định mức Giờ Nghiên cứu khoa học (%)", min_value=0.0, max_value=100.0, step=5.0, help="Phần trăm định mức giờ NCKH được giảm trừ.")
 
             if st.form_submit_button("Thêm"):
                 try:
@@ -320,9 +323,12 @@ with tab5:
     with st.expander("Thêm Diện miễn giảm (Thai sản, học tập, v.v.)"):
         with st.form("add_special_form"):
             s_name = st.text_input("Tên diện miễn giảm")
-            st.info("Cấu hình tỷ lệ phần trăm định mức nghĩa vụ được miễn giảm đối với đối tượng này. Ví dụ: đi học, thai sản được miễn 100%, hãy nhập 100%.")
-            s_teach = st.number_input("% Giờ chuẩn giảng dạy được miễn giảm", min_value=0.0, max_value=100.0, step=5.0)
-            s_nckh = st.number_input("% Giờ NCKH được miễn giảm", min_value=0.0, max_value=100.0, step=5.0)
+            st.info("💡 **Hướng dẫn tỷ lệ miễn giảm:**\n"
+                    "- Nhập **100** nếu được miễn hoàn toàn nghĩa vụ (không cần thực hiện).\n"
+                    "- Nhập **20** nếu được giảm 20% nghĩa vụ (chỉ cần thực hiện 80% định mức).\n"
+                    "- Nhập **0** nếu không được miễn giảm.")
+            s_teach = st.number_input("Tỷ lệ miễn giảm định mức Giờ giảng dạy (%)", min_value=0.0, max_value=100.0, step=5.0, help="Phần trăm định mức giờ giảng dạy được giảm trừ.")
+            s_nckh = st.number_input("Tỷ lệ miễn giảm định mức Giờ Nghiên cứu khoa học (%)", min_value=0.0, max_value=100.0, step=5.0, help="Phần trăm định mức giờ NCKH được giảm trừ.")
 
             if st.form_submit_button("Thêm"):
                 try:

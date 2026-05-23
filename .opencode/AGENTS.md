@@ -41,6 +41,36 @@ Editor → Validator (hybrid: string + regex + BS4) → Critic (hybrid: local + 
 ### Debug Pipeline (`src/debug_pipeline.py`)
 Sandbox Runner (Playwright) → Telemetry Critic (console + net + a11y) → Router. Runs in ~4.6s.
 
+### Dev Pipeline (`src/dev_pipeline/`) — NEW
+LangGraph build → test → validate loop with 3 human-in-loop checkpoints.
+Used for automating dev tasks: generates plan, writes code, runs tests, reviews quality.
+
+**Usage:**
+```
+python -m src.dev_pipeline "Add Excel bulk upload with 3 columns"
+python -m src.dev_pipeline --iterations 5 "Fix calculations.py regression"
+python -m src.dev_pipeline --interactive
+```
+
+**Graph flow:**
+[Plan] → interrupt (human approves/rejects plan)
+  → [Build] → implements code
+  → [Test] → runs test_compliance.py + test_teacher_integration.py → interrupt
+  → [Validate] → code quality review → interrupt (human approves/rejects)
+  → END
+
+**Checkpoints:** Plan, Test results, Validation — each pauses for human input.
+- 'approve' → continue
+- 'abort' → cancel
+- <any text> → retry with feedback
+
+**Agent:**
+- Uses Gemini (genai.Client) if available; mock fallback for offline dev.
+- Each agent has app-specific context (DB schema, code conventions, test patterns).
+- Build agent has file read/write/edit tools.
+- Test agent runs both test suites, parses pass/fail counts.
+- Validate agent reviews code quality against project conventions.
+
 ## Test Status
 | Suite | Status | Run command |
 |-------|--------|-------------|

@@ -4,9 +4,10 @@ from datetime import date
 from database import get_connection
 from components import render_empty_state, render_warning_state, render_sidebar
 
+st.set_page_config(page_title="Ghi nhận Hoạt động", page_icon="📝", layout="wide")
 render_sidebar("nhatky")
 
-st.title("Ghi nhận Hoạt động")
+st.title("📝 Ghi nhận Hoạt động")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Nhập liệu các hoạt động giảng dạy, NCKH và nhiệm vụ khác.</p>', unsafe_allow_html=True)
 
 conn = get_connection()
@@ -17,79 +18,90 @@ df_timeframes = pd.read_sql_query("SELECT id, name, start_date, end_date FROM ti
 
 if df_teachers.empty or df_activities.empty or df_timeframes.empty:
     render_warning_state("Cần thêm Nhà giáo, cấu hình Loại hoạt động và Năm học trước khi ghi nhận nhật ký.")
+    conn.close()
 else:
     teacher_options = {f"{row['name']} ({row['subject_group']})": int(row['id']) for idx, row in df_teachers.iterrows()}
     tf_options = {row['name']: int(row['id']) for idx, row in df_timeframes.iterrows()}
 
-    st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 24px 0;">', unsafe_allow_html=True)
-    st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">history</span> Lịch sử Hoạt động (Gần đây)</h3>', unsafe_allow_html=True)
+    tab_list, tab_new = st.tabs(["📋 Lịch sử Hoạt động (Gần đây)", "➕ Ghi nhận mới"])
 
-    query = """
-    SELECT al.id, t.name as 'Nhà giáo', at.name as 'Hoạt động', tf.name as 'Timeframe',
-           al.log_date as 'Ngày', al.quantity as 'Số lượng', al.class_level as 'Cấp/Lớp',
-           al.class_type, al.student_count as 'Sĩ số', al.note as 'Ghi chú',
-           at.category, at.base_conversion_rate, at.is_teaching_activity, at.is_nckh_activity
-    FROM activity_logs al
-    JOIN teachers t ON al.teacher_id = t.id
-    JOIN activity_types at ON al.activity_type_id = at.id
-    JOIN timeframes tf ON al.timeframe_id = tf.id
-    ORDER BY al.log_date DESC, al.id DESC
-    LIMIT 100
-    """
+    with tab_list:
+        query = """
+        SELECT al.id, t.name as 'Nhà giáo', at.name as 'Hoạt động', tf.name as 'Timeframe',
+               al.log_date as 'Ngày', al.quantity as 'Số lượng', al.class_level as 'Cấp/Lớp',
+               al.class_type, al.student_count as 'Sĩ số', al.note as 'Ghi chú',
+               at.category, at.base_conversion_rate, at.is_teaching_activity, at.is_nckh_activity,
+               al.timeframe_id
+        FROM activity_logs al
+        JOIN teachers t ON al.teacher_id = t.id
+        JOIN activity_types at ON al.activity_type_id = at.id
+        JOIN timeframes tf ON al.timeframe_id = tf.id
+        ORDER BY al.log_date DESC, al.id DESC
+        LIMIT 100
+        """
+        
+        from calculations import calculate_activity_hours
+        df_logs = pd.read_sql_query(query, conn)
+        
+        if not df_logs.empty:
+            hours_list = []
+            for idx, row in df_logs.iterrows():
+                hours = calculate_activity_hours(
+                    row.rename({'Số lượng': 'quantity', 'Cấp/Lớp': 'class_level', 'Sĩ số': 'student_count'}),
+                    row
+                )
+                hours_list.append(hours)
+            df_logs['Giờ chuẩn (Ước tính)'] = hours_list
     
-    from calculations import calculate_activity_hours
-    df_logs = pd.read_sql_query(query, conn)
+            display_cols = [
+                'id', 'Nhà giáo', 'Hoạt động', 'Ngày', 'Số lượng',
+                'Cấp/Lớp', 'Sĩ số', 'Giờ chuẩn (Ước tính)', 'Ghi chú'
+            ]
+            df_display = df_logs[[c for c in display_cols if c in df_logs.columns]]
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
     
-    if not df_logs.empty:
-        hours_list = []
-        for idx, row in df_logs.iterrows():
-            hours = calculate_activity_hours(
-                row.rename({'Số lượng': 'quantity', 'Cấp/Lớp': 'class_level', 'Sĩ số': 'student_count'}),
-                row
-            )
-            hours_list.append(hours)
-        df_logs['Giờ chuẩn (Ước tính)'] = hours_list
-
-        display_cols = [
-            'id', 'Nhà giáo', 'Hoạt động', 'Ngày', 'Số lượng',
-            'Cấp/Lớp', 'Sĩ số', 'Giờ chuẩn (Ước tính)', 'Ghi chú'
-        ]
-        df_display = df_logs[[c for c in display_cols if c in df_logs.columns]]
-        st.dataframe(df_display, width='stretch', hide_index=True)
-
-        with st.expander("Xoá Nhật ký"):
+            st.markdown("### 🗑️ Xoá Nhật ký")
             del_id = st.selectbox(
-                "Chọn dòng nhật ký cần xoá", 
+                "Chọn dòng nhật ký cần xoá:", 
                 options=df_logs['id'].tolist(),
-                format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]}"
+                format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]} ({df_logs[df_logs['id'] == x]['Timeframe'].values[0]})"
             )
-            confirm_key = f"confirm_del_log_{del_id}"
             
-            if st.session_state.get(confirm_key, False):
-                st.warning(f"⚠️ Bạn có chắc chắn muốn xóa dòng nhật ký #{del_id} này không?")
-                col_yes, col_no = st.columns(2)
-                with col_yes:
-                    if st.button("Xác nhận xóa vĩnh viễn", key=f"yes_log_{del_id}", type="primary"):
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM activity_logs WHERE id = ?", (int(del_id),))
-                        conn.commit()
-                        st.session_state[confirm_key] = False
-                        st.success("Đã xoá thành công!")
-                        st.rerun()
-                with col_no:
-                    if st.button("Hủy bỏ", key=f"no_log_{del_id}"):
-                        st.session_state[confirm_key] = False
-                        st.rerun()
+            selected_log_row = df_logs[df_logs['id'] == del_id].iloc[0]
+            log_tf_id = int(selected_log_row['timeframe_id'])
+            
+            # Check if timeframe is locked by Excel data
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM session_teacher_totals WHERE timeframe_id = ?", (log_tf_id,))
+            log_tf_locked = cursor.fetchone()[0] > 0
+            
+            if log_tf_locked:
+                st.warning("⚠️ Không thể xoá dòng nhật ký này vì năm học tương ứng đã được khóa để quản lý qua Excel.")
             else:
-                if st.button("Yêu cầu xoá dòng này", key=f"req_log_{del_id}"):
-                    st.session_state[confirm_key] = True
-                    st.rerun()
-    else:
-        render_empty_state("Chưa có nhật ký hoạt động nào.")
+                confirm_key = f"confirm_del_log_{del_id}"
+                if st.session_state.get(confirm_key, False):
+                    st.warning(f"⚠️ Bạn có chắc chắn muốn xóa dòng nhật ký #{del_id} này không?")
+                    col_yes, col_no = st.columns(2)
+                    with col_yes:
+                        if st.button("Xác nhận xóa vĩnh viễn", key=f"yes_log_{del_id}", type="primary"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM activity_logs WHERE id = ?", (int(del_id),))
+                            conn.commit()
+                            st.session_state[confirm_key] = False
+                            st.success("Đã xoá thành công!")
+                            st.rerun()
+                    with col_no:
+                        if st.button("Hủy bỏ", key=f"no_log_{del_id}"):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
+                else:
+                    if st.button("🗑️ Yêu cầu xoá dòng này", key=f"req_log_{del_id}"):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+        else:
+            render_empty_state("Chưa có nhật ký hoạt động nào.")
 
-    st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 24px 0;">', unsafe_allow_html=True)
-
-    with st.expander("Ghi nhận mới", expanded=False):
+    with tab_new:
         col_left, col_right = st.columns(2)
         teacher_sel = col_left.selectbox("Chọn Nhà giáo", options=list(teacher_options.keys()))
 
@@ -124,7 +136,18 @@ else:
                     default_index = idx
                     break
             tf_sel = st.selectbox("Chọn Năm học khác", options=tf_list, index=default_index)
-
+        
+        # Xác định timeframe được áp dụng cuối cùng
+        final_tf_id = tf_options[tf_sel]
+        
+        # Check lock state for the selected target timeframe
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM session_teacher_totals WHERE timeframe_id = ?", (final_tf_id,))
+        is_tf_locked = cursor.fetchone()[0] > 0
+        
+        if is_tf_locked:
+            st.warning(f"⚠️ Năm học **{tf_sel}** đã được khóa nhập lẻ để quản lý tập trung bằng Excel. Vui lòng chọn năm học khác hoặc xóa file Excel tại trang Nhập dữ liệu để mở khóa.")
+            
         with st.form("log_activity_form"):
             is_freeform = (act_info['category'] == 'Chấp hành Nhiệm vụ khác')
 
@@ -195,9 +218,9 @@ else:
             else:
                 note = st.text_input("Ghi chú chi tiết")
 
-            submit = st.form_submit_button("Lưu nhật ký")
+            submit = st.form_submit_button("Lưu nhật ký", disabled=is_tf_locked)
 
-            if submit:
+            if submit and not is_tf_locked:
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO activity_logs (
@@ -209,7 +232,7 @@ else:
                 ''', (
                     teacher_options[teacher_sel], selected_act_id, log_date, quantity,
                     class_level, class_type, student_count, nckh_level, int(is_main_author),
-                    0.0, note, tf_options[tf_sel]
+                    0.0, note, final_tf_id
                 ))
                 conn.commit()
                 st.success("Đã lưu nhật ký thành công!")

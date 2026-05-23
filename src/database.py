@@ -163,6 +163,21 @@ def init_db():
         FOREIGN KEY(timeframe_id) REFERENCES timeframes(id)
     )
     ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS session_teacher_totals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timeframe_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        giang_day_truc_tiep REAL NOT NULL DEFAULT 0.0,
+        hdcm_bd REAL NOT NULL DEFAULT 0.0,
+        nckh_total REAL NOT NULL DEFAULT 0.0,
+        nvk_total REAL NOT NULL DEFAULT 0.0,
+        UNIQUE(timeframe_id, teacher_id),
+        FOREIGN KEY(timeframe_id) REFERENCES timeframes(id),
+        FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+    )
+    ''')
     
     conn.commit()
     conn.close()
@@ -226,6 +241,7 @@ def seed_academic_holidays():
 def delete_teacher(teacher_id):
     conn = get_connection()
     cursor = conn.cursor()
+    cursor.execute("DELETE FROM session_teacher_totals WHERE teacher_id = ?", (teacher_id,))
     cursor.execute("DELETE FROM activity_logs WHERE teacher_id = ?", (teacher_id,))
     cursor.execute("DELETE FROM teacher_role_history WHERE teacher_id = ?", (teacher_id,))
     cursor.execute("DELETE FROM manual_conversions WHERE teacher_id = ?", (teacher_id,))

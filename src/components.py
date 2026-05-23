@@ -107,16 +107,16 @@ def render_metric_card(title, value, delta=None, icon=None):
 
     icon_html = ""
     if icon:
-        icon_html = f'<span class="material-symbols-outlined" style="color: var(--md-on-surface-variant); font-size: 20px;">{icon}</span>'
+        icon_html = f'<span class="material-symbols-outlined" style="color: var(--md-primary-fixed-dim); font-size: 24px;">{icon}</span>'
 
     # Do not indent HTML block lines to avoid markdown code block parsing
     st.markdown(f"""
-<div style="background: var(--md-surface-container-lowest); padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow-elevated); border: 1px solid var(--md-outline-variant); display: flex; flex-direction: column; gap: 12px;">
+<div class="md-card" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 0px; padding: 20px !important;">
 <div style="display: flex; align-items: baseline; justify-content: space-between;">
-<span style="color: var(--md-on-surface); font-size: 2.5rem; font-weight: 800; font-family: var(--font-family); letter-spacing: -0.02em;">{value}</span>{delta_html}
+<span style="color: #ffffff; font-size: 2.2rem; font-weight: 800; font-family: var(--font-family); letter-spacing: -0.02em;">{value}</span>{delta_html}
 </div>
 <div style="display: flex; justify-content: space-between; align-items: center;">
-<span style="color: var(--md-on-surface-variant); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">{title}</span>{icon_html}
+<span style="color: var(--md-on-surface-variant); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">{title}</span>{icon_html}
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -138,64 +138,60 @@ def render_card(content, extra_class=""):
     return f'<div class="md-card {extra_class}">{content}</div>'
 
 
-def render_sidebar(active_page="home"):
-    # 1. Hide default navigation
-    st.markdown("""
-<style>
-    [data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-    
-    # 2. Inject global fonts, Material symbols and theme styles
+def inject_premium_css():
+    """
+    Tiêm mã CSS thiết kế Pro-Max chứa các design tokens, glassmorphism,
+    hiệu ứng 3D hover và hỗ trợ hiển thị trên thiết bị di động (Chế độ Sáng - Light Mode).
+    """
     st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
 <style>
     :root {
-        --md-primary: #003f87;
-        --md-primary-container: #0056b3;
+        --md-primary: #0f4c81; /* Classic Premium Navy */
+        --md-primary-container: #e3f2fd;
         --md-on-primary: #ffffff;
-        --md-on-primary-container: #bbd0ff;
-        --md-primary-fixed: #d7e2ff;
-        --md-primary-fixed-dim: #acc7ff;
-        --md-surface: #f9f9ff;
-        --md-surface-dim: #d9d9e2;
-        --md-surface-container-lowest: #ffffff;
-        --md-surface-container-low: #f2f3fc;
-        --md-surface-container: #ededf6;
-        --md-surface-container-high: #e7e8f0;
-        --md-surface-container-highest: #e1e2ea;
-        --md-on-surface: #191c21;
-        --md-on-surface-variant: #424752;
-        --md-outline: #727784;
-        --md-outline-variant: #c2c6d4;
-        --md-secondary: #575f67;
-        --md-secondary-container: #d8e1ea;
-        --md-tertiary: #722b00;
-        --md-tertiary-container: #983c00;
+        --md-on-primary-container: #0f4c81;
+        --md-primary-fixed: #e3f2fd;
+        --md-primary-fixed-dim: #90caf9;
+        --md-surface: #f8f9fa; /* Pure Light Slate Gray */
+        --md-surface-dim: #f1f3f5;
+        --md-surface-container-lowest: #ffffff; /* White background for cards */
+        --md-surface-container-low: #f8f9fa;
+        --md-surface-container: #e9ecef;
+        --md-surface-container-high: #dee2e6;
+        --md-surface-container-highest: #ced4da;
+        --md-on-surface: #1a1c1e; /* Dark Charcoal text */
+        --md-on-surface-variant: #495057;
+        --md-outline: #79747e;
+        --md-outline-variant: #e0e0e0; /* Soft borders */
+        --md-secondary: #5c6370;
+        --md-secondary-container: #f1f3f5;
+        --md-tertiary: #bb8009;
+        --md-tertiary-container: #fef3c7;
         --md-error: #ba1a1a;
         --md-error-container: #ffdad6;
         --md-on-error: #ffffff;
-        --md-on-error-container: #93000a;
-        --md-inverse-surface: #2e3037;
-        --md-inverse-on-surface: #f0f0f9;
-        --md-inverse-primary: #acc7ff;
-        --md-green: #047857;
-        --md-green-bg: #ecfdf5;
-        --md-red: #b91c1c;
-        --md-red-bg: #fef2f2;
-        --md-amber: #d97706;
-        --md-amber-bg: #fffbeb;
-        --radius-sm: 4px;
-        --radius-md: 8px;
-        --radius-lg: 12px;
-        --radius-xl: 16px;
+        --md-on-error-container: #410002;
+        --md-green: #1a8754;
+        --md-green-bg: #d1e7dd;
+        --md-red: #dc3545;
+        --md-red-bg: #f8d7da;
+        --md-amber: #b58105;
+        --md-amber-bg: #fff3cd;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 18px;
+        --radius-xl: 24px;
         --radius-full: 9999px;
-        --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-        --shadow-elevated: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
+        --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+        --shadow-elevated: 0 12px 24px rgba(0, 0, 0, 0.08);
         --font-family: 'Inter', sans-serif;
+    }
+
+    /* Mượt mà hiệu ứng cuộn trang */
+    html {
+        scroll-behavior: smooth;
     }
 
     html, body, #root, .stApp {
@@ -204,166 +200,189 @@ def render_sidebar(active_page="home"):
         color: var(--md-on-surface) !important;
     }
 
+    /* Animation cho Card */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(15px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
     h1, h2, h3, h4, h5, h6 {
         font-family: var(--font-family) !important;
         color: var(--md-on-surface) !important;
     }
     h1 {
-        font-size: 36px !important;
-        font-weight: 700 !important;
+        font-size: 32px !important;
+        font-weight: 800 !important;
         letter-spacing: -0.02em !important;
         line-height: 1.2 !important;
+        background: linear-gradient(135deg, #0f4c81 30%, #1a5f96 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
-    h2 { font-size: 24px !important; font-weight: 600 !important; line-height: 1.3 !important; }
+    h2 { font-size: 22px !important; font-weight: 700 !important; line-height: 1.3 !important; }
     h3 { font-size: 18px !important; font-weight: 600 !important; line-height: 1.4 !important; }
 
     section[data-testid="stSidebar"] {
-        background-color: var(--md-surface-container-low) !important;
+        background-color: #f1f3f5 !important;
         border-right: 1px solid var(--md-outline-variant) !important;
     }
     section[data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
     }
-    section[data-testid="stSidebar"] .st-emotion-cache-1wrcr25,
-    section[data-testid="stSidebar"] .st-emotion-cache-1gv5dpq {
-        background-color: transparent !important;
-    }
-    section[data-testid="stSidebar"] a {
-        font-family: var(--font-family) !important;
-    }
     section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
         font-size: 14px !important;
         color: var(--md-on-surface-variant) !important;
     }
-    section[data-testid="stSidebar"] .st-emotion-cache-16idsys p {
-        font-size: 16px !important;
-        font-family: var(--font-family) !important;
-    }
 
+    /* Premium Button */
     .stButton > button {
         font-family: var(--font-family) !important;
         border-radius: var(--radius-md) !important;
         font-weight: 600 !important;
         font-size: 14px !important;
-        transition: all 0.2s ease !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
         border: 1px solid var(--md-outline-variant) !important;
+        background-color: #ffffff !important;
+        color: var(--md-on-surface) !important;
+        box-shadow: var(--shadow-card) !important;
     }
     .stButton > button:hover {
-        transform: scale(0.98) !important;
+        transform: translateY(-2px) !important;
+        border-color: var(--md-primary) !important;
+        box-shadow: var(--shadow-elevated) !important;
+        color: var(--md-primary) !important;
     }
-    .stButton > button[kind="secondary"] {
-        background: transparent !important;
-        border: 1px solid var(--md-outline) !important;
-        color: var(--md-on-surface) !important;
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, var(--md-primary), #1a5f96) !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #1a5f96, #2a7fbe) !important;
+        color: #ffffff !important;
     }
 
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stDateInput input {
+    /* Inputs & Selectboxes */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stDateInput input, .stNumberInput input {
         font-family: var(--font-family) !important;
         border-radius: var(--radius-md) !important;
         border: 1px solid var(--md-outline-variant) !important;
-        font-size: 16px !important;
+        background-color: #ffffff !important;
+        color: var(--md-on-surface) !important;
+        transition: border-color 0.2s, box-shadow 0.2s !important;
     }
-    .stTextInput input:focus, .stSelectbox div[data-baseweb="select"] > div:focus, .stDateInput input:focus {
-        border-color: var(--md-primary-container) !important;
-        box-shadow: 0 0 0 2px var(--md-primary-fixed) !important;
+    .stTextInput input:focus, .stSelectbox div[data-baseweb="select"] > div:focus, .stDateInput input:focus, .stNumberInput input:focus {
+        border-color: var(--md-primary) !important;
+        box-shadow: 0 0 0 2px rgba(15, 76, 129, 0.2) !important;
     }
+    
+    /* Labels */
     .stSelectbox label, .stTextInput label, .stDateInput label, .stNumberInput label, .stRadio label, .stMultiSelect label, .stSlider label {
         font-family: var(--font-family) !important;
         font-size: 14px !important;
         font-weight: 600 !important;
         color: var(--md-on-surface) !important;
-        text-transform: none !important;
-        letter-spacing: normal !important;
     }
 
-    .stTabs {
-        background-color: transparent !important;
-    }
-    .stTabs div[data-baseweb="tab-list"] {
-        gap: 8px !important;
-        background-color: transparent !important;
-        border-bottom: none !important;
+    /* Custom Glassmorphism Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px !important;
+        background-color: var(--md-surface-dim) !important;
+        padding: 6px !important;
+        border-radius: var(--radius-md) !important;
+        border: 1px solid var(--md-outline-variant) !important;
+        margin-bottom: 20px !important;
     }
     .stTabs button[data-baseweb="tab"] {
         font-family: var(--font-family) !important;
-        font-size: 16px !important;
+        font-size: 14px !important;
+        border-radius: var(--radius-sm) !important;
+        padding: 8px 16px !important;
+        color: var(--md-on-surface-variant) !important;
+        transition: all 0.2s ease !important;
     }
-    .stTabs button p {
-        font-size: 15px !important;
-        font-weight: 600 !important;
+    .stTabs button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #ffffff !important;
+        color: var(--md-primary) !important;
+        font-weight: 700 !important;
+        box-shadow: var(--shadow-card) !important;
     }
 
-    .stNumberInput input, .stMultiSelect div[data-baseweb="select"] > div {
-        font-family: var(--font-family) !important;
-        border-radius: var(--radius-md) !important;
-        border: 1px solid var(--md-outline-variant) !important;
-    }
-
+    /* Premium Light Mode Card */
     .md-card {
-        background-color: var(--md-surface-container-lowest) !important;
+        background: #ffffff !important;
         border: 1px solid var(--md-outline-variant) !important;
         border-radius: var(--radius-lg) !important;
         padding: 24px !important;
         box-shadow: var(--shadow-card) !important;
         margin-bottom: 16px !important;
+        animation: fadeInUp 0.4s ease-out forwards;
+        transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+    }
+    .md-card:hover {
+        transform: translateY(-2px) !important;
+        border-color: rgba(15, 76, 129, 0.3) !important;
+        box-shadow: var(--shadow-elevated) !important;
     }
 
     .md-chip {
         display: inline-flex !important;
         align-items: center !important;
-        padding: 5px 14px !important;
+        padding: 4px 12px !important;
         border-radius: var(--radius-full) !important;
         font-size: 12px !important;
         font-weight: 600 !important;
-        text-transform: none !important;
-        white-space: nowrap !important;
     }
     .md-chip-primary {
-        background-color: var(--md-primary-fixed) !important;
+        background-color: var(--md-primary-container) !important;
         color: var(--md-primary) !important;
+        border: 1px solid rgba(15, 76, 129, 0.2) !important;
     }
     .md-chip-green {
         background-color: var(--md-green-bg) !important;
         color: var(--md-green) !important;
+        border: 1px solid rgba(26, 135, 84, 0.2) !important;
     }
     .md-chip-red {
         background-color: var(--md-red-bg) !important;
         color: var(--md-red) !important;
+        border: 1px solid rgba(220, 53, 69, 0.2) !important;
     }
     .md-chip-amber {
         background-color: var(--md-amber-bg) !important;
         color: var(--md-amber) !important;
-    }
-    .md-chip-tertiary {
-        background-color: var(--md-secondary-container) !important;
-        color: var(--md-secondary) !important;
+        border: 1px solid rgba(181, 129, 5, 0.2) !important;
     }
     
-    .stButton button[aria-label="Xóa"],
+    /* Destruction Button Styling */
     .stButton button[aria-label*="Xóa"],
     .stButton button[aria-label*="xóa"],
     .stButton button[aria-label*="Xoá"],
     .stButton button[aria-label*="xoá"] {
         background-color: var(--md-red-bg) !important;
         color: var(--md-red) !important;
-        border: 1px solid var(--md-red) !important;
+        border: 1px solid rgba(220, 53, 69, 0.4) !important;
     }
-    .stButton button[aria-label="Xóa"]:hover,
     .stButton button[aria-label*="Xóa"]:hover,
     .stButton button[aria-label*="Xoá"]:hover {
-        background-color: var(--md-error-container) !important;
-        color: var(--md-on-error-container) !important;
+        background-color: var(--md-red) !important;
+        color: #ffffff !important;
     }
+
     .md-status-bar {
-        background-color: var(--md-surface-container-low) !important;
+        background: #ffffff !important;
         border: 1px solid var(--md-outline-variant) !important;
         border-radius: var(--radius-lg) !important;
-        padding: 16px 24px !important;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
+        padding: 20px 24px !important;
         box-shadow: var(--shadow-card) !important;
+        margin-bottom: 24px;
+        animation: fadeInUp 0.3s ease-out;
     }
     .md-section-label {
         font-size: 11px !important;
@@ -372,6 +391,8 @@ def render_sidebar(active_page="home"):
         letter-spacing: 0.05em !important;
         color: var(--md-on-surface-variant) !important;
     }
+
+    /* Page Navigation styling */
     [data-testid="stSidebarNav"] {
         display: none !important;
     }
@@ -383,13 +404,13 @@ def render_sidebar(active_page="home"):
         display: flex !important;
         align-items: center !important;
         gap: 12px !important;
-        padding: 10px 16px !important;
+        padding: 12px 16px !important;
         border-radius: var(--radius-md) !important;
         text-decoration: none !important;
         font-size: 15px !important;
         font-family: var(--font-family) !important;
         font-weight: 500 !important;
-        transition: all 0.15s ease !important;
+        transition: all 0.2s ease !important;
         background-color: transparent !important;
         border: none !important;
         width: 100% !important;
@@ -397,13 +418,15 @@ def render_sidebar(active_page="home"):
         color: var(--md-on-surface-variant) !important;
     }
     [data-testid="stPageLink"] > a:hover {
-        background-color: var(--md-surface-container-high) !important;
-        color: var(--md-on-surface) !important;
+        background-color: var(--md-surface-dim) !important;
+        color: var(--md-primary) !important;
+        transform: translateX(3px) !important;
     }
     [data-testid="stPageLink"] > a[aria-current="page"] {
         background-color: var(--md-primary-container) !important;
-        color: var(--md-on-primary) !important;
+        color: var(--md-primary) !important;
         font-weight: 600 !important;
+        box-shadow: var(--shadow-card) !important;
     }
     [data-testid="stPageLink"] p {
         color: inherit !important;
@@ -415,10 +438,57 @@ def render_sidebar(active_page="home"):
         color: inherit !important;
         font-size: 20px !important;
     }
+
+    /* --- MOBILE RESPONSIVENESS OVERRIDES --- */
+    @media (max-width: 768px) {
+        h1 {
+            font-size: 24px !important;
+        }
+        h2 {
+            font-size: 18px !important;
+        }
+        .md-card {
+            padding: 16px !important;
+            margin-bottom: 12px !important;
+        }
+        .md-status-bar {
+            padding: 16px !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 16px !important;
+        }
+        .md-status-bar > div {
+            width: 100% !important;
+        }
+        /* Mobile Touch Target 48px */
+        .stButton > button {
+            width: 100% !important;
+            height: 48px !important;
+            font-size: 16px !important;
+        }
+        .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stDateInput input, .stNumberInput input {
+            height: 48px !important;
+            font-size: 16px !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
-    # 4. Render HTML sidebar
+
+def render_sidebar(active_page="home"):
+    # 1. Hide default navigation
+    st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+    
+    # 2. Inject global fonts, Material symbols, design system, responsive styles
+    inject_premium_css()
+
+    # 3. Render HTML sidebar
     with st.sidebar:
         st.markdown(f"""
 <div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid var(--md-outline-variant); margin-bottom: 16px;">
@@ -434,7 +504,7 @@ def render_sidebar(active_page="home"):
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
         </div>
         <div>
-            <div style="font-weight: 700; font-size: 16px; color: var(--md-on-surface); line-height: 1.2;">Quản lý T04</div>
+            <div style="font-weight: 700; font-size: 16px; color: #ffffff; line-height: 1.2;">Quản lý T04</div>
             <div style="font-size: 11px; color: var(--md-on-surface-variant); letter-spacing: 0.03em;">Hệ thống định mức</div>
         </div>
     </div>
@@ -445,16 +515,18 @@ def render_sidebar(active_page="home"):
         st.page_link("pages/1_Dashboard.py", label="Bảng điều khiển", icon=":material/dashboard:")
         st.page_link("pages/2_QuanLyCanBo.py", label="Quản lý Cán bộ", icon=":material/groups:")
         st.page_link("pages/3_NhatKyHoatDong.py", label="Nhật ký Hoạt động", icon=":material/edit_note:")
+        st.page_link("pages/5_NhapDuLieu.py", label="Nhập dữ liệu Excel", icon=":material/download:")
         st.page_link("pages/4_CaiDatHeThong.py", label="Cài đặt Hệ thống", icon=":material/settings:")
 
         st.markdown("""
 <div style="
     margin-top: 32px;
     padding: 16px;
-    background-color: var(--md-primary-fixed);
+    background-color: var(--md-surface-container-low);
+    border: 1px solid var(--md-outline-variant);
     border-radius: var(--radius-md);
     font-size: 12px;
-    color: var(--md-primary);
+    color: var(--md-on-surface-variant);
     line-height: 1.5;
     display: flex;
     align-items: start;
@@ -464,3 +536,66 @@ def render_sidebar(active_page="home"):
     <div>v2.0 — Hệ thống định mức T04</div>
 </div>
 """, unsafe_allow_html=True)
+
+def render_step_header(step_num, title, description=None):
+    desc_html = f'<div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">{description}</div>' if description else ""
+    st.markdown(f"""
+    <div style="margin-top: 24px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="
+                background-color: var(--md-primary); 
+                color: #ffffff; 
+                font-weight: 700; 
+                width: 24px; 
+                height: 24px; 
+                border-radius: 50%; 
+                display: inline-flex; 
+                align-items: center; 
+                justify-content: center;
+                font-size: 0.85rem;
+            ">{step_num}</span>
+            <span style="font-weight: 700; font-size: 1.1rem; color: var(--md-on-surface);">{title}</span>
+        </div>
+        {desc_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_error_report(errors):
+    errors_html = "".join([f'<li style="margin-bottom: 6px;">{err}</li>' for err in errors])
+    st.markdown(f"""
+    <div style="
+        background-color: #fdf2f2;
+        border: 1px solid #f5c2c2;
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        color: #9b1c1c;
+        margin: 16px 0;
+        font-size: 0.95rem;
+    ">
+        <div style="font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span class="material-symbols-outlined" style="font-size: 20px; color: #df1b1b;">error</span>
+            Phát hiện lỗi dữ liệu ({len(errors)} lỗi):
+        </div>
+        <ul style="margin: 0; padding-left: 20px;">
+            {errors_html}
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_success_preview(df):
+    st.markdown(f"""
+    <div style="
+        background-color: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        color: #166534;
+        margin: 16px 0;
+        font-size: 0.95rem;
+    ">
+        <div style="font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-outlined" style="font-size: 20px; color: #15803d;">check_circle</span>
+            File hợp lệ! Sẵn sàng nhập {len(df)} cán bộ.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
