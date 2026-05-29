@@ -94,6 +94,10 @@ def ensure_reduction_rules(conn, cursor):
         except:
             pass
 
+def get_police_rank_id(cursor, rank_name):
+    row = cursor.execute("SELECT id FROM police_ranks WHERE rank_name = ?", (rank_name,)).fetchone()
+    return row[0] if row else None
+
 SUBJECT_GROUP = 'Chính trị/Nghiệp vụ'
 DEPT_NAME = 'Chính trị, Pháp luật, Nghiệp vụ'
 
@@ -101,8 +105,9 @@ def seed_teacher_NguyenVanA(conn, cursor, tf_id):
     """Nguyễn Văn A — Trợ giảng, bổ nhiệm 01/12/2025 (Điều 10.3.a)."""
     print("\n  1. Nguyễn Văn A — Trợ giảng (Điều 10.3.a)")
     subject_group = SUBJECT_GROUP
-    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
-                   ('Nguyễn Văn A', subject_group, 0))
+    pr_id = get_police_rank_id(cursor, 'Thiếu úy')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'TEACHER', ?, ?, ?)",
+                   ('Nguyễn Văn A', subject_group, 0, 85_000_000, pr_id, 4.20))
     tid = cursor.lastrowid
 
     cursor.execute("""
@@ -128,8 +133,9 @@ def seed_teacher_TranVanB(conn, cursor, tf_id):
     """Trần Văn B — Giảng viên, trưng tập + bồi dưỡng + điều trị (Điều 10.3.b)."""
     print("\n  2. Trần Văn B — Giảng viên, trưng tập + bồi dưỡng + điều trị (Điều 10.3.b)")
     subject_group = SUBJECT_GROUP
-    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
-                   ('Trần Văn B', subject_group, 0))
+    pr_id = get_police_rank_id(cursor, 'Trung úy')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'TEACHER', ?, ?, ?)",
+                   ('Trần Văn B', subject_group, 0, 95_000_000, pr_id, 4.60))
     tid = cursor.lastrowid
 
     cursor.execute("""
@@ -172,8 +178,9 @@ def seed_teacher_PhamThiC(conn, cursor, tf_id):
     """Phạm Thị C — Giảng viên nữ, thai sản + nuôi con (Điều 10.3.c)."""
     print("\n  3. Phạm Thị C — Giảng viên nữ, thai sản + nuôi con (Điều 10.3.c)")
     subject_group = SUBJECT_GROUP
-    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
-                   ('Phạm Thị C', subject_group, 1))
+    pr_id = get_police_rank_id(cursor, 'Thượng úy')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'TEACHER', ?, ?, ?)",
+                   ('Phạm Thị C', subject_group, 1, 90_000_000, pr_id, 5.00))
     tid = cursor.lastrowid
 
     cursor.execute("""
@@ -208,8 +215,9 @@ def seed_teacher_LeVanD(conn, cursor, tf_id):
     """Lê Văn D — Ví dụ 1: Phó Trưởng khoa → Trưởng khoa, đi thực tế + đi học."""
     print("\n  4. Lê Văn D — Ví dụ 1 (Phó TK→TK, đi thực tế + đi học)")
     subject_group = SUBJECT_GROUP
-    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
-                   ('Lê Văn D', subject_group, 0))
+    pr_id = get_police_rank_id(cursor, 'Đại úy')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'TEACHER', ?, ?, ?)",
+                   ('Lê Văn D', subject_group, 0, 130_000_000, pr_id, 5.40))
     tid = cursor.lastrowid
 
     cursor.execute("""
@@ -258,8 +266,9 @@ def seed_teacher_BuiThiX(conn, cursor, tf_id):
     """Bùi Thị X — Ví dụ 2: GV→GVC, thai sản + đi học."""
     print("\n  5. Bùi Thị X — Ví dụ 2 (GV→GVC, thai sản + đi học)")
     subject_group = SUBJECT_GROUP
-    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
-                   ('Bùi Thị X', subject_group, 1))
+    pr_id = get_police_rank_id(cursor, 'Thượng úy')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'TEACHER', ?, ?, ?)",
+                   ('Bùi Thị X', subject_group, 1, 100_000_000, pr_id, 5.00))
     tid = cursor.lastrowid
 
     cursor.execute("""
@@ -306,8 +315,9 @@ def seed_teacher_GVBinhThuong(conn, cursor, tf_id):
     """GV Bình Thường — Simple teacher with activity logs for verification."""
     print("\n  6. GV Bình Thường — Activity log verification")
     subject_group = SUBJECT_GROUP
-    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
-                   ('GV Bình Thường', subject_group, 0))
+    pr_id = get_police_rank_id(cursor, 'Trung úy')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'TEACHER', ?, ?, ?)",
+                   ('GV Bình Thường', subject_group, 0, 85_000_000, pr_id, 4.60))
     tid = cursor.lastrowid
 
     cursor.execute("""
@@ -351,9 +361,54 @@ def seed_teacher_GVBinhThuong(conn, cursor, tf_id):
     print(f"    teacher_id={tid}")
     return tid
 
+def seed_teacher_GuestSpeaker(conn, cursor, tf_id):
+    """Nguyễn Thị Khách — Giảng viên thỉnh giảng (GUEST)."""
+    print("\n  7. Nguyễn Thị Khách — Giảng viên thỉnh giảng (GUEST)")
+    subject_group = SUBJECT_GROUP
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank) VALUES (?, ?, ?, 'GUEST', ?)",
+                   ('Nguyễn Thị Khách', subject_group, 1, 'Giáo sư'))
+    tid = cursor.lastrowid
+
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date)
+        VALUES (?, 'TITLE', ?, ?)
+    """, (tid, 'Giáo sư, Phó Giáo sư', '2025-08-04'))
+
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'DEPARTMENT', ?, ?, ?)
+    """, (tid, DEPT_NAME, '2025-08-04', None))
+
+    conn.commit()
+    print(f"    teacher_id={tid}")
+    return tid
+
+def seed_teacher_StaffManager(conn, cursor, tf_id):
+    """Trần Văn Quản Lý — Cán bộ quản lý (STAFF)."""
+    print("\n  8. Trần Văn Quản Lý — Cán bộ quản lý (STAFF)")
+    subject_group = SUBJECT_GROUP
+    pr_id = get_police_rank_id(cursor, 'Đại tá')
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female, employment_type, total_12m_salary, police_rank_id, salary_coefficient) VALUES (?, ?, ?, 'STAFF', ?, ?, ?)",
+                   ('Trần Văn Quản Lý', subject_group, 0, 150_000_000, pr_id, 8.00))
+    tid = cursor.lastrowid
+
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date)
+        VALUES (?, 'TITLE', ?, ?)
+    """, (tid, 'Giảng viên chính', '2025-08-04'))
+
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'DEPARTMENT', ?, ?, ?)
+    """, (tid, 'Công tác tại phòng, trung tâm', '2025-08-04', None))
+
+    conn.commit()
+    print(f"    teacher_id={tid}")
+    return tid
+
 def delete_existing_teachers(conn, cursor):
     """Remove existing seeded teachers to allow re-seed."""
-    names = ['Nguyễn Văn A', 'Trần Văn B', 'Phạm Thị C', 'Lê Văn D', 'Bùi Thị X', 'GV Bình Thường']
+    names = ['Nguyễn Văn A', 'Trần Văn B', 'Phạm Thị C', 'Lê Văn D', 'Bùi Thị X', 'GV Bình Thường', 'Nguyễn Thị Khách', 'Trần Văn Quản Lý']
     for name in names:
         row = cursor.execute("SELECT id FROM teachers WHERE name = ?", (name,)).fetchone()
         if row:
@@ -374,13 +429,17 @@ def run():
 
     tf_id = ensure_timeframe(conn, cursor)
 
+    # Ensure police_ranks exist before any teacher references them
+    from database import seed_police_ranks
+    seed_police_ranks(conn, cursor)
+
     from seed_activities import ACTIVITIES
     added_acts = 0
     for a in ACTIVITIES:
         try:
             cursor.execute("""
-                INSERT INTO activity_types (name, category, unit, base_conversion_rate, is_teaching_activity, is_nckh_activity)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO activity_types (name, category, unit, base_conversion_rate, is_teaching_activity, is_nckh_activity, applicable_employment_types)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, a)
             added_acts += 1
         except:
@@ -402,6 +461,8 @@ def run():
     seed_teacher_LeVanD(conn, cursor, tf_id)
     seed_teacher_BuiThiX(conn, cursor, tf_id)
     seed_teacher_GVBinhThuong(conn, cursor, tf_id)
+    seed_teacher_GuestSpeaker(conn, cursor, tf_id)
+    seed_teacher_StaffManager(conn, cursor, tf_id)
 
     count = cursor.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]
     print(f"\n  Total teachers in DB: {count}")

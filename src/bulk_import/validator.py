@@ -1,12 +1,15 @@
 import pandas as pd
 from database import get_connection
+from .templates import ALLOWED_LOAI
+
+ALLOWED_LOAI_SET = set(ALLOWED_LOAI)
 
 def safe_float(val):
     if pd.isna(val) or val is None:
-        return 0.0
+        return None
     val_str = str(val).strip()
     if val_str == "" or val_str.lower() == "nan":
-        return 0.0
+        return None
     val_str = val_str.replace(" ", "")
     if "," in val_str and "." not in val_str:
         val_str = val_str.replace(",", ".")
@@ -18,108 +21,113 @@ def safe_float(val):
     return float(val_str)
 
 def validate_excel_data(file_bytes):
-    """
-    Đọc dữ liệu từ file Excel và thực hiện kiểm tra tính hợp lệ.
-    Trả về: (is_valid, list_of_errors, parsed_df)
-    """
     errors = []
-    
-    # 1. Đọc Excel
+
     try:
         df = pd.read_excel(file_bytes, header=3)
     except Exception as e:
-        return False, [f"Không thể đọc file Excel. Chi tiết lỗi: {str(e)}"], None
-        
-    if df.empty:
-        return False, ["File Excel không có dữ liệu để nhập."], None
+        return False, [f"Không thể đọc file Excel: {str(e)}"], None
 
-    df = df.dropna(how='all')
-    
-    # 2. Kiểm tra cột tiêu đề
+    df = df.dropna(how='all').reset_index(drop=True)
+    if df.empty:
+        return False, ["File Excel không có dữ liệu."], None
+
     expected_headers = [
-        "Mã GV (Khóa)", 
-        "Họ tên (Khóa)", 
-        "Giảng dạy trực tiếp*", 
-        "HĐ chuyên môn & Bồi dưỡng*", 
-        "NCKH*", 
-        "Nhiệm vụ khác*", 
-        "Ghi chú"
+        "Mã GV (Khóa)", "Họ tên (Khóa)", "Chức danh (Khóa)", "Đơn vị (Khóa)",
+        "Tên môn học", "Loại", "Nhóm", "Sỉ số", "Tiết quy đổi",
+        "Hệ số tín chỉ", "Ghi chú"
     ]
-    
-    actual_headers = list(df.columns)
-    if len(actual_headers) < 6:
-        return False, [f"Cấu trúc file không đúng. Cần tối thiểu 6 cột dữ liệu đầu tiên."], None
-        
-    for i in range(6):
-        if actual_headers[i].strip() != expected_headers[i]:
-            errors.append(f"Tên cột thứ {i+1} không khớp. Yêu cầu: '{expected_headers[i]}', Thực tế: '{actual_headers[i]}'")
-            
+    actual_headers = [str(h).strip() if not pd.isna(h) else "" for h in df.columns]
+    if len(actual_headers) < 11:
+        return False, [f"Cần 11 cột, phát hiện {len(actual_headers)} cột."], None
+
+    for i in range(11):
+        if actual_headers[i] != expected_headers[i]:
+            errors.append(
+                f"Cột thứ {i+1} không khớp. "
+                f"Yêu cầu: '{expected_headers[i]}', Thực tế: '{actual_headers[i]}'"
+            )
     if errors:
         return False, errors, None
-        
+
     df.columns = [
-        "teacher_id", "teacher_name", "giang_day_truc_tiep", 
-        "hdcm_bd", "nckh_total", "nvk_total"
-    ] + list(df.columns[6:])
-    
-    # 3. Kết nối DB lấy danh sách Mã GV hiện tại để đối chiếu
+        "teacher_id", "teacher_name", "chuc_danh", "don_vi",
+        "subject_name", "loai", "nhom", "si_so", "tiet_quy_doi",
+        "he_so_tin_chi", "ghi_chu"
+    ]
+
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM teachers")
     db_teachers = {t['id']: t['name'] for t in cursor.fetchall()}
     conn.close()
-    
-    # 4. Kiểm tra từng dòng
-    seen_ids = set()
-    
+
     for idx, row in df.iterrows():
         row_num = idx + 5
-        
-        # A. Kiểm tra Mã GV trống
+
         t_id_raw = row['teacher_id']
         if pd.isna(t_id_raw) or str(t_id_raw).strip() == "":
             errors.append(f"Dòng {row_num}: Mã GV bị trống.")
             continue
-            
+
         try:
-            t_id_float = float(t_id_raw)
-            if t_id_float.is_integer():
-                t_id = int(t_id_float)
-            else:
-                errors.append(f"Dòng {row_num}: Mã GV '{t_id_raw}' phải là số nguyên.")
-                continue
+            t_id = int(float(t_id_raw))
             df.at[idx, 'teacher_id'] = t_id
-        except ValueError:
+        except (ValueError, TypeError):
             errors.append(f"Dòng {row_num}: Mã GV '{t_id_raw}' phải là số nguyên.")
             continue
-            
-        # B. Kiểm tra trùng lặp Mã GV trong file
-        if t_id in seen_ids:
-            errors.append(f"Dòng {row_num}: Trùng lặp Mã GV {t_id} trong file.")
-        seen_ids.add(t_id)
-        
-        # C. Kiểm tra Mã GV tồn tại trong DB
+
         if t_id not in db_teachers:
             errors.append(f"Dòng {row_num}: Mã GV {t_id} không tồn tại trong hệ thống.")
-            continue
-            
-        # D. Kiểm tra giá trị số
-        for friendly_name, col_name in [
-            ("Giảng dạy trực tiếp", "giang_day_truc_tiep"),
-            ("HĐ chuyên môn & Bồi dưỡng", "hdcm_bd"),
-            ("NCKH", "nckh_total"),
-            ("Nhiệm vụ khác", "nvk_total")
-        ]:
-            val = row[col_name]
-            try:
-                cleaned_val = safe_float(val)
-                if cleaned_val < 0:
-                    errors.append(f"Dòng {row_num}: Cột '{friendly_name}' có giá trị âm ({cleaned_val}). Phải là số >= 0.")
-                df.at[idx, col_name] = cleaned_val
-            except ValueError:
-                errors.append(f"Dòng {row_num}: Cột '{friendly_name}' có giá trị '{val}' không phải là số hợp lệ.")
-                    
+
+        subject_name = row.get('subject_name', '')
+        if pd.isna(subject_name) or str(subject_name).strip() == "":
+            errors.append(f"Dòng {row_num}: Tên môn học bị trống.")
+
+        loai = row.get('loai', '')
+        if pd.isna(loai) or str(loai).strip() == "":
+            errors.append(f"Dòng {row_num}: Cột Loại bị trống.")
+        else:
+            loai_clean = str(loai).strip().upper()
+            if loai_clean not in ALLOWED_LOAI_SET:
+                allowed_str = ", ".join(ALLOWED_LOAI)
+                errors.append(
+                    f"Dòng {row_num}: Loại '{loai}' không hợp lệ. "
+                    f"Chấp nhận: {allowed_str}"
+                )
+            else:
+                df.at[idx, 'loai'] = loai_clean
+
+        si_so_raw = row.get('si_so', None)
+        si_so_val = safe_float(si_so_raw)
+        if si_so_val is None:
+            errors.append(f"Dòng {row_num}: Sỉ số bị trống hoặc không phải số.")
+        elif si_so_val < 0:
+            errors.append(f"Dòng {row_num}: Sỉ số không được âm ({si_so_val}).")
+        elif not si_so_val.is_integer():
+            errors.append(f"Dòng {row_num}: Sỉ số phải là số nguyên ({si_so_val}).")
+        else:
+            df.at[idx, 'si_so'] = int(si_so_val)
+
+        tqđ_raw = row.get('tiet_quy_doi', None)
+        tqđ_val = safe_float(tqđ_raw)
+        if tqđ_val is None:
+            errors.append(f"Dòng {row_num}: Tiết quy đổi bị trống hoặc không phải số.")
+        elif tqđ_val < 0:
+            errors.append(f"Dòng {row_num}: Tiết quy đổi không được âm ({tqđ_val}).")
+        else:
+            df.at[idx, 'tiet_quy_doi'] = tqđ_val
+
+        hstc_raw = row.get('he_so_tin_chi', None)
+        hstc_val = safe_float(hstc_raw)
+        if hstc_val is None:
+            errors.append(f"Dòng {row_num}: Hệ số tín chỉ bị trống hoặc không phải số.")
+        elif hstc_val <= 0:
+            errors.append(f"Dòng {row_num}: Hệ số tín chỉ phải > 0 ({hstc_val}).")
+        else:
+            df.at[idx, 'he_so_tin_chi'] = hstc_val
+
     if errors:
         return False, errors, df
-        
+
     return True, [], df

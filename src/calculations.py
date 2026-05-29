@@ -126,7 +126,7 @@ def calculate_activity_hours(log_row, activity_type_row):
     else:
         return base
 
-def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
+def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_override=None):
     """
     Tính toán định mức động cho giảng viên, sử dụng logic proportional timeline
     """
@@ -151,11 +151,11 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
     # (explicitly stated for thai sản: "23 tuần, không bao gồm 03 tuần nghỉ Tết Âm lịch")
 
 
-    # Query teachers
-    t_query = "SELECT * FROM teachers"
+    # Query teachers (core teachers only; GUEST handled separately by payroll)
+    t_query = "SELECT * FROM teachers WHERE employment_type IN ('TEACHER', 'STAFF')"
     t_params = []
     if teacher_id is not None:
-        t_query += " WHERE id = ?"
+        t_query += " AND id = ?"
         t_params.append(int(teacher_id))
         
     df_teachers = pd.read_sql_query(t_query, conn, params=t_params)
@@ -612,11 +612,14 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
     df_out['dinh_muc_nckh_phai_thuc_hien'] = df_out['dinh_muc_nckh_phai_thuc_hien'].fillna(0)
     
     # Tính Logs
-    df_session = pd.read_sql_query(
-        "SELECT * FROM session_teacher_totals WHERE timeframe_id = ?",
-        conn, params=[tf_id]
-    )
-    
+    if df_session_override is not None:
+        df_session = df_session_override
+    else:
+        df_session = pd.read_sql_query(
+            "SELECT * FROM session_teacher_totals WHERE timeframe_id = ?",
+            conn, params=[tf_id]
+        )
+
     if not df_session.empty:
         gc_dict = df_session.set_index('teacher_id')['giang_day_truc_tiep'].to_dict()
         hdcm_bd_dict = df_session.set_index('teacher_id')['hdcm_bd'].to_dict()
@@ -632,6 +635,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
         df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)
         df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
         df_out['giang_day_truc_tiep'] = df_out['id'].map(gc_dict).fillna(0)
+        df_out['nguon_du_lieu'] = 'Excel'
     else:
         query_logs = """
         SELECT 
@@ -669,6 +673,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None):
         df_out['nvk_da_thuc_hien'] = df_out['id'].map(nvk_dict).fillna(0)
         df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
         df_out['giang_day_truc_tiep'] = df_out['id'].map(direct_teaching_dict).fillna(0)
+        df_out['nguon_du_lieu'] = 'Nhập lẻ'
     
     df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - (df_out['dinh_muc_gc_phai_thuc_hien'] - df_out['so_gio_duoc_mien_giam'])
     df_out['nckh_vuot_thieu'] = df_out['nckh_da_thuc_hien'] - df_out['dinh_muc_nckh_phai_thuc_hien']

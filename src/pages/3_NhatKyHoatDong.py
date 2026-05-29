@@ -12,7 +12,7 @@ st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Nh
 
 conn = get_connection()
 
-df_teachers = pd.read_sql_query("SELECT id, name, subject_group FROM teachers", conn)
+df_teachers = pd.read_sql_query("SELECT id, name, subject_group, employment_type FROM teachers", conn)
 df_activities = pd.read_sql_query("SELECT * FROM activity_types", conn)
 df_timeframes = pd.read_sql_query("SELECT id, name, start_date, end_date FROM timeframes ORDER BY id DESC", conn)
 
@@ -104,8 +104,18 @@ else:
     with tab_new:
         col_left, col_right = st.columns(2)
         teacher_sel = col_left.selectbox("Chọn Nhà giáo", options=list(teacher_options.keys()))
+        selected_teacher_id = teacher_options[teacher_sel]
+        selected_emp_type = df_teachers[df_teachers['id'] == selected_teacher_id].iloc[0]['employment_type']
 
-        activity_options = {f"[{row['category']}] {row['name']}": int(row['id']) for idx, row in df_activities.iterrows()}
+        def _row_applies(r, emp_type):
+            val = r.get('applicable_employment_types', 'ALL')
+            if pd.isna(val) or val == 'ALL':
+                return True
+            return emp_type in str(val).split(',')
+
+        act_mask = df_activities.apply(lambda r: _row_applies(r, selected_emp_type), axis=1)
+        df_filtered = df_activities[act_mask]
+        activity_options = {f"[{row['category']}] {row['name']}": int(row['id']) for idx, row in df_filtered.iterrows()}
         activity_sel = col_right.selectbox("Chọn Hoạt động", options=list(activity_options.keys()))
         selected_act_id = activity_options[activity_sel]
         act_info = df_activities[df_activities['id'] == selected_act_id].iloc[0]

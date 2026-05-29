@@ -19,11 +19,13 @@ Tracks Giảng dạy, Hoạt động chuyên môn, Bồi dưỡng, NCKH, and Ch�
 - `nvk_dict = {'Hoạt động chuyên môn', 'Bồi dưỡng'}` (for "Kế hoạch khác" column)
 - "Chấp hành Nhiệm vụ khác" is NOT in GC — free-form, no conversion rate
 
-## Seed Status (run `python src/seed_full.py`)
+## Seed Status (run `python src/seed_teachers.py`)
 - 113 activity types: 13 Giảng dạy, 52 Hoạt động chuyên môn, 4 Bồi dưỡng, 33 NCKH, 10 NCKH-Hướng dẫn thi đấu, 1 CHNVK
 - 51 reduction rules (NCKH values verified via 5-agent swarm consensus)
 - 4 titles (GS/PGS, GVC, GV, TG) × 3 fields (TN, XH, NCKH) = 12 base norms
 - 4 departments, 1 timeframe (Aug 4 2025 – Jun 5 2026)
+- 29 police ranks (Bảng 6+7 NĐ 204/2004/NĐ-CP)
+- 8 teachers: 6 TEACHER + 1 GUEST + 1 STAFF, each with police rank + coefficient
 - Uses UPSERT — existing rows get updated on re-seed
 
 ## Key Decisions
@@ -71,6 +73,23 @@ python -m src.dev_pipeline --interactive
 - Test agent runs both test suites, parses pass/fail counts.
 - Validate agent reviews code quality against project conventions.
 
+## Salary Reform (Police Rank-Based)
+- `total_12m_salary` replaced by coefficient × base_salary × 12 computation
+- **`police_ranks` table**: 29 ranks from NĐ 204/2004/NĐ-CP Bảng 6+7
+- **`salary_coefficient`** column on teachers (source of truth for pay)
+- **`police_rank_id`** FK to police_ranks (auto-fills coefficient on selection)
+- **`base_salary`** setting in DB: 2,340,000 VND (NĐ 73/2024/NĐ-CP), updatable
+- Fallback: if `salary_coefficient` is NULL, uses stored `total_12m_salary`
+- GUEST pay unchanged (still TT11 per-session rates)
+- Teacher create/edit forms: police_rank selectbox → auto-compute preview
+- Seed teachers: each has realistic police rank (Thiếu úy→Đại tá, Đại úy→Đại tướng)
+
+## Bù Định Mức (Dashboard)
+- Radio selector: "Cá nhân (GC ↔ NCKH)" / "Tập thể (theo Đơn vị)" / "Không bù"
+- Individual: auto-compensation between GC and NCKH per teacher (Điều 12)
+- Department: sharing surplus hours within same unit (Điều 12.3)
+- No compensation: raw metrics display
+
 ## Test Status
 | Suite | Status | Run command |
 |-------|--------|-------------|
@@ -84,6 +103,10 @@ python -m src.dev_pipeline --interactive
 - Event reduction: `segment_norm × event_weeks / seg_weeks × reduction_pct`
 - Bu trừ: GC surplus → NCKH; NCKH surplus → GC (Điều 12)
 - NCKH for GV nữ nuôi con 12-36 tháng: 0% reduction (Điều 11.4)
+- Salary: `total_12m = salary_coefficient × base_salary × 12` (NĐ 204/2004/NĐ-CP)
+- Hourly rate: `(total_12m / standard_hours) × (44/52)` per TT21/2025
+- Base pay: `hourly_rate × min(actual_hours, standard_hours)`
+- Overtime: `hourly_rate × capped_overtime` (max 100h or 100% standard)
 
 ## Regulation Derived Values
 - Lê Văn D: dinh_muc≈178.8, giam=47.1 (system: 178.05, 47.09)

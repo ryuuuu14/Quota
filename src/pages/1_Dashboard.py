@@ -18,13 +18,15 @@ if 'selected_tf_id' not in st.session_state:
 if st.session_state['selected_tf_id'] is None and not df_tf.empty:
     st.session_state['selected_tf_id'] = int(df_tf.iloc[0]['id'])
 
-if not df_tf.empty:
+selected_tf_id = st.session_state['selected_tf_id']
+
+if not df_tf.empty and selected_tf_id:
     tf_options = {f"{row['name']} ({row['start_date']} đến {row['end_date']})": row['id'] for _, row in df_tf.iterrows()}
     current_key = [k for k, v in tf_options.items() if v == st.session_state['selected_tf_id']]
     current_key = current_key[0] if current_key else list(tf_options.keys())[0]
 
     col_tf, _ = st.columns([8, 4])
-    tf_sel = col_tf.selectbox("📅 Đang xem năm học:", options=list(tf_options.keys()), index=list(tf_options.keys()).index(current_key))
+    tf_sel = col_tf.selectbox("Chọn năm học:", options=list(tf_options.keys()), index=list(tf_options.keys()).index(current_key))
     if tf_options[tf_sel] != st.session_state['selected_tf_id']:
         st.session_state['selected_tf_id'] = int(tf_options[tf_sel])
         st.rerun()
@@ -59,21 +61,31 @@ if selected_tf_id:
         with col1:
             render_metric_card("Tổng số nhà giáo", f"{tong_nha_giao}", icon="groups")
         with col2:
-            render_metric_card("Tổng định mức Giờ giảng", f"{tong_dinh_muc_gc:,.1f}", icon="contract")
+            render_metric_card("Tổng định mức GC", f"{tong_dinh_muc_gc:,.1f}", icon="contract")
         with col3:
-            render_metric_card("Tổng Giờ giảng đã thực hiện", f"{tong_thuc_hien_gc:,.1f}", icon="task_alt")
+            render_metric_card("Tổng GC đã thực hiện", f"{tong_thuc_hien_gc:,.1f}", icon="task_alt")
         with col4:
-            render_metric_card("Tỷ lệ hoàn thành Giờ giảng", f"{ti_le_hoan_thanh:.1f}%", icon="pie_chart")
+            render_metric_card("Tỷ lệ hoàn thành GC", f"{ti_le_hoan_thanh:.1f}%", icon="pie_chart")
         with col5:
-            render_metric_card("Nhiệm vụ khác (Giờ chuẩn)", f"{tong_nvk:,.1f}", icon="assignment")
+            render_metric_card("Nhiệm vụ khác (Giờ hành chính)", f"{tong_nvk:,.1f}", icon="assignment")
 
         st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">', unsafe_allow_html=True)
         st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">table_chart</span> Bảng Dữ liệu Chi tiết</h3>', unsafe_allow_html=True)
 
-        apply_dept_comp = st.checkbox("Áp dụng chia sẻ giờ giảng thừa trong cùng Đơn vị (Bù định mức tập thể)")
-        if apply_dept_comp:
+        comp_mode = st.radio(
+            "Chế độ bù định mức",
+            options=["Cá nhân (GC ↔ NCKH)", "Tập thể (theo Đơn vị)", "Không bù"],
+            index=0,
+            horizontal=True,
+            key="comp_mode"
+        )
+        if comp_mode == "Tập thể (theo Đơn vị)":
             df_display = calculate_department_compensation(df_display)
-            st.info("Đã áp dụng chia sẻ giờ giảng thừa. Giờ giảng thừa của giảng viên này sẽ được bù đắp cho giảng viên thiếu trong cùng đơn vị.")
+            st.info("Đã áp dụng chia sẻ giờ giảng thừa trong cùng đơn vị (Điều 12.3).")
+        elif comp_mode == "Không bù":
+            df_display['gc_vuot_thieu_sau_quy_doi'] = df_display['gc_vuot_thieu']
+            df_display['nckh_vuot_thieu_sau_quy_doi'] = df_display['nckh_vuot_thieu']
+            st.caption("Hiển thị số liệu thô, chưa áp dụng bù trừ.")
 
         df_display['hoan_thanh_gd'] = df_display['gc_vuot_thieu_sau_quy_doi'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
         df_display['hoan_thanh_nckh'] = df_display['nckh_vuot_thieu_sau_quy_doi'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
@@ -90,33 +102,34 @@ if selected_tf_id:
         col_mapping = {
             'id': 'ID',
             'name': 'Họ và tên',
+            'nguon_du_lieu': 'Nguồn',
             'title_name': 'Chức danh',
             'dept_name': 'Đơn vị',
             'applied_reductions': 'Miễn giảm áp dụng',
-            'base_gc': 'Định mức gốc GD',
-            'dinh_muc_gc_phai_thuc_hien': 'Định mức thực tế GD',
+            'base_gc': 'Định mức gốc GC',
+            'dinh_muc_gc_phai_thuc_hien': 'Định mức thực tế GC',
             'so_gio_duoc_mien_giam': 'Số giờ được miễn giảm',
-            'tổng_gc_da_thuc_hien': 'Đã Giảng dạy (tổng GC)',
+            'tổng_gc_da_thuc_hien': 'Đã thực hiện (tổng GC)',
             'hdcm_bd_da_thuc_hien': 'Trong đó: Kế hoạch khác',
-            'gc_vuot_thieu_sau_quy_doi': 'Vượt/Thiếu GD',
+            'gc_vuot_thieu_sau_quy_doi': 'Vượt/Thiếu GC',
             'base_nckh': 'Định mức gốc NCKH',
             'dinh_muc_nckh_phai_thuc_hien': 'Định mức thực tế NCKH',
-            'nckh_da_thuc_hien': 'Đã NCKH',
+            'nckh_da_thuc_hien': 'Đã làm NCKH',
             'nckh_vuot_thieu_sau_quy_doi': 'Vượt/Thiếu NCKH',
             'dinh_muc_nvk_goc': 'Định mức gốc NVK',
-            'dinh_muc_nvk_phai_thuc_hien': 'Định mức NVK',
+            'dinh_muc_nvk_phai_thuc_hien': 'Định mức NVK (Giờ hành chính)',
             'nvk_da_thuc_hien': 'Đã làm NVK',
             'nvk_vuot_thieu': 'Vượt/Thiếu NVK',
-            'hoan_thanh_gd': 'Hoàn thành GD',
+            'hoan_thanh_gd': 'Hoàn thành GC',
             'hoan_thanh_nckh': 'Hoàn thành NCKH',
             'hoan_thanh_nvk': 'Hoàn thành NVK',
             'Trạng thái Chung': 'Trạng thái Chung'
         }
-        if 'gc_give_to_dept' in df_display.columns and apply_dept_comp:
+        if 'gc_give_to_dept' in df_display.columns and comp_mode == "Tập thể (theo Đơn vị)":
             col_mapping['gc_give_to_dept'] = 'Nhường cho Đơn vị'
             col_mapping['gc_receive_from_dept'] = 'Nhận từ Đơn vị'
 
-        default_cols = ['Họ và tên', 'Chức danh', 'Đơn vị', 'Định mức thực tế GD', 'Vượt/Thiếu GD', 'Hoàn thành GD', 'Hoàn thành NCKH', 'Hoàn thành NVK', 'Trạng thái Chung']
+        default_cols = ['Họ và tên', 'Nguồn', 'Chức danh', 'Đơn vị', 'Định mức thực tế GC', 'Vượt/Thiếu GC', 'Hoàn thành GC', 'Hoàn thành NCKH', 'Hoàn thành NVK', 'Trạng thái Chung']
         selected_col_names = st.multiselect("Chọn cột hiển thị", options=list(col_mapping.values()), default=default_cols)
 
         selected_cols = [k for k, v in col_mapping.items() if v in selected_col_names]
@@ -142,6 +155,10 @@ if selected_tf_id:
                 return 'background-color: #ecfdf5; color: #047857; font-weight: bold;'
             elif val == 'Không đạt':
                 return 'background-color: #fef2f2; color: #b91c1c; font-weight: bold;'
+            elif val == 'Excel':
+                return 'background-color: #e0f2fe; color: #0369a1; font-weight: bold; border-radius: 999px; padding: 0 8px;'
+            elif val == 'Nhập lẻ':
+                return 'background-color: #f0fdf4; color: #166534; font-weight: bold; border-radius: 999px; padding: 0 8px;'
             return ''
 
         config = {}
@@ -151,20 +168,20 @@ if selected_tf_id:
             config['Họ và tên'] = st.column_config.Column(pinned=True)
 
         float_cols = [col for col in [
-            'Định mức gốc GD', 'Định mức thực tế GD', 'Số giờ được miễn giảm', 
-            'Đã Giảng dạy (tổng GC)', 'Trong đó: Kế hoạch khác', 'Vượt/Thiếu GD', 
-            'Định mức gốc NCKH', 'Định mức thực tế NCKH', 'Đã NCKH', 'Vượt/Thiếu NCKH',
-            'Định mức NVK', 'Đã làm NVK', 'Vượt/Thiếu NVK',
+            'Định mức gốc GC', 'Định mức thực tế GC', 'Số giờ được miễn giảm', 
+            'Đã thực hiện (tổng GC)', 'Trong đó: Kế hoạch khác', 'Vượt/Thiếu GC', 
+            'Định mức gốc NCKH', 'Định mức thực tế NCKH', 'Đã làm NCKH', 'Vượt/Thiếu NCKH',
+            'Định mức NVK (Giờ hành chính)', 'Đã làm NVK', 'Vượt/Thiếu NVK',
             'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
         ] if col in df_table.columns]
 
         format_dict = {col: format_numeric for col in float_cols}
 
         style_cols = [col for col in [
-            'Số giờ được miễn giảm', 'Đã Giảng dạy (tổng GC)', 'Trong đó: Kế hoạch khác',
-            'Vượt/Thiếu GD', 'Đã NCKH', 'Vượt/Thiếu NCKH', 'Vượt/Thiếu NVK', 
-            'Hoàn thành GD', 'Hoàn thành NCKH', 'Hoàn thành NVK', 'Trạng thái Chung',
-            'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
+            'Số giờ được miễn giảm', 'Đã thực hiện (tổng GC)', 'Trong đó: Kế hoạch khác',
+            'Vượt/Thiếu GC', 'Đã làm NCKH', 'Vượt/Thiếu NCKH', 'Vượt/Thiếu NVK', 
+            'Hoàn thành GC', 'Hoàn thành NCKH', 'Hoàn thành NVK', 'Trạng thái Chung',
+            'Nguồn', 'Nhường cho Đơn vị', 'Nhận từ Đơn vị'
         ] if col in df_table.columns]
 
         try:
@@ -202,8 +219,8 @@ if selected_tf_id:
         <div>
             <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
             <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
-                Đang thiếu {render_chip(f"{abs(row['gc_vuot_thieu_sau_quy_doi']):.1f} Giờ giảng", "red", "arrow_downward")}
-                nhưng thừa {render_chip(f"{row['nckh_vuot_thieu_sau_quy_doi']:.1f} Giờ NCKH", "green", "arrow_upward")}
+                Đang thiếu {render_chip(f"{abs(row['gc_vuot_thieu_sau_quy_doi']):.1f} GC", "red", "arrow_downward")}
+                nhưng thừa {render_chip(f"{row['nckh_vuot_thieu_sau_quy_doi']:.1f} NCKH", "green", "arrow_upward")}
             </div>
         </div>
         <div>
@@ -213,7 +230,7 @@ if selected_tf_id:
 </div>
                         """, unsafe_allow_html=True)
                         col_btn, _ = st.columns([3, 7])
-                        if col_btn.button(f"Bù trừ {limits['max_nckh_to_spend']:.1f} Giờ NCKH → {limits['gc_gained']:.1f} Giờ giảng", key=f"n2g_{row['id']}"):
+                        if col_btn.button(f"Bù trừ {limits['max_nckh_to_spend']:.1f} NCKH → {limits['gc_gained']:.1f} GC", key=f"n2g_{row['id']}"):
                             cursor = conn.cursor()
                             cursor.execute("INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount) VALUES (?, ?, ?, ?, ?, ?)",
                                            (row['id'], selected_tf_id, 'NCKH', 'Giảng dạy', limits['max_nckh_to_spend'], limits['gc_gained']))
@@ -238,8 +255,8 @@ if selected_tf_id:
         <div>
             <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
             <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
-                Đang thiếu {render_chip(f"{abs(row['nckh_vuot_thieu_sau_quy_doi']):.1f} Giờ NCKH", "red", "arrow_downward")}
-                nhưng thừa {render_chip(f"{row['gc_vuot_thieu_sau_quy_doi']:.1f} Giờ giảng", "green", "arrow_upward")}
+                Đang thiếu {render_chip(f"{abs(row['nckh_vuot_thieu_sau_quy_doi']):.1f} NCKH", "red", "arrow_downward")}
+                nhưng thừa {render_chip(f"{row['gc_vuot_thieu_sau_quy_doi']:.1f} GC", "green", "arrow_upward")}
             </div>
         </div>
         <div>
@@ -249,7 +266,7 @@ if selected_tf_id:
 </div>
                         """, unsafe_allow_html=True)
                         col_btn, _ = st.columns([3, 7])
-                        if col_btn.button(f"Bù trừ {limits['max_gc_to_spend']:.1f} Giờ giảng → {limits['nckh_gained']:.1f} Giờ NCKH", key=f"g2n_{row['id']}"):
+                        if col_btn.button(f"Bù trừ {limits['max_gc_to_spend']:.1f} GC → {limits['nckh_gained']:.1f} NCKH", key=f"g2n_{row['id']}"):
                             cursor = conn.cursor()
                             cursor.execute("INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount) VALUES (?, ?, ?, ?, ?, ?)",
                                            (row['id'], selected_tf_id, 'Giảng dạy', 'NCKH', limits['max_gc_to_spend'], limits['nckh_gained']))
@@ -258,12 +275,12 @@ if selected_tf_id:
                             st.rerun()
                 elif limits['warning'] and row['nckh_vuot_thieu_sau_quy_doi'] < 0 and row['gc_vuot_thieu_sau_quy_doi'] > 0:
                     has_suggestion = True
-                    warning_text = limits['warning'].replace("NCKH", "Giờ NCKH").replace("Giảng dạy", "Giờ giảng")
-                    st.warning(f"**{row['name']}**: Thừa Giờ giảng, thiếu Giờ NCKH nhưng **{warning_text}**")
+                    warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")
+                    st.warning(f"**{row['name']}**: Thừa GC, thiếu NCKH nhưng **{warning_text}**")
                 elif limits['warning'] and row['gc_vuot_thieu_sau_quy_doi'] < 0 and row['nckh_vuot_thieu_sau_quy_doi'] > 0:
                     has_suggestion = True
-                    warning_text = limits['warning'].replace("NCKH", "Giờ NCKH").replace("Giảng dạy", "Giờ giảng")
-                    st.warning(f"**{row['name']}**: Thừa Giờ NCKH, thiếu Giờ giảng nhưng **{warning_text}**")
+                    warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")
+                    st.warning(f"**{row['name']}**: Thừa NCKH, thiếu GC nhưng **{warning_text}**")
 
             if not has_suggestion:
                 st.markdown('<p style="color: var(--md-on-surface-variant);">Không có gợi ý quy đổi nào tại thời điểm này. Các cán bộ đã hoàn thành hoặc chưa đủ điều kiện.</p>', unsafe_allow_html=True)

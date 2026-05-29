@@ -11,6 +11,10 @@
       "headers": {
         "X-Goog-Api-Key": "AQ.Ab8RN6KJW4qqZo8HmJXb0pNYuE47k5RlATRA9TLaC9WrT2D95Q"
       }
+    },
+    "persistproc": {
+      "type": "local",
+      "command": ["F:\\Python\\python.exe", ".opencode\\persistproc_stdio.py"]
     }
   }
 }

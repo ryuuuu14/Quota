@@ -113,7 +113,7 @@ def render_metric_card(title, value, delta=None, icon=None):
     st.markdown(f"""
 <div class="md-card" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 0px; padding: 20px !important;">
 <div style="display: flex; align-items: baseline; justify-content: space-between;">
-<span style="color: #ffffff; font-size: 2.2rem; font-weight: 800; font-family: var(--font-family); letter-spacing: -0.02em;">{value}</span>{delta_html}
+<span style="color: var(--md-on-surface); font-size: 2.2rem; font-weight: 800; font-family: var(--font-family); letter-spacing: -0.02em;">{value}</span>{delta_html}
 </div>
 <div style="display: flex; justify-content: space-between; align-items: center;">
 <span style="color: var(--md-on-surface-variant); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">{title}</span>{icon_html}
@@ -488,7 +488,36 @@ def render_sidebar(active_page="home"):
     # 2. Inject global fonts, Material symbols, design system, responsive styles
     inject_premium_css()
 
-    # 3. Render HTML sidebar
+    # 3. Build system status data
+    _db_ok = False
+    _tf_name = "—"
+    _teacher_count = 0
+    _guest_count = 0
+    _has_excel = False
+    try:
+        from database import get_connection
+        _conn_sidebar = get_connection()
+        _c = _conn_sidebar.cursor()
+        _c.execute("SELECT COUNT(*) FROM teachers WHERE employment_type IN ('TEACHER','STAFF')")
+        _teacher_count = _c.fetchone()[0]
+        _c.execute("SELECT COUNT(*) FROM teachers WHERE employment_type = 'GUEST'")
+        _guest_count = _c.fetchone()[0]
+        _c.execute("SELECT name FROM timeframes ORDER BY start_date DESC LIMIT 1")
+        _r = _c.fetchone()
+        if _r: _tf_name = _r[0]
+        _c.execute("SELECT COUNT(*) FROM session_teacher_totals")
+        _has_excel = _c.fetchone()[0] > 0
+        _conn_sidebar.close()
+        _db_ok = True
+    except Exception:
+        _db_ok = False
+
+    _dot_color = "#22c55e" if _db_ok else "#ef4444"
+    _dot_label = "Đã kết nối" if _db_ok else "Mất kết nối"
+    _source_icon = "download" if _has_excel else "edit_note"
+    _source_label = "Excel" if _has_excel else "Nhập lẻ"
+
+    # 4. Render HTML sidebar
     with st.sidebar:
         st.markdown(f"""
 <div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid var(--md-outline-variant); margin-bottom: 16px;">
@@ -517,23 +546,40 @@ def render_sidebar(active_page="home"):
         st.page_link("pages/3_NhatKyHoatDong.py", label="Nhật ký Hoạt động", icon=":material/edit_note:")
         st.page_link("pages/5_NhapDuLieu.py", label="Nhập dữ liệu Excel", icon=":material/download:")
         st.page_link("pages/4_CaiDatHeThong.py", label="Cài đặt Hệ thống", icon=":material/settings:")
+        st.page_link("pages/6_Payroll.py", label="Quản lý Lương TT11", icon=":material/payments:")
 
-        st.markdown("""
+        # System status bar
+        st.markdown(f"""
 <div style="
     margin-top: 32px;
-    padding: 16px;
+    padding: 12px 14px;
     background-color: var(--md-surface-container-low);
     border: 1px solid var(--md-outline-variant);
     border-radius: var(--radius-md);
-    font-size: 12px;
+    font-size: 11px;
     color: var(--md-on-surface-variant);
-    line-height: 1.5;
-    display: flex;
-    align-items: start;
-    gap: 8px;
+    line-height: 1.6;
 ">
-    <span class="material-symbols-outlined" style="font-size: 16px; margin-top: 1px;">info</span>
-    <div>v2.0 — Hệ thống định mức T04</div>
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--md-outline-variant); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;">
+        <span class="material-symbols-outlined" style="font-size: 14px;">monitor_heart</span>
+        Trạng thái hệ thống
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 8px;">
+        <span style="color: var(--md-on-surface-variant);">CSDL</span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background-color: {_dot_color}; display: inline-block;"></span>
+            <span>{_dot_label}</span>
+        </div>
+        <span style="color: var(--md-on-surface-variant);">Năm học</span>
+        <span style="font-weight: 500;">{_tf_name}</span>
+        <span style="color: var(--md-on-surface-variant);">CB-CV</span>
+        <span style="font-weight: 500;">{_teacher_count} cơ hữu + {_guest_count} khách mời</span>
+        <span style="color: var(--md-on-surface-variant);">Nguồn số liệu</span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+            <span class="material-symbols-outlined" style="font-size: 12px;">{_source_icon}</span>
+            <span style="font-weight: 500;">{_source_label}</span>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
