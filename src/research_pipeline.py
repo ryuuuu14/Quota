@@ -1,18 +1,20 @@
 """
 Research → Brainstorm → Validation Pipeline (LangGraph)
 Domain: TT108 Quota Management System
-
-Graph: Research (reg + code) → Brainstorm → Validate → Router
+Graph: Research (parallel regulation/rules/code/db) → Research Merge → Brainstorm → Validate (parallel syntax/tests/rules) → Validate Merge → Router
 """
-from typing import TypedDict, List, Optional
 import os
 import re
-import subprocess
 import sys
 import time
+import operator
+from typing import TypedDict, List, Optional, Annotated, Literal
+from langgraph.graph import StateGraph, START, END
 
-from langgraph.graph import StateGraph, END
+from agent_core.llm import GeminiPool
+from agent_core import tools
 
+# Constants
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGULATION_FILE = os.path.join(
     PROJECT_ROOT,
@@ -24,290 +26,272 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 DB_PATH = os.path.join(DATA_DIR, "database.sqlite")
 
 MAX_ITERATIONS = 3
+SKIP_TESTS = os.environ.get("SKIP_TESTS", "1") == "1"
 
 
+# Define State with custom/standard reducers
 class ResearchState(TypedDict):
     query: str
-    regulation_chunks: List[str]
+    regulation_chunks: Annotated[List[str], operator.add]
     rules_context: str
-    code_snippets: List[str]
-    db_inspections: List[str]
+    code_snippets: Annotated[List[str], operator.add]
+    db_inspections: Annotated[List[str], operator.add]
     research_summary: str
     proposal: str
     validation_feedback: Optional[str]
+    syntax_error: Optional[str]
     test_output: str
     test_exit_code: int
+    rules_warning: Optional[str]
     iterations: int
-    logs: List[str]
+    logs: Annotated[List[str], operator.add]
 
 
-def _read_file(path: str, max_len: int = 8000) -> str:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read(max_len)
-        return content
-    except Exception as e:
-        return f"[ERROR reading {path}]: {e}"
+# ─── Research Nodes (Parallel Fan-out) ──────────────────────────────────────────
 
-
-def _grep_src(pattern: str, context_lines: int = 5) -> str:
-    """Search source code for a pattern — inline (no subprocess)."""
-    calcs_path = os.path.join(SRC_DIR, "calculations.py")
-    if not os.path.exists(calcs_path):
-        return "[FILE NOT FOUND]"
-    try:
-        with open(calcs_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        matches = []
-        for i, line in enumerate(lines, 1):
-            if re.search(pattern, line, re.I):
-                start = max(0, i - 1 - context_lines)
-                end = min(len(lines), i + context_lines)
-                matches.append(f"--- lines {start+1}-{end} ---")
-                for j in range(start, end):
-                    matches.append(f"{j+1}:{lines[j].rstrip()}")
-                matches.append("")
-        return "\n".join(matches[:60])[:3000] or "No matches"
-    except Exception as e:
-        return f"[GREP_ERROR]: {e}"
-
-
-def _inspect_db(sql: str) -> str:
-    """Run a read-only SQL query — inline (no subprocess)."""
-    import sqlite3, json
-    if not os.path.exists(DB_PATH):
-        return "[DB NOT FOUND]"
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        try:
-            cur = conn.execute(sql)
-            rows = cur.fetchall()
-            cols = [d[0] for d in cur.description]
-            out = {"columns": cols, "rows": rows[:20], "total": len(rows)}
-            return json.dumps(out, ensure_ascii=False, default=str)[:3000]
-        finally:
-            conn.close()
-    except Exception as e:
-        return f"[DB_ERROR]: {e}"
-
-
-def _run_tests(test_files: List[str]) -> tuple[str, int]:
-    """Run pytest on given test files (quick mode: --tb=line, --no-header)."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", *test_files, "--tb=line", "--no-header", "-q"],
-            capture_output=True, timeout=45, encoding='utf-8',
-            cwd=PROJECT_ROOT,
-        )
-        output = result.stdout + "\n" + result.stderr
-        return output.strip()[-2500:], result.returncode
-    except subprocess.TimeoutExpired:
-        return "[TIMEOUT] Tests exceeded 45s", -1
-    except Exception as e:
-        return f"[RUN_ERROR]: {e}", -1
-
-
-def research_node(state: ResearchState) -> dict:
-    logs = list(state.get("logs", []))
+def research_regulation_node(state: ResearchState) -> dict:
     query = state.get("query", "")
-    logs.append(f"[Research] Starting research on: {query}")
-
     chunks = []
     if os.path.exists(REGULATION_FILE):
-        text = _read_file(REGULATION_FILE, 20000)
+        text = tools.read_file(REGULATION_FILE, 20000)
         paragraphs = re.split(r'\n###\s+', text)
         relevant = [
             p for p in paragraphs
             if any(kw in p.lower() for kw in query.lower().split())
         ]
         chunks = relevant[:5] if relevant else paragraphs[:3]
-    logs.append(f"[Research] Regulation: found {len(paragraphs)} sections, {len(chunks)} relevant")
+    return {
+        "regulation_chunks": chunks,
+        "logs": [f"[Research Regulation] Found {len(chunks)} relevant chunks."]
+    }
 
+
+def research_rules_node(state: ResearchState) -> dict:
     rules = ""
     if os.path.exists(RULES_LOGIC_FILE):
-        rules = _read_file(RULES_LOGIC_FILE, 5000)
-    logs.append(f"[Research] Rules logic: {len(rules)} chars")
+        rules = tools.read_file(RULES_LOGIC_FILE, 5000)
+    return {
+        "rules_context": rules,
+        "logs": [f"[Research Rules] Rules logic context loaded ({len(rules)} chars)."]
+    }
 
+
+def research_code_node(state: ResearchState) -> dict:
+    query = state.get("query", "")
     code = []
     for kw in query.lower().split():
         if len(kw) > 3:
-            result = _grep_src(kw)
+            result = tools.grep_src(kw)
             if result and "No matches" not in result:
                 code.append(f"## Search: '{kw}'\n{result}")
-    logs.append(f"[Research] Code searches: {len(code)} hits")
+    return {
+        "code_snippets": code,
+        "logs": [f"[Research Code] Performed code grep. Found {len(code)} matches."]
+    }
 
+
+def research_db_node(state: ResearchState) -> dict:
+    query = state.get("query", "")
     db_info = []
-    if "db" in query.lower() or "database" in query.lower() or "sql" in query.lower():
-        tables = _inspect_db("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+    if any(kw in query.lower() for kw in ["db", "database", "sql"]):
+        tables = tools.inspect_db("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         db_info.append(f"Tables:\n{tables}")
-    logs.append(f"[Research] DB inspected: {bool(db_info)}")
+    return {
+        "db_inspections": db_info,
+        "logs": [f"[Research DB] Database inspection complete. Found {len(db_info)} items."]
+    }
+
+
+def research_merge_node(state: ResearchState) -> dict:
+    chunks = state.get("regulation_chunks", [])
+    code = state.get("code_snippets", [])
+    db_info = state.get("db_inspections", [])
+    rules = state.get("rules_context", "")
 
     summary = []
     if chunks:
         summary.append("=== REGULATION ===")
-        summary.append(chunks[0][:2000])
+        summary.append("\n".join(chunks)[:3000])
     if code:
         summary.append("\n=== CODE ===")
-        summary.append(code[0][:2000])
+        summary.append("\n".join(code)[:3000])
     if db_info:
         summary.append("\n=== DB ===")
-        summary.append(db_info[0][:1000])
+        summary.append("\n".join(db_info)[:2000])
     if rules:
-        summary.append(f"\n=== RULES ===")
-        summary.append(rules[:1500])
+        summary.append("\n=== RULES ===")
+        summary.append(rules[:2000])
 
-    logs.append(f"[Research] Complete — research_summary: {len(summary)} blocks")
+    research_summary = "\n".join(summary) if summary else f"No relevant findings for '{state.get('query')}'"
     return {
-        "regulation_chunks": chunks,
-        "rules_context": rules,
-        "code_snippets": code,
-        "db_inspections": db_info,
-        "research_summary": "\n".join(summary) if summary else f"No relevant findings for '{query}'",
-        "logs": logs,
+        "research_summary": research_summary,
+        "logs": ["[Research Merge] Consolidated research details into summary."]
     }
 
+
+# ─── Brainstorm Node ─────────────────────────────────────────────────────────
 
 def brainstorm_node(state: ResearchState) -> dict:
-    logs = list(state.get("logs", []))
-    logs.append("[Brainstorm] Generating proposal from research...")
-
-    summary = state.get("research_summary", "")
-    query = state.get("query", "")
-
-    proposal_parts = []
-    proposal_parts.append(f"## Proposal for: {query}")
-    proposal_parts.append("")
-    proposal_parts.append("### Analysis")
-    proposal_parts.append(
-        "Based on regulation review and code analysis, the following approach is proposed:"
+    print("Brainstorming proposal using LLM...")
+    system_prompt = (
+        "You are an expert Vietnamese educational regulation architect. Given a user query and a summary of "
+        "regulations, codebase context, and database schema, generate a structured, clear technical proposal "
+        "in Vietnamese to address the query. Ensure compliance with T04 guidelines."
     )
-    proposal_parts.append("")
-
-    if "regulation_chunks" in state and state["regulation_chunks"]:
-        chunk = state["regulation_chunks"][0]
-        title_match = re.search(r"^(###?\s+\*\*.*?\*\*)", chunk, re.M)
-        title = title_match.group(1) if title_match else "Relevant regulation"
-        proposal_parts.append(f"- **Regulation basis:** {title}")
-        article = re.search(r"Điều\s+\d+", chunk)
-        if article:
-            proposal_parts.append(f"- **Article:** {article.group(0)}")
-        proposal_parts.append("")
-
-    if "code_snippets" in state and state["code_snippets"]:
-        proposal_parts.append("- **Code location:** Found relevant code in `calculations.py`")
-        proposal_parts.append("")
-
-    proposal_parts.append("### Proposed Solution")
-    proposal_parts.append("[To be generated based on research findings]")
-
-    logs.append(f"[Brainstorm] Proposal generated ({sum(len(p) for p in proposal_parts)} chars)")
+    user_prompt = (
+        f"Query: {state.get('query')}\n\n"
+        f"Research Summary:\n{state.get('research_summary')}"
+    )
+    proposal = GeminiPool.call(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        complexity="planning",
+        pipeline_name="research_pipeline",
+        agent_name="brainstormer"
+    )
+    
+    new_iterations = state.get("iterations", 0) + 1
     return {
-        "proposal": "\n".join(proposal_parts),
-        "logs": logs,
+        "proposal": proposal,
+        "iterations": new_iterations,
+        "logs": [f"[Brainstorm] Generated proposal via Gemini (Attempt {new_iterations})."]
     }
 
 
-SKIP_TESTS = os.environ.get("SKIP_TESTS", "1") == "1"
+# ─── Validation Nodes (Parallel Fan-out) ──────────────────────────────────────
+
+def validate_syntax_node(state: ResearchState) -> dict:
+    calculations_file = os.path.join(SRC_DIR, "calculations.py")
+    syntax_error = None
+    if os.path.exists(calculations_file):
+        res = tools.check_syntax(calculations_file)
+        if not res["passed"]:
+            syntax_error = f"SYNTAX ERROR in calculations.py: {res['error']}"
+    return {
+        "syntax_error": syntax_error,
+        "logs": ["[Validate Syntax] Calculations syntax check complete."]
+    }
 
 
-def validate_node(state: ResearchState) -> dict:
-    logs = list(state.get("logs", []))
-    logs.append("[Validate] Running validation checks...")
-
-    proposal = state.get("proposal", "")
-    query = state.get("query", "")
-    feedback_parts = []
+def validate_tests_node(state: ResearchState) -> dict:
     test_output = ""
-    test_exit = 0
-
-    check_syntax = True
-    check_tests = not SKIP_TESTS
-    check_rules = True
-
-    if check_syntax:
-        logs.append("[Validate] Checking Python syntax...")
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "py_compile", os.path.join(SRC_DIR, "calculations.py")],
-                capture_output=True, text=True, timeout=15,
-            )
-            if result.returncode != 0:
-                feedback_parts.append(f"SYNTAX ERROR in calculations.py: {result.stderr.strip()[:200]}")
-            else:
-                logs.append("[Validate] Syntax OK")
-        except Exception as e:
-            feedback_parts.append(f"Syntax check error: {e}")
-
-    if check_tests:
-        logs.append("[Validate] Running test suite...")
-        test_files_to_run = [
+    test_exit_code = 0
+    if not SKIP_TESTS:
+        test_files = [
             os.path.join(SRC_DIR, "test_compliance.py"),
             os.path.join(SRC_DIR, "test_teacher_integration.py"),
         ]
-        existing = [f for f in test_files_to_run if os.path.exists(f)]
-        if existing:
-            test_output, test_exit = _run_tests(existing)
-            logs.append(f"[Validate] Tests exit code: {test_exit}")
-            if test_exit != 0:
-                feedback_parts.append(f"TESTS FAILED (exit {test_exit})")
-                fail_lines = [
-                    l for l in test_output.split("\n")
-                    if "FAILED" in l or "ERROR" in l or "AssertionError" in l
-                ]
-                if fail_lines:
-                    feedback_parts.extend(fail_lines[:5])
-            else:
-                logs.append("[Validate] All tests PASSED")
-
-    if check_rules:
-        logs.append("[Validate] Checking against rules_logic.md...")
-        rules = state.get("rules_context", "")
-        if rules:
-            keywords = query.lower().split()
-            missing = [kw for kw in keywords if len(kw) > 4 and kw not in rules.lower()]
-            if missing:
-                feedback_parts.append(f"WARNING: rules_logic.md lacks coverage for: {missing}")
-            else:
-                logs.append("[Validate] Rules coverage adequate")
-
-    validation_feedback = "\n".join(feedback_parts) if feedback_parts else None
-    if validation_feedback:
-        logs.append(f"[Validate] Issues found ({len(feedback_parts)})")
-    else:
-        logs.append("[Validate] All checks passed")
-
+        test_output, test_exit_code = tools.run_pytest(test_files)
     return {
-        "validation_feedback": validation_feedback,
         "test_output": test_output,
-        "test_exit_code": test_exit,
-        "logs": logs,
+        "test_exit_code": test_exit_code,
+        "logs": [f"[Validate Tests] Compliance tests run complete (Exit: {test_exit_code})."]
     }
 
 
-def router_condition(state: ResearchState) -> str:
+def validate_rules_node(state: ResearchState) -> dict:
+    query = state.get("query", "")
+    rules = state.get("rules_context", "")
+    rules_warning = None
+    if rules:
+        keywords = query.lower().split()
+        missing = [kw for kw in keywords if len(kw) > 4 and kw not in rules.lower()]
+        if missing:
+            rules_warning = f"WARNING: rules_logic.md lacks coverage for: {missing}"
+    return {
+        "rules_warning": rules_warning,
+        "logs": ["[Validate Rules] Rules logic coverage verified."]
+    }
+
+
+def validate_merge_node(state: ResearchState) -> dict:
+    feedback_parts = []
+    if state.get("syntax_error"):
+        feedback_parts.append(state["syntax_error"])
+    
+    test_exit = state.get("test_exit_code", 0)
+    if test_exit != 0:
+        feedback_parts.append(f"TESTS FAILED (exit {test_exit})")
+        test_output = state.get("test_output", "")
+        fail_lines = [
+            l for l in test_output.split("\n")
+            if "FAILED" in l or "ERROR" in l or "AssertionError" in l
+        ]
+        if fail_lines:
+            feedback_parts.extend(fail_lines[:5])
+            
+    if state.get("rules_warning"):
+        feedback_parts.append(state["rules_warning"])
+
+    validation_feedback = "\n".join(feedback_parts) if feedback_parts else None
+    return {
+        "validation_feedback": validation_feedback,
+        "logs": ["[Validate Merge] Validation feedback aggregated."]
+    }
+
+
+# ─── Router and Graph ─────────────────────────────────────────────────────────
+
+def router_condition(state: ResearchState) -> Literal["retry", "abort", "approve"]:
     iteration = state.get("iterations", 0)
     feedback = state.get("validation_feedback")
 
-    if iteration >= MAX_ITERATIONS:
-        return "abort"
     if feedback:
+        if iteration >= MAX_ITERATIONS:
+            return "abort"
         return "retry"
     return "approve"
 
 
 def build_research_pipeline():
     workflow = StateGraph(ResearchState)
-    workflow.add_node("research", research_node)
+    
+    # Add Nodes
+    workflow.add_node("research_regulation", research_regulation_node)
+    workflow.add_node("research_rules", research_rules_node)
+    workflow.add_node("research_code", research_code_node)
+    workflow.add_node("research_db", research_db_node)
+    workflow.add_node("research_merge", research_merge_node)
+    
     workflow.add_node("brainstorm", brainstorm_node)
-    workflow.add_node("validate", validate_node)
+    
+    workflow.add_node("validate_syntax", validate_syntax_node)
+    workflow.add_node("validate_tests", validate_tests_node)
+    workflow.add_node("validate_rules", validate_rules_node)
+    workflow.add_node("validate_merge", validate_merge_node)
 
-    workflow.set_entry_point("research")
-    workflow.add_edge("research", "brainstorm")
-    workflow.add_edge("brainstorm", "validate")
+    # Set Entry and Research Branching
+    workflow.set_entry_point("research_regulation")
+    # To run all research in parallel, add entry to each
+    workflow.add_edge(START, "research_regulation")
+    workflow.add_edge(START, "research_rules")
+    workflow.add_edge(START, "research_code")
+    workflow.add_edge(START, "research_db")
+    
+    # Connect research outputs to merge
+    workflow.add_edge("research_regulation", "research_merge")
+    workflow.add_edge("research_rules", "research_merge")
+    workflow.add_edge("research_code", "research_merge")
+    workflow.add_edge("research_db", "research_merge")
+    
+    # Brainstorm follows merge
+    workflow.add_edge("research_merge", "brainstorm")
+    
+    # Validate Branching from Brainstorm
+    workflow.add_edge("brainstorm", "validate_syntax")
+    workflow.add_edge("brainstorm", "validate_tests")
+    workflow.add_edge("brainstorm", "validate_rules")
+    
+    # Connect validate outputs to merge
+    workflow.add_edge("validate_syntax", "validate_merge")
+    workflow.add_edge("validate_tests", "validate_merge")
+    workflow.add_edge("validate_rules", "validate_merge")
+    
+    # Conditional route after merge
     workflow.add_conditional_edges(
-        "validate",
+        "validate_merge",
         router_condition,
-        {"retry": "research", "abort": END, "approve": END},
+        {"retry": "research_regulation", "abort": END, "approve": END},
     )
 
     return workflow.compile()
@@ -330,8 +314,10 @@ def run_research_pipeline(
         "research_summary": "",
         "proposal": "",
         "validation_feedback": None,
+        "syntax_error": None,
         "test_output": "",
         "test_exit_code": 0,
+        "rules_warning": None,
         "iterations": 0,
         "logs": [],
     }
@@ -346,7 +332,7 @@ def run_research_pipeline(
     return {
         "query": query,
         "status": status,
-        "iterations": result.get("iterations", 0) + 1,
+        "iterations": result.get("iterations", 0),
         "research_summary": result.get("research_summary", ""),
         "proposal": result.get("proposal", ""),
         "validation_feedback": result.get("validation_feedback"),

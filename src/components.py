@@ -144,8 +144,7 @@ def inject_premium_css():
     hiệu ứng 3D hover và hỗ trợ hiển thị trên thiết bị di động (Chế độ Sáng - Light Mode).
     """
     st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
+<link href="/app/static/fonts.css" rel="stylesheet">
 <style>
     :root {
         --md-primary: #0f4c81; /* Classic Premium Navy */
@@ -258,12 +257,14 @@ def inject_premium_css():
         box-shadow: var(--shadow-elevated) !important;
         color: var(--md-primary) !important;
     }
-    .stButton > button[kind="primary"] {
+    .stButton > button[kind="primary"],
+    .stButton > button[data-testid="baseButton-primary"] {
         background: linear-gradient(135deg, var(--md-primary), #1a5f96) !important;
         color: #ffffff !important;
         border: none !important;
     }
-    .stButton > button[kind="primary"]:hover {
+    .stButton > button[kind="primary"]:hover,
+    .stButton > button[data-testid="baseButton-primary"]:hover {
         background: linear-gradient(135deg, #1a5f96, #2a7fbe) !important;
         color: #ffffff !important;
     }
@@ -519,6 +520,31 @@ def render_sidebar(active_page="home"):
 
     # 4. Render HTML sidebar
     with st.sidebar:
+        from auth import get_current_user
+        user = get_current_user()
+        
+        if user:
+            role_labels = {
+                "admin": "Quản trị viên",
+                "head_dept": f"Trưởng {user.get('department_name') or 'Khoa'}"
+            }
+            role_label = role_labels.get(user["role"], "Người dùng")
+            identity_html = (
+                f'<div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">'
+                f'  <div style="font-size: 11px; color: var(--md-on-surface-variant); font-weight: 500;">Tài khoản hoạt động:</div>'
+                f'  <div style="font-weight: 700; color: #60a5fa; font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
+                f'  <div style="font-size: 10px; color: #10b981; margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
+                f'</div>'
+            )
+        else:
+            identity_html = (
+                '<div style="margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,0.05); border-radius: 12px; border: 1px solid rgba(239,68,68,0.15);">'
+                '  <div style="font-size: 11px; color: #f87171; font-weight: 600; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">'
+                '    <span class="material-symbols-outlined" style="font-size: 14px;">lock</span> Chế độ Khách (Đọc)'
+                '  </div>'
+                '</div>'
+            )
+
         st.markdown(f"""
 <div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid var(--md-outline-variant); margin-bottom: 16px;">
     <div style="display: flex; align-items: center; gap: 12px;">
@@ -537,6 +563,7 @@ def render_sidebar(active_page="home"):
             <div style="font-size: 11px; color: var(--md-on-surface-variant); letter-spacing: 0.03em;">Hệ thống định mức</div>
         </div>
     </div>
+    {identity_html}
 </div>
 """, unsafe_allow_html=True)
 
@@ -544,9 +571,24 @@ def render_sidebar(active_page="home"):
         st.page_link("pages/1_Dashboard.py", label="Bảng điều khiển", icon=":material/dashboard:")
         st.page_link("pages/2_QuanLyCanBo.py", label="Quản lý Cán bộ", icon=":material/groups:")
         st.page_link("pages/3_NhatKyHoatDong.py", label="Nhật ký Hoạt động", icon=":material/edit_note:")
-        st.page_link("pages/5_NhapDuLieu.py", label="Nhập dữ liệu Excel", icon=":material/download:")
-        st.page_link("pages/4_CaiDatHeThong.py", label="Cài đặt Hệ thống", icon=":material/settings:")
-        st.page_link("pages/6_Payroll.py", label="Quản lý Lương TT11", icon=":material/payments:")
+        
+        # Role-based menu links
+        role = user["role"] if user else None
+        if role in ["admin", "head_dept"]:
+            st.page_link("pages/4_CaiDatHeThong.py", label="Cài đặt Hệ thống", icon=":material/settings:")
+        if role == "admin":
+            st.page_link("pages/6_Payroll.py", label="Quản lý Lương TT11", icon=":material/payments:")
+            st.page_link("pages/7_PheDuyet.py", label="Phê duyệt Dữ liệu", icon=":material/fact_check:")
+            
+        login_label = "Thông tin tài khoản" if user else "Đăng nhập"
+        st.page_link("pages/8_DangNhap.py", label=login_label, icon=":material/lock:")
+
+        if user:
+            from auth import logout
+            if st.button("Đăng xuất", type="primary", use_container_width=True):
+                logout()
+                st.switch_page("pages/8_DangNhap.py")
+
 
         # System status bar
         st.markdown(f"""

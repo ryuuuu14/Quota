@@ -3,6 +3,9 @@ import pandas as pd
 from datetime import date
 from database import get_connection
 from components import render_empty_state, render_warning_state, render_sidebar
+from auth import get_current_user, get_scoped_teacher_ids, require_role
+require_role(["admin", "head_dept"], "Ghi nhận Hoạt động")
+from pipeline.mapping_templates import load_mapping_templates, save_mapping_template, delete_mapping_template
 
 st.set_page_config(page_title="Ghi nhận Hoạt động", page_icon="📝", layout="wide")
 render_sidebar("nhatky")
@@ -12,7 +15,13 @@ st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Nh
 
 conn = get_connection()
 
+user = get_current_user()
+scoped_ids = get_scoped_teacher_ids(user)
+
 df_teachers = pd.read_sql_query("SELECT id, name, subject_group, employment_type FROM teachers", conn)
+if scoped_ids is not None:
+    df_teachers = df_teachers[df_teachers['id'].isin(scoped_ids)]
+
 df_activities = pd.read_sql_query("SELECT * FROM activity_types", conn)
 df_timeframes = pd.read_sql_query("SELECT id, name, start_date, end_date FROM timeframes ORDER BY id DESC", conn)
 
@@ -23,7 +32,10 @@ else:
     teacher_options = {f"{row['name']} ({row['subject_group']})": int(row['id']) for idx, row in df_teachers.iterrows()}
     tf_options = {row['name']: int(row['id']) for idx, row in df_timeframes.iterrows()}
 
-    tab_list, tab_new = st.tabs(["📋 Lịch sử Hoạt động (Gần đây)", "➕ Ghi nhận mới"])
+    if user is None:
+        tab_list, = st.tabs(["📋 Lịch sử Hoạt động (Gần đây)"])
+    else:
+        tab_list, tab_new, tab_bulk = st.tabs(["📋 Lịch sử Hoạt động (Gần đây)", "➕ Ghi nhận mới", "📥 Nhập hàng loạt từ Excel"])
 
     with tab_list:
         query = """
@@ -31,7 +43,7 @@ else:
                al.log_date as 'Ngày', al.quantity as 'Số lượng', al.class_level as 'Cấp/Lớp',
                al.class_type, al.student_count as 'Sĩ số', al.note as 'Ghi chú',
                at.category, at.base_conversion_rate, at.is_teaching_activity, at.is_nckh_activity,
-               al.timeframe_id
+               al.timeframe_id, al.teacher_id
         FROM activity_logs al
         JOIN teachers t ON al.teacher_id = t.id
         JOIN activity_types at ON al.activity_type_id = at.id
@@ -42,6 +54,8 @@ else:
         
         from calculations import calculate_activity_hours
         df_logs = pd.read_sql_query(query, conn)
+        if scoped_ids is not None:
+            df_logs = df_logs[df_logs['teacher_id'].isin(scoped_ids)]
         
         if not df_logs.empty:
             hours_list = []
@@ -60,46 +74,51 @@ else:
             df_display = df_logs[[c for c in display_cols if c in df_logs.columns]]
             st.dataframe(df_display, use_container_width=True, hide_index=True)
     
-            st.markdown("### 🗑️ Xoá Nhật ký")
-            del_id = st.selectbox(
-                "Chọn dòng nhật ký cần xoá:", 
-                options=df_logs['id'].tolist(),
-                format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]} ({df_logs[df_logs['id'] == x]['Timeframe'].values[0]})"
-            )
-            
-            selected_log_row = df_logs[df_logs['id'] == del_id].iloc[0]
-            log_tf_id = int(selected_log_row['timeframe_id'])
-            
-            # Check if timeframe is locked by Excel data
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM session_teacher_totals WHERE timeframe_id = ?", (log_tf_id,))
-            log_tf_locked = cursor.fetchone()[0] > 0
-            
-            if log_tf_locked:
-                st.warning("⚠️ Không thể xoá dòng nhật ký này vì năm học tương ứng đã được khóa để quản lý qua Excel.")
-            else:
-                confirm_key = f"confirm_del_log_{del_id}"
-                if st.session_state.get(confirm_key, False):
-                    st.warning(f"⚠️ Bạn có chắc chắn muốn xóa dòng nhật ký #{del_id} này không?")
-                    col_yes, col_no = st.columns(2)
-                    with col_yes:
-                        if st.button("Xác nhận xóa vĩnh viễn", key=f"yes_log_{del_id}", type="primary"):
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM activity_logs WHERE id = ?", (int(del_id),))
-                            conn.commit()
-                            st.session_state[confirm_key] = False
-                            st.success("Đã xoá thành công!")
-                            st.rerun()
-                    with col_no:
-                        if st.button("Hủy bỏ", key=f"no_log_{del_id}"):
-                            st.session_state[confirm_key] = False
-                            st.rerun()
+            if user is not None:
+                st.markdown("### 🗑️ Xoá Nhật ký")
+                del_id = st.selectbox(
+                    "Chọn dòng nhật ký cần xoá:", 
+                    options=df_logs['id'].tolist(),
+                    format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]} ({df_logs[df_logs['id'] == x]['Timeframe'].values[0]})"
+                )
+                
+                selected_log_row = df_logs[df_logs['id'] == del_id].iloc[0]
+                log_tf_id = int(selected_log_row['timeframe_id'])
+                
+                # Check if timeframe is locked by Excel data
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM session_teacher_totals WHERE timeframe_id = ?", (log_tf_id,))
+                log_tf_locked = cursor.fetchone()[0] > 0
+                
+                if log_tf_locked:
+                    st.warning("⚠️ Không thể xoá dòng nhật ký này vì năm học tương ứng đã được khóa để quản lý qua Excel.")
                 else:
-                    if st.button("🗑️ Yêu cầu xoá dòng này", key=f"req_log_{del_id}"):
-                        st.session_state[confirm_key] = True
-                        st.rerun()
+                    confirm_key = f"confirm_del_log_{del_id}"
+                    if st.session_state.get(confirm_key, False):
+                        st.warning(f"⚠️ Bạn có chắc chắn muốn xóa dòng nhật ký #{del_id} này không?")
+                        col_yes, col_no = st.columns(2)
+                        with col_yes:
+                            if st.button("Xác nhận xóa vĩnh viễn", key=f"yes_log_{del_id}", type="primary"):
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM activity_logs WHERE id = ?", (int(del_id),))
+                                conn.commit()
+                                st.session_state[confirm_key] = False
+                                st.success("Đã xoá thành công!")
+                                st.rerun()
+                        with col_no:
+                            if st.button("Hủy bỏ", key=f"no_log_{del_id}"):
+                                st.session_state[confirm_key] = False
+                                st.rerun()
+                    else:
+                        if st.button("🗑️ Yêu cầu xoá dòng này", key=f"req_log_{del_id}"):
+                            st.session_state[confirm_key] = True
+                            st.rerun()
         else:
             render_empty_state("Chưa có nhật ký hoạt động nào.")
+
+    if user is None:
+        conn.close()
+        st.stop()
 
     with tab_new:
         col_left, col_right = st.columns(2)
@@ -247,5 +266,314 @@ else:
                 conn.commit()
                 st.success("Đã lưu nhật ký thành công!")
                 st.rerun()
+
+    with tab_bulk:
+        st.markdown("### 📥 Nhập nhật ký hoạt động hàng loạt từ Excel")
+        st.markdown("""
+        Hướng dẫn:
+        1. Nhập **Mã bảo mật Khoa/Bộ môn** của bạn để xác thực đơn vị.
+        2. Chọn **Năm học** áp dụng.
+        3. Tải file mẫu Excel và điền thông tin hoạt động của các cán bộ.
+        4. Tải lên file đã điền và bấm **Gửi yêu cầu phê duyệt**.
+        """)
+        
+        col_code, col_tf = st.columns(2)
+        with col_code:
+            dept_auth_code = st.text_input("Nhập mã bảo mật Khoa/Bộ môn:", type="password", key="dept_auth_code_activities")
+        with col_tf:
+            selected_tf_name = st.selectbox("Chọn Năm học:", options=list(tf_options.keys()), key="tf_select_activities")
+            
+        if dept_auth_code:
+            from auth import get_department_by_code
+            dept_info = get_department_by_code(dept_auth_code)
+            if not dept_info:
+                st.error("Mã bảo mật Khoa/Bộ môn không chính xác.")
+            else:
+                dept_id, dept_name = dept_info
+                st.success(f"✓ Đã xác thực đơn vị: **{dept_name}**")
+                
+                # Selection of import method
+                import_method = st.radio(
+                    "Phương thức nhập dữ liệu:",
+                    options=["activities", "aggregate_totals"],
+                    format_func=lambda x: "Nhập chi tiết Nhật ký Hoạt động" if x == "activities" else "Nhập tổng số giờ chuẩn tích lũy (Ghi đè)",
+                    key="import_method_radio_choice"
+                )
+
+                if import_method == "activities":
+                    # Button to download template
+                    from pipeline.templates import generate_activities_template
+                    try:
+                        template_bytes = generate_activities_template(dept_name, selected_tf_name)
+                        st.download_button(
+                            label=f"📥 Tải file mẫu Excel Nhật ký Hoạt động ({dept_name} - {selected_tf_name})",
+                            data=template_bytes,
+                            file_name=f"Mau_Nhat_Ky_Hoat_Dong_{dept_name.replace(' ', '_')}_{selected_tf_name.replace(' ', '_')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_activities_template_btn"
+                        )
+                    except Exception as e:
+                        st.error(f"Lỗi tạo file mẫu: {e}")
+
+                st.info("💡 **Mẹo:** Bạn có thể tải lên bất kỳ bảng Excel nào từ các hệ thống khác. Hệ thống hỗ trợ tính năng tự động nhận diện tiêu đề cột thông minh.")
+
+                st.markdown("---")
+                st.markdown("##### Tải lên file Excel dữ liệu:")
+                uploaded_file = st.file_uploader(
+                    "Chọn file Excel chứa dữ liệu:",
+                    type=["xlsx", "xls"],
+                    label_visibility="collapsed",
+                    key="uploaded_import_file_excel"
+                )
+
+                if uploaded_file is not None:
+                    if uploaded_file.size > 5 * 1024 * 1024:
+                        st.error("❌ File tải lên vượt quá giới hạn dung lượng cho phép (5MB). Vui lòng thử lại với file nhỏ hơn.")
+                    else:
+                        file_bytes = uploaded_file.read()
+                        from pipeline.importer import parse_excel_to_df, get_excel_sheet_names, get_excel_headers, remap_dataframe_columns
+                        from pipeline.fuzzy_matcher import suggest_mappings
+                        from pipeline.validator import validate_activities_data, validate_aggregate_totals_data
+                        from pipeline.differ import diff_activities, diff_aggregate_totals
+                        
+                        try:
+                            sheet_names = get_excel_sheet_names(file_bytes)
+                            col_sh, col_hd = st.columns(2)
+                            with col_sh:
+                                selected_sheet = st.selectbox(
+                                    "Chọn Sheet cần đọc:",
+                                    options=sheet_names,
+                                    key="import_selected_sheet_sel"
+                                )
+                            with col_hd:
+                                header_row = st.number_input(
+                                    "Dòng chứa tiêu đề (0-indexed):",
+                                    min_value=0,
+                                    max_value=20,
+                                    value=3 if import_method == "activities" else 0,
+                                    step=1,
+                                    key="import_header_row_val"
+                                )
+
+                            headers = get_excel_headers(file_bytes, sheet_name=selected_sheet, header_row=header_row)
+                            if not headers:
+                                st.error("Không tìm thấy tiêu đề cột nào tại dòng đã chọn.")
+                            else:
+                                if import_method == "activities":
+                                    required_cols = ["Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng"]
+                                    optional_cols = ["Cấp lớp", "Loại lớp", "Số học viên", "Cấp đề tài", "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"]
+                                else:
+                                    required_cols = ["Mã GV", "Tổng GC thực hiện", "NCKH thực hiện", "Số giờ miễn giảm", "Định mức GC"]
+                                    optional_cols = ["Ghi chú"]
+
+                                all_target_cols = required_cols + optional_cols
+
+                                # Mapping templates management
+                                saved_templates = load_mapping_templates()
+                                template_options = ["(Chọn cấu hình đã lưu)"] + list(saved_templates.keys())
+
+                                col_tpl_sel, col_tpl_del = st.columns([3, 1])
+                                with col_tpl_sel:
+                                    selected_tpl = st.selectbox(
+                                        "Sử dụng cấu hình cột đã lưu:",
+                                        options=template_options,
+                                        key="selected_mapping_template_name"
+                                    )
+                                with col_tpl_del:
+                                    st.write("")
+                                    st.write("")
+                                    if selected_tpl != "(Chọn cấu hình đã lưu)":
+                                        if st.button("🗑️ Xóa cấu hình này", key="delete_tpl_btn"):
+                                            delete_mapping_template(selected_tpl)
+                                            st.success(f"Đã xóa cấu hình '{selected_tpl}'")
+                                            st.rerun()
+
+                                # Retrieve defaults
+                                if selected_tpl != "(Chọn cấu hình đã lưu)":
+                                    defaults = saved_templates[selected_tpl]
+                                else:
+                                    defaults = suggest_mappings(headers, all_target_cols)
+
+                                st.markdown("##### ⚙️ Ánh xạ tiêu đề cột từ file Excel của bạn:")
+                                current_mapping = {}
+
+                                # Required fields
+                                st.caption("Các cột bắt buộc:")
+                                cols_req = st.columns(2)
+                                for idx_req, col_name in enumerate(required_cols):
+                                    col_idx = idx_req % 2
+                                    def_val = defaults.get(col_name)
+                                    def_index = 0
+                                    if def_val in headers:
+                                        def_index = headers.index(def_val) + 1
+                                    with cols_req[col_idx]:
+                                        sel_val = st.selectbox(
+                                            f"Cột tương ứng với '{col_name}':",
+                                            options=["(Không chọn)"] + headers,
+                                            index=def_index,
+                                            key=f"mapping_req_{col_name}"
+                                        )
+                                        current_mapping[col_name] = None if sel_val == "(Không chọn)" else sel_val
+
+                                # Optional fields
+                                if optional_cols:
+                                    st.markdown("---")
+                                    st.caption("Các cột không bắt buộc (Có thể bỏ qua):")
+                                    cols_opt = st.columns(2)
+                                    for idx_opt, col_name in enumerate(optional_cols):
+                                        col_idx = idx_opt % 2
+                                        def_val = defaults.get(col_name)
+                                        def_index = 0
+                                        if def_val in headers:
+                                            def_index = headers.index(def_val) + 1
+                                        with cols_opt[col_idx]:
+                                            sel_val = st.selectbox(
+                                                f"Cột tương ứng với '{col_name}':",
+                                                options=["(Không chọn)"] + headers,
+                                                index=def_index,
+                                                key=f"mapping_opt_{col_name}"
+                                            )
+                                            current_mapping[col_name] = None if sel_val == "(Không chọn)" else sel_val
+
+                                # Save template block
+                                st.markdown("---")
+                                col_save_name, col_save_btn = st.columns([3, 1])
+                                with col_save_name:
+                                    save_name = st.text_input("Lưu cấu hình ánh xạ hiện tại thành mẫu mới:", key="new_template_save_name_input")
+                                with col_save_btn:
+                                    st.write("")
+                                    st.write("")
+                                    if st.button("💾 Lưu mẫu ánh xạ", key="save_mapping_template_btn"):
+                                        if save_name.strip():
+                                            save_mapping_template(save_name.strip(), current_mapping)
+                                            st.success(f"Đã lưu mẫu '{save_name.strip()}'!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Vui lòng điền tên mẫu.")
+
+                                # Verify required mapping completed
+                                missing_required = [c for c in required_cols if current_mapping[c] is None]
+                                if missing_required:
+                                    st.warning(f"⚠️ Vui lòng ánh xạ tất cả các cột bắt buộc: {', '.join(missing_required)}")
+                                else:
+                                    # Read & remap
+                                    df_raw = parse_excel_to_df(file_bytes, header_row=header_row, sheet_name=selected_sheet)
+                                    df_parsed = remap_dataframe_columns(df_raw, current_mapping)
+
+                                    if df_parsed.empty:
+                                        st.info("Không có dòng dữ liệu nào sau khi đọc.")
+                                    elif len(df_parsed) > 1000:
+                                        st.error("❌ Số lượng dòng trong file Excel vượt quá giới hạn cho phép (1000 dòng).")
+                                    else:
+                                        # Validate
+                                        if import_method == "activities":
+                                            errors = validate_activities_data(df_parsed, get_connection())
+                                        else:
+                                            errors = validate_aggregate_totals_data(df_parsed, get_connection())
+
+                                        if errors:
+                                            st.error("❌ Phát hiện lỗi định dạng dữ liệu trong file Excel. Vui lòng sửa lại:")
+                                            for idx_e, r_num, err_msg in errors[:20]:
+                                                st.write(f"- Dòng {r_num}: {err_msg}")
+                                            if len(errors) > 20:
+                                                st.caption(f"... và {len(errors) - 20} lỗi khác.")
+                                        else:
+                                            st.success(f"✓ Dữ liệu hợp lệ! Đã đọc thành công {len(df_parsed)} dòng.")
+
+                                            # Diff
+                                            if import_method == "activities":
+                                                df_diff = diff_activities(df_parsed, get_connection(), selected_tf_name)
+                                                display_preview_cols = ["Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng", "diff_marker"]
+                                            else:
+                                                df_diff = diff_aggregate_totals(df_parsed, get_connection(), selected_tf_name)
+                                                display_preview_cols = ["Mã GV", "Tổng GC thực hiện", "NCKH thực hiện", "Số giờ miễn giảm", "Định mức GC", "diff_marker"]
+
+                                            # Diff counts
+                                            counts = df_diff["diff_marker"].value_counts().to_dict()
+                                            c_new = counts.get("NEW", 0)
+                                            c_upd = counts.get("UPDATE", 0)
+                                            c_skip = counts.get("SKIP", 0)
+
+                                            cols_m = st.columns(3)
+                                            cols_m[0].metric("Thêm mới", c_new)
+                                            cols_m[1].metric("Cập nhật / Thay đổi", c_upd)
+                                            cols_m[2].metric("Trùng khớp (Bỏ qua)", c_skip)
+
+                                            st.markdown("##### Xem trước danh sách dữ liệu:")
+                                            st.dataframe(df_diff[display_preview_cols], use_container_width=True, hide_index=True)
+
+                                            # Submit batch
+                                            if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_batch_approve"):
+                                                conn_write = get_connection()
+                                                try:
+                                                    cur = conn_write.cursor()
+                                                    cur.execute('''
+                                                        INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                                                        VALUES (?, ?, 'pending', ?, ?, ?)
+                                                    ''', (import_method, dept_name, f"Code {dept_auth_code}", uploaded_file.name, len(df_diff)))
+                                                    batch_id = cur.lastrowid
+
+                                                    from pipeline.validator import parse_bool, safe_float
+
+                                                    if import_method == "activities":
+                                                        for idx_r, row in df_diff.iterrows():
+                                                            is_main = parse_bool(row.get("Tác giả chính", False))
+                                                            is_foreign = parse_bool(row.get("Giảng dạy tiếng nước ngoài", False))
+                                                            qty = safe_float(row["Số lượng"])
+                                                            std_cnt = int(safe_float(row.get("Số học viên", 0)) or 0)
+                                                            log_d_parsed = pd.to_datetime(row["Ngày thực hiện"]).strftime("%Y-%m-%d")
+
+                                                            cur.execute('''
+                                                                INSERT INTO staging_activities (
+                                                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                    teacher_name, activity_type_name, log_date, quantity,
+                                                                    class_level, class_type, student_count, nckh_level,
+                                                                    is_main_author, is_foreign_language_instruction, note, timeframe_name
+                                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                            ''', (
+                                                                batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                row["Mã GV"], row["Tên loại hoạt động"], log_d_parsed, qty,
+                                                                row.get("Cấp lớp", None) if not pd.isna(row.get("Cấp lớp", None)) else None,
+                                                                row.get("Loại lớp", None) if not pd.isna(row.get("Loại lớp", None)) else None,
+                                                                std_cnt,
+                                                                row.get("Cấp đề tài", None) if not pd.isna(row.get("Cấp đề tài", None)) else None,
+                                                                is_main, is_foreign,
+                                                                row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
+                                                                selected_tf_name
+                                                            ))
+                                                    else:  # aggregate_totals
+                                                        for idx_r, row in df_diff.iterrows():
+                                                            cur.execute('''
+                                                                INSERT INTO staging_aggregate_totals (
+                                                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                    teacher_name, tong_gc_da_thuc_hien, nckh_da_thuc_hien,
+                                                                    so_gio_duoc_mien_giam, dinh_muc_gc_phai_thuc_hien, note, timeframe_name
+                                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                            ''', (
+                                                                batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                row["Mã GV"],
+                                                                safe_float(row["Tổng GC thực hiện"]) or 0.0,
+                                                                safe_float(row["NCKH thực hiện"]) or 0.0,
+                                                                safe_float(row["Số giờ miễn giảm"]) or 0.0,
+                                                                safe_float(row["Định mức GC"]) or 0.0,
+                                                                row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
+                                                                selected_tf_name
+                                                            ))
+
+                                                    conn_write.commit()
+                                                    st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
+                                                    st.balloons()
+                                                except Exception as ex:
+                                                    st.error(f"Lỗi khi gửi yêu cầu: {ex}")
+                                                finally:
+                                                    conn_write.close()
+                        except Exception as e_headers:
+                            st.error(
+                                "⚠️ **Lỗi đọc file Excel:** Không thể phân tích cấu trúc của file Excel được tải lên.\n\n"
+                                "**Gợi ý khắc phục:**\n"
+                                "- Đảm bảo file không bị lỗi, mật khẩu bảo vệ hoặc bị mã hóa.\n"
+                                "- Kiểm tra xem bạn đã chọn đúng tên Sheet và Dòng chứa tiêu đề cột (0-indexed) chưa.\n"
+                                f"- *Chi tiết kỹ thuật:* {e_headers}"
+                            )
 
 conn.close()

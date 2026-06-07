@@ -50,6 +50,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+from auth import get_current_user
+_gate_user = get_current_user()
+if not _gate_user:
+    st.switch_page("pages/8_DangNhap.py")
+    st.stop()
+
 render_sidebar("home")
 
 # ── Welcome page ──

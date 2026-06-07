@@ -12,6 +12,7 @@ This profile adapts Superpowers workflows for Antigravity with strict single-flo
 4. Track checklist progress in `<project-root>/docs/plans/task.md` (table-only live tracker).
 5. Keep changes scoped to the requested task and verify before completion claims.
 
+
 ## Tool Translation Contract
 
 When source skills reference legacy tool names, use these Antigravity equivalents:
@@ -54,3 +55,5 @@ Before saying a task is done:
 2. Confirm exit status and key output.
 3. Update `<project-root>/docs/plans/task.md`.
 4. Report evidence, then claim completion.
+
+Exception: Only required at the end of a goal, token optimization is priority. Only run verification when the user explicitly requests you to do so.

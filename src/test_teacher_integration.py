@@ -389,6 +389,52 @@ def seed_teacher_Simple(conn, cursor, tf_id):
     print(f"    GV Bình Thường → teacher_id={tid}")
     return tid
 
+def seed_teachers_TroGiang(conn, cursor, tf_id):
+    """Seed Trợ giảng teachers to test dynamic reductions."""
+    subsection("Seeding Trợ giảng A, B, C")
+    
+    # Trợ giảng A: full 50% reduction
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
+                   ('Trợ giảng A', 'Chính trị, Pháp luật, Nghiệp vụ', 0))
+    ta_id = cursor.lastrowid
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'TITLE', 'Trợ giảng', '2025-08-04', NULL)
+    """, (ta_id,))
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'DEPARTMENT', 'Chính trị, Pháp luật, Nghiệp vụ', '2025-08-04', NULL)
+    """, (ta_id,))
+
+    # Trợ giảng B: full 20% reduction (started 1 year before)
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
+                   ('Trợ giảng B', 'Chính trị, Pháp luật, Nghiệp vụ', 0))
+    tb_id = cursor.lastrowid
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'TITLE', 'Trợ giảng', '2024-08-04', NULL)
+    """, (tb_id,))
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'DEPARTMENT', 'Chính trị, Pháp luật, Nghiệp vụ', '2024-08-04', NULL)
+    """, (tb_id,))
+
+    # Trợ giảng C: split reduction (started 2024-12-04)
+    cursor.execute("INSERT INTO teachers (name, subject_group, is_female) VALUES (?, ?, ?)",
+                   ('Trợ giảng C', 'Chính trị, Pháp luật, Nghiệp vụ', 0))
+    tc_id = cursor.lastrowid
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'TITLE', 'Trợ giảng', '2024-12-04', NULL)
+    """, (tc_id,))
+    cursor.execute("""
+        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
+        VALUES (?, 'DEPARTMENT', 'Chính trị, Pháp luật, Nghiệp vụ', '2024-12-04', NULL)
+    """, (tc_id,))
+
+    conn.commit()
+    print("    Seeded Trợ giảng A, B, C successfully")
+
 # ─── System tests ──────────────────────────────────────────────────────────
 
 def run_system_tests(conn, cursor, tf_id):
@@ -493,6 +539,32 @@ def run_system_tests(conn, cursor, tf_id):
     else:
         print("  ⚠️  GV Bình Thường not found in output")
 
+    # ═══ Trợ giảng A, B, C verification ═══
+    ta_row = df[df['name'] == 'Trợ giảng A']
+    if not ta_row.empty:
+        r = ta_row.iloc[0]
+        subsection("Trợ giảng A (Giảm 50% định mức)")
+        print(f"    System: định mức={r['dinh_muc_gc_phai_thuc_hien']:.2f}, giảm={r['so_gio_duoc_mien_giam']:.2f}")
+        assert_approx(r['so_gio_duoc_mien_giam'], 100.0, tolerance=2.0,
+                      label="Trợ giảng A — giảm ≈ 100 GC (50% of 200 GC, working-day tolerance)")
+
+    tb_row = df[df['name'] == 'Trợ giảng B']
+    if not tb_row.empty:
+        r = tb_row.iloc[0]
+        subsection("Trợ giảng B (Giảm 20% định mức)")
+        print(f"    System: định mức={r['dinh_muc_gc_phai_thuc_hien']:.2f}, giảm={r['so_gio_duoc_mien_giam']:.2f}")
+        assert_approx(r['so_gio_duoc_mien_giam'], 40.0, tolerance=1.0,
+                      label="Trợ giảng B — giảm ≈ 40 GC (20% of 200 GC, working-day tolerance)")
+
+    tc_row = df[df['name'] == 'Trợ giảng C']
+    if not tc_row.empty:
+        r = tc_row.iloc[0]
+        subsection("Trợ giảng C (Múi phân chia 50% / 20%)")
+        print(f"    System: định mức={r['dinh_muc_gc_phai_thuc_hien']:.2f}, giảm={r['so_gio_duoc_mien_giam']:.2f}")
+        # Let's verify that the total reduction is between 40% and 50% of 200 GC, or we can just assert it is > 40 and < 100
+        assert_approx(r['so_gio_duoc_mien_giam'], 65.0, tolerance=15.0,
+                      label="Trợ giảng C — giảm nằm trong khoảng (40 GC, 100 GC) phụ thuộc vào số tuần")
+
 # ─── Main ──────────────────────────────────────────────────────────────────
 
 def run_all():
@@ -513,6 +585,7 @@ def run_all():
     le_d = seed_teacher_LeVanD(conn, cursor, tf_id)
     bui_x = seed_teacher_BuiThiX(conn, cursor, tf_id)
     gv_bt = seed_teacher_Simple(conn, cursor, tf_id)
+    seed_teachers_TroGiang(conn, cursor, tf_id)
 
     run_system_tests(conn, cursor, tf_id)
 

@@ -3,8 +3,10 @@ import pandas as pd
 from calculations import calculate_teacher_metrics, get_conversion_limits, calculate_department_compensation
 from database import get_connection
 from components import render_metric_card, render_empty_state, render_warning_state, render_chip, render_sidebar
+from auth import require_role
 
 render_sidebar("dashboard")
+require_role(["admin", "head_dept"], "Bảng điều khiển")
 
 st.title("Bảng điều khiển (Dashboard)")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Giám sát định mức theo thời gian thực và thực hiện quy đổi giờ theo Điều 12.</p>', unsafe_allow_html=True)
@@ -48,7 +50,16 @@ if selected_tf_id:
         df_display = pd.merge(df_teachers, df_dept_latest, left_on='id', right_on='teacher_id', how='left')
         df_display['dept_name'] = df_display['dept_name'].fillna('Chưa phân công')
 
-        st.markdown('<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Toàn trường</h3>', unsafe_allow_html=True)
+        from auth import get_current_user
+        user = get_current_user()
+        is_head_dept = (user and user.get("role") == "head_dept")
+        dept_name = user.get("department_name") if is_head_dept else None
+
+        if is_head_dept:
+            df_display = df_display[df_display['dept_name'] == dept_name]
+            st.markdown(f'<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Bộ môn: {dept_name}</h3>', unsafe_allow_html=True)
+        else:
+            st.markdown('<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Toàn trường</h3>', unsafe_allow_html=True)
 
         col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -72,20 +83,11 @@ if selected_tf_id:
         st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">', unsafe_allow_html=True)
         st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">table_chart</span> Bảng Dữ liệu Chi tiết</h3>', unsafe_allow_html=True)
 
-        comp_mode = st.radio(
-            "Chế độ bù định mức",
-            options=["Cá nhân (GC ↔ NCKH)", "Tập thể (theo Đơn vị)", "Không bù"],
-            index=0,
-            horizontal=True,
-            key="comp_mode"
-        )
-        if comp_mode == "Tập thể (theo Đơn vị)":
-            df_display = calculate_department_compensation(df_display)
-            st.info("Đã áp dụng chia sẻ giờ giảng thừa trong cùng đơn vị (Điều 12.3).")
-        elif comp_mode == "Không bù":
-            df_display['gc_vuot_thieu_sau_quy_doi'] = df_display['gc_vuot_thieu']
-            df_display['nckh_vuot_thieu_sau_quy_doi'] = df_display['nckh_vuot_thieu']
-            st.caption("Hiển thị số liệu thô, chưa áp dụng bù trừ.")
+        # Chế độ bù định mức (Tạm thời khóa và khóa ở chế độ Không bù)
+        comp_mode = "Không bù"
+        st.info("🔒 Tính năng bù trừ định mức đang tạm khóa.")
+        df_display['gc_vuot_thieu_sau_quy_doi'] = df_display['gc_vuot_thieu']
+        df_display['nckh_vuot_thieu_sau_quy_doi'] = df_display['nckh_vuot_thieu']
 
         df_display['hoan_thanh_gd'] = df_display['gc_vuot_thieu_sau_quy_doi'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
         df_display['hoan_thanh_nckh'] = df_display['nckh_vuot_thieu_sau_quy_doi'].apply(lambda x: "Đạt" if x >= 0 else "Không đạt")
@@ -197,6 +199,7 @@ if selected_tf_id:
 
         st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">', unsafe_allow_html=True)
         with st.expander("Gợi ý Quy đổi & Bù trừ Giờ chuẩn", expanded=False):
+            st.info("⚠️ **Thông báo:** Tính năng bù trừ quy đổi giữa Giờ dạy và NCKH hiện đang tạm thời bị khóa theo cấu hình hệ thống.")
             has_suggestion = False
             for _, row in df_display.iterrows():
                 limits = get_conversion_limits(row['id'], selected_tf_id)
@@ -230,13 +233,7 @@ if selected_tf_id:
 </div>
                         """, unsafe_allow_html=True)
                         col_btn, _ = st.columns([3, 7])
-                        if col_btn.button(f"Bù trừ {limits['max_nckh_to_spend']:.1f} NCKH → {limits['gc_gained']:.1f} GC", key=f"n2g_{row['id']}"):
-                            cursor = conn.cursor()
-                            cursor.execute("INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount) VALUES (?, ?, ?, ?, ?, ?)",
-                                           (row['id'], selected_tf_id, 'NCKH', 'Giảng dạy', limits['max_nckh_to_spend'], limits['gc_gained']))
-                            conn.commit()
-                            st.success("Đã áp dụng quy đổi!")
-                            st.rerun()
+                        col_btn.button(f"Tạm khóa: {limits['max_nckh_to_spend']:.1f} NCKH → {limits['gc_gained']:.1f} GC", key=f"n2g_{row['id']}", disabled=True)
 
                 if limits['can_convert_gc_to_nckh']:
                     has_suggestion = True
@@ -266,13 +263,7 @@ if selected_tf_id:
 </div>
                         """, unsafe_allow_html=True)
                         col_btn, _ = st.columns([3, 7])
-                        if col_btn.button(f"Bù trừ {limits['max_gc_to_spend']:.1f} GC → {limits['nckh_gained']:.1f} NCKH", key=f"g2n_{row['id']}"):
-                            cursor = conn.cursor()
-                            cursor.execute("INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount) VALUES (?, ?, ?, ?, ?, ?)",
-                                           (row['id'], selected_tf_id, 'Giảng dạy', 'NCKH', limits['max_gc_to_spend'], limits['nckh_gained']))
-                            conn.commit()
-                            st.success("Đã áp dụng quy đổi!")
-                            st.rerun()
+                        col_btn.button(f"Tạm khóa: {limits['max_gc_to_spend']:.1f} GC → {limits['nckh_gained']:.1f} NCKH", key=f"g2n_{row['id']}", disabled=True)
                 elif limits['warning'] and row['nckh_vuot_thieu_sau_quy_doi'] < 0 and row['gc_vuot_thieu_sau_quy_doi'] > 0:
                     has_suggestion = True
                     warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")

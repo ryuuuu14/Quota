@@ -213,6 +213,16 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
                     dates.add(r_start)
                     dates.add(r_end + pd.Timedelta(days=1))
                     
+        # Add dynamic transition points for Trợ giảng reductions (months 12 and 24)
+        for _, r in title_recs.iterrows():
+            if r['value_text'] == 'Trợ giảng':
+                app_date = pd.to_datetime(r['start_date'])
+                t12 = app_date + pd.DateOffset(months=12)
+                t24 = app_date + pd.DateOffset(months=24)
+                for t in [t12, t24]:
+                    if pd.to_datetime(tf_start) <= t <= pd.to_datetime(tf_end):
+                        dates.add(t)
+                        
         sorted_dates = sorted(list(dates))
         segments = []
         for i in range(len(sorted_dates) - 1):
@@ -366,14 +376,14 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
                 tro_giang_rec = title_recs[title_recs['value_text'] == 'Trợ giảng'].iloc[0]
                 appointment_date = pd.to_datetime(tro_giang_rec['start_date'])
                 
-                # 1st 12 months
+                # 1st 12 months (exclusive end date)
                 end_12m = appointment_date + pd.DateOffset(months=12)
-                # Next 12 months
+                # Next 12 months (exclusive end date)
                 end_24m = appointment_date + pd.DateOffset(months=24)
                 
-                # Check segment overlap with 1st 12 months
+                # Check segment overlap with 1st 12 months: [appointment_date, end_12m - 1 day]
                 p1_start = max(seg_start, appointment_date)
-                p1_end = min(seg_end, end_12m)
+                p1_end = min(seg_end, end_12m - pd.Timedelta(days=1))
                 if p1_start <= p1_end:
                     p1_weeks = calculate_t04_weeks(p1_start, p1_end, holidays_list)
                     red_gc = seg_base_gc * (1 - role_t_red / 100.0) * 0.5 * (p1_weeks / std_weeks)
@@ -382,9 +392,9 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
                     if desc not in applied_reductions:
                         applied_reductions.append(desc)
                         
-                # Check segment overlap with next 12 months
+                # Check segment overlap with next 12 months: [end_12m, end_24m - 1 day]
                 p2_start = max(seg_start, end_12m)
-                p2_end = min(seg_end, end_24m)
+                p2_end = min(seg_end, end_24m - pd.Timedelta(days=1))
                 if p2_start <= p2_end:
                     p2_weeks = calculate_t04_weeks(p2_start, p2_end, holidays_list)
                     red_gc = seg_base_gc * (1 - role_t_red / 100.0) * 0.2 * (p2_weeks / std_weeks)
@@ -401,6 +411,9 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
             rid = r['reduction_rule_id']
             if rid in rules_dict and rules_dict[rid]['rule_type'] == 'SPECIAL':
                 rule = rules_dict[rid]
+                if rule['name'].startswith('Trợ giảng'):
+                    # Skip manual duplicate rules to prevent double counting
+                    continue
                 if rule['teaching_reduction_pct'] == 100.0:
                     point2_leaves.append((r, rule))
                 else:
@@ -674,6 +687,25 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
         df_out['hdcm_bd_da_thuc_hien'] = df_out['id'].map(hdcm_bd_dict).fillna(0)
         df_out['giang_day_truc_tiep'] = df_out['id'].map(direct_teaching_dict).fillna(0)
         df_out['nguon_du_lieu'] = 'Nhập lẻ'
+
+    # Ghi đè tổng hợp (Aggregate Overrides)
+    try:
+        df_overrides = pd.read_sql_query(
+            "SELECT * FROM teacher_calculated_totals WHERE timeframe_id = ? AND is_override = 1",
+            conn, params=[tf_id]
+        )
+        if not df_overrides.empty:
+            for _, ovr in df_overrides.iterrows():
+                ovr_tid = ovr['teacher_id']
+                idx = df_out[df_out['id'] == ovr_tid].index
+                if not idx.empty:
+                    df_out.loc[idx, 'tổng_gc_da_thuc_hien'] = ovr['tong_gc_da_thuc_hien']
+                    df_out.loc[idx, 'nckh_da_thuc_hien'] = ovr['nckh_da_thuc_hien']
+                    df_out.loc[idx, 'so_gio_duoc_mien_giam'] = ovr['so_gio_duoc_mien_giam']
+                    df_out.loc[idx, 'dinh_muc_gc_phai_thuc_hien'] = ovr['dinh_muc_gc_phai_thuc_hien']
+                    df_out.loc[idx, 'nguon_du_lieu'] = 'Ghi đè (Excel)'
+    except Exception:
+        pass
     
     df_out['gc_vuot_thieu'] = df_out['tổng_gc_da_thuc_hien'] - (df_out['dinh_muc_gc_phai_thuc_hien'] - df_out['so_gio_duoc_mien_giam'])
     df_out['nckh_vuot_thieu'] = df_out['nckh_da_thuc_hien'] - df_out['dinh_muc_nckh_phai_thuc_hien']

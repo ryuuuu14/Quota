@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage, SystemMessage, HumanMessage
-from langchain_openai import ChatOpenAI
+from agent_core.llm import GeminiPool
 
 # 1. State Definition
 class BuilderState(TypedDict):
@@ -26,19 +26,23 @@ def research_agent(state: BuilderState) -> dict:
 
 def brainstorm_agent(state: BuilderState) -> dict:
     print("Running Brainstorm Agent...")
-    llm = ChatOpenAI(model="gpt-4o", temperature=0) # Using standard interface
     
     prompt = f"""
-    You are the Brainstorm Agent.
-    TT11 Content: {state.get('tt11_content', '')[:1000]}...
-    DB Schema: {state.get('db_schema', '')[:1000]}...
-    
     Design the DB updates and Python calculation logic for the Payroll feature.
     Output a concise design document.
     """
-    # response = llm.invoke([HumanMessage(content=prompt)])
-    # For now, simulate response to build the graph structure
-    doc = "Proposed design: Add guest_lecturers table, add salary to teachers. Code logic..."
+    system_prompt = f"""
+    You are the Brainstorm Agent.
+    TT11 Content: {state.get('tt11_content', '')[:1000]}...
+    DB Schema: {state.get('db_schema', '')[:1000]}...
+    """
+    doc = GeminiPool.call(
+        system_prompt=system_prompt,
+        user_prompt=prompt,
+        complexity="planning",
+        pipeline_name="payroll_builder",
+        agent_name="brainstormer"
+    )
     return {"brainstorm_doc": doc, "messages": [SystemMessage(content="Brainstorm complete.")]}
 
 def hitl_review(state: BuilderState) -> dict:

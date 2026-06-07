@@ -1,18 +1,10 @@
 import os
-import requests
 from typing import TypedDict, Annotated, Literal
-from langgraph.graph import StateGraph, END
-from google import genai
-from pydantic import BaseModel, Field
+from langgraph.graph import StateGraph, START, END
+
+from agent_core.llm import GeminiPool
 
 MAX_RETRIES = 2
-
-# Check for Gemini API key for the agents (Designer, QA, Review)
-# Assumes GEMINI_API_KEY is set in environment for the LLM agents.
-try:
-    client = genai.Client()
-except Exception:
-    client = None
 
 # Define State
 class PipelineState(TypedDict):
@@ -26,41 +18,46 @@ class PipelineState(TypedDict):
     retry_count: int
 
 # Agent Implementations
-def call_llm(system_instruction: str, user_prompt: str) -> str:
-    """Helper to call Gemini for agent tasks."""
-    if not client:
-        return "LLM Mock Response. Set GEMINI_API_KEY to enable."
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_prompt,
-            config={'system_instruction': system_instruction}
-        )
-        return response.text
-    except Exception as e:
-        return f"Error calling LLM: {str(e)}"
 
-def designer_agent(state: PipelineState) -> PipelineState:
+def designer_agent(state: PipelineState) -> dict:
     print("Designer Agent analyzing taste...")
-    system_prompt = "You are a UI Designer Agent. Given a user request, output a terse, bulleted style guide for a Streamlit app. Focus on layout, colors, elements, and modern taste."
-    style_guide = call_llm(system_prompt, f"User request: {state['prompt']}")
-    state["style_guide"] = style_guide
+    system_prompt = (
+        "You are a UI Designer Agent. Given a user request, output a terse, bulleted style guide for a Streamlit app. "
+        "Focus on layout, colors, elements, and modern taste."
+    )
+    user_prompt = f"User request: {state['prompt']}"
+    style_guide = GeminiPool.call(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        complexity="default",
+        pipeline_name="ui_design_pipeline",
+        agent_name="designer"
+    )
     print("Style guide generated.")
-    return state
+    return {"style_guide": style_guide}
 
-def coder_agent(state: PipelineState) -> PipelineState:
-    state["retry_count"] = state.get("retry_count", 0) + 1
-    print("Coder Agent writing Streamlit UI...")
+def coder_agent(state: PipelineState) -> dict:
+    new_retry_count = state.get("retry_count", 0) + 1
+    print(f"Coder Agent writing Streamlit UI (Attempt {new_retry_count})...")
     
     # Construct full context prompt
-    context = f"Build a Streamlit app. Context: {state['prompt']}\\n\\nStyle:\\n{state['style_guide']}"
+    context = f"Build a Streamlit app. Context: {state['prompt']}\n\nStyle:\n{state.get('style_guide', '')}"
     if not state.get("qa_passed", True):
-        context += f"\\nFix QA issues: {state.get('qa_feedback')}"
+        context += f"\nFix QA issues: {state.get('qa_feedback')}"
     if not state.get("review_passed", True):
-        context += f"\\nFix Review issues: {state.get('review_feedback')}"
+        context += f"\nFix Review issues: {state.get('review_feedback')}"
         
-    system_prompt = "You are an expert Python Streamlit developer. Output ONLY valid Python code block with the Streamlit app. Do not include explanations."
-    generated_code = call_llm(system_prompt, context)
+    system_prompt = (
+        "You are an expert Python Streamlit developer. Output ONLY a valid Python code block with the Streamlit app. "
+        "Do not include explanations."
+    )
+    generated_code = GeminiPool.call(
+        system_prompt=system_prompt,
+        user_prompt=context,
+        complexity="planning" if new_retry_count == 1 else "default",
+        pipeline_name="ui_design_pipeline",
+        agent_name="coder"
+    )
     
     # Strip markdown block quotes if present
     if generated_code.startswith("```python"):
@@ -68,35 +65,54 @@ def coder_agent(state: PipelineState) -> PipelineState:
     elif generated_code.startswith("```"):
         generated_code = generated_code.split("```")[1].split("```")[0].strip()
         
-    state["code"] = generated_code
     print("Code built successfully via LLM.")
-    return state
+    return {"code": generated_code, "retry_count": new_retry_count}
 
-def qa_agent(state: PipelineState) -> PipelineState:
+def qa_agent(state: PipelineState) -> dict:
     print("QA Agent checking functionality...")
-    system_prompt = "You are a QA Agent. Review this Streamlit code. If it has syntax errors, missing imports, or lacks functionality, reply with 'FAIL: <reason>'. If good, reply 'PASS'."
-    response = call_llm(system_prompt, f"Code:\\n```python\\n{state['code']}\\n```")
+    system_prompt = (
+        "You are a QA Agent. Review this Streamlit code. If it has syntax errors, missing imports, "
+        "or lacks functionality, reply with 'FAIL: <reason>'. If good, reply 'PASS'."
+    )
+    user_prompt = f"Code:\n```python\n{state.get('code', '')}\n```"
+    response = GeminiPool.call(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        complexity="default",
+        pipeline_name="ui_design_pipeline",
+        agent_name="qa"
+    )
     
-    if response.startswith("PASS"):
-        state["qa_passed"] = True
-        state["qa_feedback"] = ""
+    if response.strip().startswith("PASS"):
+        return {"qa_passed": True, "qa_feedback": ""}
     else:
-        state["qa_passed"] = False
-        state["qa_feedback"] = response
-    return state
+        return {"qa_passed": False, "qa_feedback": response}
 
-def review_agent(state: PipelineState) -> PipelineState:
+def review_agent(state: PipelineState) -> dict:
     print("Review Agent checking code quality...")
-    system_prompt = "You are a Code Review Agent. Review this Streamlit code for best practices and security. If bad, reply 'FAIL: <reason>'. If good, reply 'PASS'."
-    response = call_llm(system_prompt, f"Code:\\n```python\\n{state['code']}\\n```")
+    system_prompt = (
+        "You are a Code Review Agent. Review this Streamlit code for best practices and security. "
+        "If bad, reply 'FAIL: <reason>'. If good, reply 'PASS'."
+    )
+    user_prompt = f"Code:\n```python\n{state.get('code', '')}\n```"
+    response = GeminiPool.call(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        complexity="default",
+        pipeline_name="ui_design_pipeline",
+        agent_name="reviewer"
+    )
     
-    if response.startswith("PASS"):
-        state["review_passed"] = True
-        state["review_feedback"] = ""
+    if response.strip().startswith("PASS"):
+        return {"review_passed": True, "review_feedback": ""}
     else:
-        state["review_passed"] = False
-        state["review_feedback"] = response
-    return state
+        return {"review_passed": False, "review_feedback": response}
+
+def merge_node(state: PipelineState) -> dict:
+    print("Merging parallel QA and Review results...")
+    # This is a synchronization point for parallel branches.
+    # It just returns an empty dict because the state is already updated with qa_passed/review_passed by the parallel nodes.
+    return {}
 
 def router(state: PipelineState) -> Literal["build", "end"]:
     """Route back to build if QA/Review fail, else end."""
@@ -118,13 +134,21 @@ workflow.add_node("designer", designer_agent)
 workflow.add_node("coder", coder_agent)
 workflow.add_node("qa", qa_agent)
 workflow.add_node("review", review_agent)
+workflow.add_node("merge", merge_node)
 
 workflow.set_entry_point("designer")
 workflow.add_edge("designer", "coder")
+
+# Fan-out to QA and Review in parallel from coder
 workflow.add_edge("coder", "qa")
-workflow.add_edge("qa", "review")
+workflow.add_edge("coder", "review")
+
+# Fan-in from QA and Review to merge node
+workflow.add_edge("qa", "merge")
+workflow.add_edge("review", "merge")
+
 workflow.add_conditional_edges(
-    "review",
+    "merge",
     router,
     {"build": "coder", "end": END}
 )
@@ -145,7 +169,7 @@ if __name__ == "__main__":
     
     print("Starting LangGraph Pipeline...")
     final_state = pipeline_app.invoke(initial_state)
-    print("\\nPipeline Finished.")
+    print("\nPipeline Finished.")
     print("Final Code Output:")
     print("--------------------------------------------------")
     print(final_state["code"])

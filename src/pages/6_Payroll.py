@@ -10,6 +10,10 @@ from payroll import run_payroll_cycle, get_payroll_records
 st.set_page_config(page_title="Quản lý Chế độ chi TT11", layout="wide")
 render_sidebar("payroll")
 
+from auth import require_role
+if not require_role(["admin"], page_title="Quản lý Chế độ chi TT11"):
+    st.stop()
+
 st.title("Quản lý Chế độ chi Giáo dục, Đào tạo (TT11/2026)")
 st.markdown(
     '<p style="color: var(--md-on-surface-variant); font-size: 14px;">'

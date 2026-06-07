@@ -12,7 +12,12 @@ if not os.path.exists(_db_dir):
     os.makedirs(_db_dir, exist_ok=True)
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    path = os.environ.get('DB_PATH', DB_PATH)
+    _db_dir = os.path.dirname(os.path.abspath(path))
+    if not os.path.exists(_db_dir):
+        os.makedirs(_db_dir, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -281,8 +286,182 @@ def init_db():
     )
     ''')
 
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS teacher_calculated_totals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timeframe_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        tong_gc_da_thuc_hien REAL NOT NULL DEFAULT 0.0,
+        nckh_da_thuc_hien REAL NOT NULL DEFAULT 0.0,
+        so_gio_duoc_mien_giam REAL NOT NULL DEFAULT 0.0,
+        dinh_muc_gc_phai_thuc_hien REAL NOT NULL DEFAULT 0.0,
+        is_override BOOLEAN DEFAULT 1,
+        note TEXT,
+        UNIQUE(timeframe_id, teacher_id),
+        FOREIGN KEY(timeframe_id) REFERENCES timeframes(id),
+        FOREIGN KEY(teacher_id) REFERENCES teachers(id)
+    )
+    ''')
+
+    # Migration for departments table
+    try:
+        cursor.execute("ALTER TABLE departments ADD COLUMN dept_code TEXT")
+    except Exception:
+        pass
+
+    # Admin Users Table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS admin_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    try:
+        cursor.execute("ALTER TABLE admin_users ADD COLUMN role TEXT NOT NULL DEFAULT 'teacher'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE admin_users ADD COLUMN department_name TEXT REFERENCES departments(name)")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE admin_users ADD COLUMN teacher_id INTEGER REFERENCES teachers(id)")
+    except sqlite3.OperationalError:
+        pass
+
+    # Import Batches Registry
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS import_batches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT NOT NULL,
+        dept_name TEXT,
+        uploaded_by TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        row_count INTEGER,
+        status TEXT DEFAULT 'pending',
+        rejection_reason TEXT,
+        diff_json TEXT,
+        snapshot_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        decided_at DATETIME,
+        decided_by TEXT
+    )
+    ''')
+
+    # Staging Tables
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS staging_teachers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id INTEGER REFERENCES import_batches(id) ON DELETE CASCADE,
+        row_num INTEGER,
+        diff_marker TEXT,
+        diff_detail TEXT,
+        validation_errors TEXT,
+        teacher_name TEXT,
+        subject_group TEXT,
+        is_female BOOLEAN DEFAULT 0,
+        employment_type TEXT DEFAULT 'TEACHER',
+        guest_rank TEXT,
+        total_12m_salary REAL,
+        police_rank_id INTEGER,
+        salary_coefficient REAL,
+        title TEXT,
+        department TEXT,
+        role TEXT,
+        teacher_id INTEGER
+    )
+    ''')
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN role TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN teacher_id INTEGER")
+    except Exception:
+        pass
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS staging_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id INTEGER REFERENCES import_batches(id) ON DELETE CASCADE,
+        row_num INTEGER,
+        diff_marker TEXT,
+        diff_detail TEXT,
+        validation_errors TEXT,
+        teacher_name TEXT,
+        activity_type_name TEXT,
+        log_date DATE,
+        quantity REAL,
+        class_level TEXT,
+        class_type TEXT,
+        student_count INTEGER DEFAULT 0,
+        nckh_level TEXT,
+        is_main_author BOOLEAN DEFAULT 1,
+        is_foreign_language_instruction BOOLEAN DEFAULT 0,
+        note TEXT,
+        timeframe_name TEXT
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS staging_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id INTEGER REFERENCES import_batches(id) ON DELETE CASCADE,
+        row_num INTEGER,
+        diff_marker TEXT,
+        diff_detail TEXT,
+        validation_errors TEXT,
+        teacher_name TEXT,
+        subject_name TEXT,
+        loai TEXT,
+        nhom TEXT DEFAULT '',
+        si_so INTEGER,
+        tiet_quy_doi REAL,
+        he_so_tin_chi REAL DEFAULT 1.0,
+        he_so_lop_dong REAL,
+        tiet_thuc_day REAL,
+        timeframe_name TEXT
+    )
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS staging_aggregate_totals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id INTEGER REFERENCES import_batches(id) ON DELETE CASCADE,
+        row_num INTEGER,
+        diff_marker TEXT,
+        diff_detail TEXT,
+        validation_errors TEXT,
+        teacher_name TEXT,
+        tong_gc_da_thuc_hien REAL,
+        nckh_da_thuc_hien REAL,
+        so_gio_duoc_mien_giam REAL,
+        dinh_muc_gc_phai_thuc_hien REAL,
+        note TEXT,
+        timeframe_name TEXT
+    )
+    ''')
+
     conn.commit()
     conn.close()
+    
+    # Run cleanup of old staging batches/records (older than 30 days)
+    cleanup_old_batches()
+
+def cleanup_old_batches():
+    """
+    Dọn dẹp các lô nhập dữ liệu tạm thời (staging batches/records) cũ hơn 30 ngày.
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM import_batches WHERE created_at < datetime('now', '-30 days')")
+        conn.commit()
+    except Exception as e:
+        print(f"Error during cleanup of old batches: {e}")
+    finally:
+        conn.close()
 
 def seed_initial_data():
     conn = get_connection()
@@ -312,14 +491,27 @@ def seed_initial_data():
 
     # Seed Departments
     departments = [
-        ('Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học', 1),
-        ('Nhà giáo giảng dạy thực hành', 1),
-        ('Chính trị, Pháp luật, Nghiệp vụ', 1),
-        ('Công tác tại phòng, trung tâm', 0)
+        ('Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học', 1, '1111'),
+        ('Nhà giáo giảng dạy thực hành', 1, '2222'),
+        ('Chính trị, Pháp luật, Nghiệp vụ', 1, '3333'),
+        ('Công tác tại phòng, trung tâm', 0, '4444')
     ]
-    for d in departments:
-        try: cursor.execute("INSERT INTO departments (name, is_teaching_dept) VALUES (?, ?)", d)
-        except: pass
+    for name, is_teaching, code in departments:
+        try:
+            cursor.execute("INSERT INTO departments (name, is_teaching_dept, dept_code) VALUES (?, ?, ?)", (name, is_teaching, code))
+        except Exception:
+            try:
+                cursor.execute("UPDATE departments SET dept_code = ? WHERE name = ?", (code, name))
+            except Exception:
+                pass
+
+    # Seed default admin user
+    try:
+        import bcrypt
+        hashed = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode()
+        cursor.execute("INSERT INTO admin_users (username, password, role) VALUES ('admin', ?, 'admin')", (hashed,))
+    except Exception:
+        pass
 
     seed_police_ranks(conn, cursor)
 

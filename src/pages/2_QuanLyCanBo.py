@@ -15,104 +15,301 @@ st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Qu
 
 conn = get_connection()
 
+# Fetch base salary globally to avoid NameError
+base_raw = get_base_salary()
+if not isinstance(base_raw, (int, float)):
+    base_salary = 2340000.0
+else:
+    base_salary = float(base_raw)
+
+# Check role/user permissions
+from auth import get_current_user, get_scoped_teacher_ids, require_role
+require_role(["admin", "head_dept"], "Quản lý Hồ sơ Nhà giáo")
+user = get_current_user()
+scoped_ids = get_scoped_teacher_ids(user)
+is_admin = (user is not None and user["role"] == "admin")
+is_head = (user is not None and user["role"] == "head_dept")
+
+# --- TOP: NHẬP HÀNG LOẠT ---
+if is_admin or is_head:
+    with st.expander("📥 Nhập hồ sơ hàng loạt từ Excel (Dành cho Khoa/Bộ môn)", expanded=False):
+        st.markdown("#### Hướng dẫn nhập dữ liệu:")
+        st.markdown("""
+        1. Tải file mẫu Excel được cấu hình riêng cho đơn vị của bạn.
+        2. Điền đầy đủ thông tin cán bộ theo mẫu.
+        3. Tải lên file đã điền để kiểm tra và gửi yêu cầu phê duyệt cho Quản trị viên.
+        """)
+        
+        df_depts_list = pd.read_sql_query("SELECT name FROM departments", conn)
+        depts_list_opts = df_depts_list['name'].tolist() if not df_depts_list.empty else []
+        
+        if is_admin:
+            dept_name = st.selectbox("Chọn Đơn vị nhập dữ liệu:", options=depts_list_opts, key="admin_upload_dept")
+            dept_auth_code = "Admin"
+        else:
+            dept_name = user["department_name"]
+            dept_auth_code = "HeadDept"
+            st.success(f"✓ Đơn vị thực hiện: **{dept_name}**")
+            
+        if dept_name:
+            # Button to download template
+            from pipeline.templates import generate_teachers_template
+            try:
+                template_bytes = generate_teachers_template(dept_name)
+                st.download_button(
+                    label=f"📥 Tải file mẫu Excel ({dept_name})",
+                    data=template_bytes,
+                    file_name=f"Mau_Can_Bo_{dept_name.replace(' ', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_teachers_template_btn"
+                )
+            except Exception as e:
+                st.error(f"Lỗi tạo file mẫu: {e}")
+                
+            st.markdown("---")
+            st.markdown("##### Tải lên file Excel dữ liệu:")
+            uploaded_teachers = st.file_uploader(
+                "Chọn file Excel đã điền:",
+                type=["xlsx"],
+                label_visibility="collapsed",
+                key="uploaded_teachers_excel"
+            )
+            
+            if uploaded_teachers is not None:
+                if uploaded_teachers.size > 5 * 1024 * 1024:
+                    st.error("❌ File tải lên vượt quá giới hạn dung lượng cho phép (5MB). Vui lòng thử lại với file nhỏ hơn.")
+                else:
+                    file_bytes = uploaded_teachers.read()
+                    from pipeline.importer import parse_excel_to_df
+                    from pipeline.validator import validate_teachers_data
+                    from pipeline.differ import diff_teachers
+                    
+                    try:
+                        df_parsed = parse_excel_to_df(file_bytes, header_row=3)
+                        if len(df_parsed) > 1000:
+                            st.error("❌ Số lượng dòng trong file Excel vượt quá giới hạn cho phép (1000 dòng). Vui lòng chia nhỏ file.")
+                        else:
+                            # Validate
+                            errors = validate_teachers_data(df_parsed, get_connection())
+                            if errors:
+                                st.error("❌ Phát hiện lỗi định dạng dữ liệu trong file Excel. Vui lòng sửa lại:")
+                                for idx, r_num, err_msg in errors[:20]:
+                                    st.write(f"- Dòng {r_num}: {err_msg}")
+                                if len(errors) > 20:
+                                    st.caption(f"... và {len(errors) - 20} lỗi khác.")
+                            else:
+                                st.success(f"✓ Dữ liệu hợp lệ! Đã đọc thành công {len(df_parsed)} dòng cán bộ.")
+                                
+                                # Diff
+                                df_diff = diff_teachers(df_parsed, get_connection())
+                                
+                                # Filter diff results if not admin (head_dept can only see/update their own department in diff preview)
+                                if not is_admin:
+                                    df_diff = df_diff[df_diff["Đơn vị"].strip().lower() == dept_name.strip().lower()]
+                                
+                                # Preview markers counts
+                                counts = df_diff["diff_marker"].value_counts().to_dict()
+                                c_new = counts.get("NEW", 0)
+                                c_update = counts.get("UPDATE", 0)
+                                c_skip = counts.get("SKIP", 0)
+                                
+                                cols_m = st.columns(3)
+                                cols_m[0].metric("Thêm mới", c_new)
+                                cols_m[1].metric("Cập nhật", c_update)
+                                cols_m[2].metric("Trùng khớp (Bỏ qua)", c_skip)
+                                
+                                st.markdown("##### Xem trước danh sách dữ liệu:")
+                                st.dataframe(df_diff[["Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng", "Chức danh", "Chức vụ", "Đơn vị", "diff_marker", "diff_detail"]], use_container_width=True)
+                                
+                                # Commit to staging database as a pending batch
+                                if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_teachers_batch"):
+                                    conn_write = get_connection()
+                                    try:
+                                        cur = conn_write.cursor()
+                                        # Create import batch
+                                        cur.execute("""
+                                            INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                                            VALUES ('teachers', ?, 'pending', ?, ?, ?)
+                                        """, (dept_name, f"Code {dept_auth_code}", uploaded_teachers.name, len(df_diff)))
+                                        batch_id = cur.lastrowid
+                                        
+                                        # Insert staging rows
+                                        from pipeline.validator import parse_bool, safe_float
+                                        for idx, row in df_diff.iterrows():
+                                            is_fem = parse_bool(row["Nữ"])
+                                            
+                                            # Skip rows that are from other departments if this is head_dept
+                                            if not is_admin and str(row["Đơn vị"]).strip().lower() != dept_name.strip().lower():
+                                                continue
+                                                
+                                            cur.execute("""
+                                                INSERT INTO staging_teachers (
+                                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                    teacher_name, subject_group, is_female, employment_type,
+                                                    guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id
+                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                            """, (
+                                                batch_id, idx + 5, row["diff_marker"], row["diff_detail"], "",
+                                                row["Họ tên"], row["Tổ bộ môn"], is_fem, row["Loại hợp đồng"],
+                                                row["Học hàm học vị"] if not pd.isna(row["Học hàm học vị"]) else None,
+                                                None, None,
+                                                row["Chức danh"] if not pd.isna(row["Chức danh"]) else None,
+                                                row["Đơn vị"],
+                                                row.get("Chức vụ", None) if not pd.isna(row.get("Chức vụ")) else None,
+                                                int(float(str(row["Mã GV"]).strip())) if pd.notna(row.get("Mã GV")) and str(row.get("Mã GV")).strip() and str(row.get("Mã GV")).strip() != "None" else None
+                                            ))
+                                        conn_write.commit()
+                                        st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
+                                        st.balloons()
+                                    except Exception as ex:
+                                        st.error(f"Lỗi khi gửi yêu cầu: {ex}")
+                                    finally:
+                                        conn_write.close()
+                    except Exception as e_parse:
+                        st.error(f"Không thể đọc file: {e_parse}")
+
 # --- TOP: THÊM MỚI HỒ SƠ ---
-with st.expander("➕ Thêm mới Hồ sơ Nhà giáo", expanded=False):
-    df_titles = pd.read_sql_query("SELECT name FROM titles", conn)
-    titles_list = df_titles['name'].tolist() if not df_titles.empty else ["(Chưa có dữ liệu)"]
+if user is not None:
+    with st.expander("➕ Thêm mới Hồ sơ Nhà giáo", expanded=False):
+        df_titles = pd.read_sql_query("SELECT name FROM titles", conn)
+        titles_list = df_titles['name'].tolist() if not df_titles.empty else ["(Chưa có dữ liệu)"]
 
-    df_depts = pd.read_sql_query("SELECT name FROM departments", conn)
-    depts_list = df_depts['name'].tolist() if not df_depts.empty else ["(Chưa có dữ liệu)"]
+        df_depts = pd.read_sql_query("SELECT name FROM departments", conn)
+        depts_list = df_depts['name'].tolist() if not df_depts.empty else ["(Chưa có dữ liệu)"]
+        if is_head:
+            depts_list = [user["department_name"]]
 
-    df_roles = pd.read_sql_query("SELECT id, name FROM reduction_rules WHERE rule_type = 'ROLE'", conn)
-    roles_dict = {row['name']: row['id'] for _, row in df_roles.iterrows()} if not df_roles.empty else {}
-    roles_list = ["Không có"] + list(roles_dict.keys())
+        df_roles = pd.read_sql_query("SELECT id, name FROM reduction_rules WHERE rule_type = 'ROLE'", conn)
+        roles_dict = {row['name']: row['id'] for _, row in df_roles.iterrows()} if not df_roles.empty else {}
+        roles_list = ["Không có"] + list(roles_dict.keys())
 
-    # Load police ranks for selectbox
-    police_ranks = get_police_ranks()
-    police_rank_opts = {f"{r['rank_group']} — {r['rank_name']} (HS {r['coefficient']})": r for r in police_ranks}
-    base_salary = get_base_salary()
+        # Load police ranks for selectbox
+        police_ranks = get_police_ranks()
+        if not isinstance(police_ranks, list):
+            police_ranks = []
+        if not police_ranks:
+            police_rank_opts = {"(Chưa có cấp bậc hàm)": {'id': None, 'coefficient': 0.0, 'rank_name': '', 'rank_group': ''}}
+        else:
+            police_rank_opts = {f"{r['rank_group']} — {r['rank_name']} (HS {r['coefficient']})": r for r in police_ranks}
+        base_raw = get_base_salary()
+        if not isinstance(base_raw, (int, float)):
+            base_salary = 2340000.0
+        else:
+            base_salary = float(base_raw)
 
-    emp_type_opts = {"TEACHER": "Giảng viên cơ hữu", "GUEST": "Giảng viên thỉnh giảng", "STAFF": "Cán bộ quản lý"}
-    create_emp_type = st.selectbox("Loại nhân sự", options=list(emp_type_opts.keys()), format_func=lambda x: emp_type_opts[x], key="create_emp_type")
+        emp_type_opts = {"TEACHER": "Giảng viên cơ hữu", "GUEST": "Giảng viên thỉnh giảng", "STAFF": "Cán bộ quản lý"}
+        create_emp_type = st.selectbox("Loại nhân sự", options=list(emp_type_opts.keys()), format_func=lambda x: emp_type_opts[x], key="create_emp_type")
 
-    create_guest_rank = None
-    create_police_rank_id = None
-    create_coefficient = None
-    create_salary = 0.0
-    if st.session_state.create_emp_type == "GUEST":
-        create_guest_rank = st.selectbox("Cấp bậc Khách mời", options=list(GUEST_RATES.keys()))
-    else:
-        selected_rank_key = st.selectbox(
-            "Cấp bậc hàm",
-            options=list(police_rank_opts.keys()),
-            index=0,
-            key="create_police_rank"
-        )
-        selected_rank = police_rank_opts[selected_rank_key]
-        create_police_rank_id = selected_rank['id']
-        create_coefficient = selected_rank['coefficient']
-        computed_monthly = create_coefficient * base_salary
-        computed_annual = computed_monthly * 12
-        st.markdown(
-            f'<div style="padding: 8px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); '
-            f'font-size: 0.9rem; line-height: 1.6;">'
-            f'<strong>Hệ số:</strong> {create_coefficient} &nbsp;|&nbsp; '
-            f'<strong>Lương tháng:</strong> {computed_monthly:,.0f} đ &nbsp;|&nbsp; '
-            f'<strong>Tổng lương 12T:</strong> {computed_annual:,.0f} đ'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-    with st.form("add_teacher_form"):
-        col1, col2 = st.columns(2)
-        name = col1.text_input("Họ và tên")
-        subject_group = col1.selectbox("Khối môn học", ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"])
-        is_female = col2.selectbox("Giới tính", ["Nam", "Nữ"]) == "Nữ"
-
-        initial_title = col1.selectbox("Chức danh ban đầu", options=titles_list)
-        initial_dept = col2.selectbox("Đơn vị công tác", options=depts_list)
-        initial_role = col2.selectbox("Chức vụ ban đầu", options=roles_list)
-        start_date = col2.date_input("Ngày bắt đầu công tác", value=date.today())
-
-        if st.form_submit_button("Lưu Hồ sơ"):
-            if not name.strip():
-                st.error("Vui lòng nhập họ và tên.")
-            elif initial_title == "(Chưa có dữ liệu)" or initial_dept == "(Chưa có dữ liệu)":
-                st.error("Vui lòng cài đặt Chức danh và Đơn vị trong phần Cài đặt Hệ thống trước.")
+        create_guest_rank = None
+        create_police_rank_id = None
+        create_coefficient = None
+        create_salary = 0.0
+        if st.session_state.create_emp_type == "GUEST":
+            create_guest_rank = st.selectbox("Cấp bậc Khách mời", options=list(GUEST_RATES.keys()))
+        else:
+            selected_rank_key = st.selectbox(
+                "Cấp bậc hàm",
+                options=list(police_rank_opts.keys()),
+                index=0,
+                key="create_police_rank"
+            )
+            selected_rank = police_rank_opts.get(selected_rank_key, {'id': None, 'coefficient': 0.0})
+            create_police_rank_id = selected_rank.get('id')
+            coeff_raw = selected_rank.get('coefficient', 0.0)
+            if not isinstance(coeff_raw, (int, float)):
+                create_coefficient = 0.0
             else:
-                cursor = conn.cursor()
-                is_guest = st.session_state.create_emp_type == "GUEST"
-                cursor.execute("""
-                    INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (name.strip(), subject_group, int(is_female),
-                      st.session_state.create_emp_type,
-                      create_guest_rank if is_guest else None,
-                      create_salary if is_guest else computed_annual,
-                      create_police_rank_id if not is_guest else None,
-                      create_coefficient if not is_guest else None))
-                new_teacher_id = cursor.lastrowid
+                create_coefficient = float(coeff_raw)
+            computed_monthly = create_coefficient * base_salary
+            computed_annual = computed_monthly * 12
+            st.markdown(
+                f'<div style="padding: 8px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); '
+                f'font-size: 0.9rem; line-height: 1.6;">'
+                f'<strong>Hệ số:</strong> {create_coefficient} &nbsp;|&nbsp; '
+                f'<strong>Lương tháng:</strong> {computed_monthly:,.0f} đ &nbsp;|&nbsp; '
+                f'<strong>Tổng lương 12T:</strong> {computed_annual:,.0f} đ'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
-                cursor.execute("""
-                    INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
-                    VALUES (?, 'TITLE', ?, NULL, ?, NULL)
-                """, (new_teacher_id, initial_title, start_date.isoformat()))
+        with st.form("add_teacher_form"):
+            col1, col2 = st.columns(2)
+            name = col1.text_input("Họ và tên")
+            subject_group = col1.selectbox("Khối môn học", ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"])
+            is_female = col2.selectbox("Giới tính", ["Nam", "Nữ"]) == "Nữ"
 
-                cursor.execute("""
-                    INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
-                    VALUES (?, 'DEPARTMENT', ?, NULL, ?, NULL)
-                """, (new_teacher_id, initial_dept, start_date.isoformat()))
+            initial_title = col1.selectbox("Chức danh ban đầu", options=titles_list)
+            initial_dept = col2.selectbox("Đơn vị công tác", options=depts_list)
+            initial_role = col2.selectbox("Chức vụ ban đầu", options=roles_list)
+            start_date = col2.date_input("Ngày bắt đầu công tác", value=date.today())
 
-                if initial_role != "Không có":
-                    role_id = roles_dict[initial_role]
-                    cursor.execute("""
-                        INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
-                        VALUES (?, 'REDUCTION', NULL, ?, ?, NULL)
-                    """, (new_teacher_id, role_id, start_date.isoformat()))
+            if st.form_submit_button("Lưu Hồ sơ"):
+                if not name.strip():
+                    st.error("Vui lòng nhập họ và tên.")
+                elif initial_title == "(Chưa có dữ liệu)" or initial_dept == "(Chưa có dữ liệu)":
+                    st.error("Vui lòng cài đặt Chức danh và Đơn vị trong phần Cài đặt Hệ thống trước.")
+                else:
+                    cursor = conn.cursor()
+                    is_guest = st.session_state.create_emp_type == "GUEST"
+                    if is_admin:
+                        cursor.execute("""
+                            INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (name.strip(), subject_group, int(is_female),
+                              st.session_state.create_emp_type,
+                              create_guest_rank if is_guest else None,
+                              create_salary if is_guest else computed_annual,
+                              create_police_rank_id if not is_guest else None,
+                              create_coefficient if not is_guest else None))
+                        new_teacher_id = cursor.lastrowid
 
-                conn.commit()
-                st.success("Đã thêm hồ sơ và khởi tạo lịch sử!")
-                st.rerun()
+                        cursor.execute("""
+                            INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
+                            VALUES (?, 'TITLE', ?, NULL, ?, NULL)
+                        """, (new_teacher_id, initial_title, start_date.isoformat()))
+
+                        cursor.execute("""
+                            INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
+                            VALUES (?, 'DEPARTMENT', ?, NULL, ?, NULL)
+                        """, (new_teacher_id, initial_dept, start_date.isoformat()))
+
+                        if initial_role != "Không có":
+                            role_id = roles_dict[initial_role]
+                            cursor.execute("""
+                                INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
+                                VALUES (?, 'REDUCTION', NULL, ?, ?, NULL)
+                            """, (new_teacher_id, role_id, start_date.isoformat()))
+
+                        conn.commit()
+                        st.success("Đã thêm hồ sơ và khởi tạo lịch sử!")
+                        st.rerun()
+                    else:
+                        # CRUD as request for Head Dept
+                        cursor.execute("""
+                            INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                            VALUES ('teachers', ?, 'pending', ?, ?, 1)
+                        """, (initial_dept, f"User {user['username']}", "Thêm mới cán bộ", 1))
+                        batch_id = cursor.lastrowid
+                        
+                        cursor.execute("""
+                            INSERT INTO staging_teachers (
+                                batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                teacher_name, subject_group, is_female, employment_type,
+                                guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            batch_id, 1, 'NEW', "Thêm cán bộ mới trực tiếp từ giao diện", "",
+                            name.strip(), subject_group, int(is_female), st.session_state.create_emp_type,
+                            create_guest_rank if is_guest else None,
+                            create_salary if is_guest else computed_annual,
+                            create_coefficient if not is_guest else None,
+                            initial_title, initial_dept,
+                            initial_role if initial_role != "Không có" else None,
+                            None
+                        ))
+                        conn.commit()
+                        st.success(f"🎉 Đã gửi yêu cầu thêm cán bộ (Lô #{batch_id}) đến Quản trị viên phê duyệt!")
+                        st.rerun()
 
 st.markdown('<hr style="border-color: var(--md-outline-variant); margin: 16px 0;">', unsafe_allow_html=True)
 
@@ -123,6 +320,9 @@ df_teachers = pd.read_sql_query("""
     LEFT JOIN police_ranks pr ON t.police_rank_id = pr.id
     ORDER BY t.name
 """, conn)
+
+if scoped_ids is not None:
+    df_teachers = df_teachers[df_teachers['id'].isin(scoped_ids)]
 
 if df_teachers.empty:
     render_warning_state("Chưa có hồ sơ nhà giáo nào. Vui lòng thêm hồ sơ phía trên.")
@@ -148,9 +348,13 @@ else:
         df_current = pd.read_sql_query(current_status_query, conn, params=[selected_t_id])
         curr_titles = df_current[df_current['record_type'] == 'TITLE']['value_text'].tolist()
         curr_depts = df_current[df_current['record_type'] == 'DEPARTMENT']['value_text'].tolist()
+        curr_roles = df_current[df_current['record_type'] == 'ROLE']['value_text'].tolist()
+        if not curr_roles:
+            curr_roles = df_current[df_current['rule_name'].notna()]['rule_name'].tolist()
         
         c_title = curr_titles[0] if curr_titles else 'Chưa có chức danh'
         c_dept = curr_depts[0] if curr_depts else 'Chưa có đơn vị'
+        c_role = curr_roles[0] if curr_roles else None
         gender = "Nữ" if t_data['is_female'] else "Nam"
         
         emp_type_labels = {"TEACHER": "Giảng viên cơ hữu", "GUEST": "Giảng viên thỉnh giảng", "STAFF": "Cán bộ quản lý"}
@@ -213,230 +417,301 @@ font-size: 24px; font-weight: bold;
 </div>
 </div>""", unsafe_allow_html=True)
         
-        with st.expander("✏️ Chỉnh sửa Thông tin cơ bản", expanded=False):
-            edit_emp_key = f"edit_emp_type_{selected_t_id}"
-            if edit_emp_key not in st.session_state:
-                st.session_state[edit_emp_key] = t_data['employment_type']
-            
-            emp_types = ["TEACHER", "GUEST", "STAFF"]
-            emp_idx = emp_types.index(t_data['employment_type']) if t_data['employment_type'] in emp_types else 0
-            new_emp = st.selectbox(
-                "Loại nhân sự", emp_types, index=emp_idx,
-                format_func=lambda x: {"TEACHER": "Giảng viên cơ hữu", "GUEST": "Giảng viên thỉnh giảng", "STAFF": "Cán bộ quản lý"}[x],
-                key=edit_emp_key
-            )
-            
-            new_guest_rank = t_data['guest_rank']
-            new_police_rank_id = t_data['police_rank_id'] if pd.notna(t_data['police_rank_id']) else None
-            new_coefficient = t_data['salary_coefficient'] if pd.notna(t_data['salary_coefficient']) else None
-            new_salary = t_data['total_12m_salary'] if pd.notna(t_data['total_12m_salary']) else 0.0
-            
-            if st.session_state[edit_emp_key] == "GUEST":
-                ranks = list(GUEST_RATES.keys())
-                rank_idx = ranks.index(new_guest_rank) if new_guest_rank in ranks else 0
-                new_guest_rank = st.selectbox("Cấp bậc Khách mời", ranks, index=rank_idx)
-            else:
-                rank_keys = list(police_rank_opts.keys())
-                current_rank_key = None
-                for k, r in police_rank_opts.items():
-                    if r['id'] == new_police_rank_id:
-                        current_rank_key = k
-                        break
-                if current_rank_key is None and new_coefficient:
-                    current_rank_key = f"CMKT — (HS {new_coefficient})"
-                    rank_keys = [current_rank_key] + rank_keys
-                edit_rank_idx = rank_keys.index(current_rank_key) if current_rank_key in rank_keys else 0
-                selected_edit_rank_key = st.selectbox(
-                    "Cấp bậc hàm", options=rank_keys, index=edit_rank_idx,
-                    key=f"edit_police_rank_{selected_t_id}"
-                )
-                selected_edit_rank = police_rank_opts.get(selected_edit_rank_key)
-                if selected_edit_rank:
-                    new_police_rank_id = selected_edit_rank['id']
-                    new_coefficient = selected_edit_rank['coefficient']
-                edit_monthly = (new_coefficient or 0) * base_salary
-                edit_annual = edit_monthly * 12
-                st.markdown(
-                    f'<div style="padding: 8px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); '
-                    f'font-size: 0.9rem; line-height: 1.6;">'
-                    f'<strong>Hệ số:</strong> {new_coefficient or "N/A"} &nbsp;|&nbsp; '
-                    f'<strong>Lương tháng:</strong> {edit_monthly:,.0f} đ &nbsp;|&nbsp; '
-                    f'<strong>Tổng lương 12T:</strong> {edit_annual:,.0f} đ'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-            
-            with st.form("edit_basic_info_form"):
-                new_name = st.text_input("Họ và tên", value=t_data['name'])
-                col_b1, col_b2 = st.columns(2)
-                new_subj = col_b1.selectbox("Khối môn học", ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"], index=0 if t_data['subject_group'] == "Tự nhiên/Kỹ thuật" else 1)
-                new_fem = col_b2.selectbox("Giới tính", ["Nam", "Nữ"], index=1 if t_data['is_female'] else 0)
+        if user is not None:
+            with st.expander("✏️ Chỉnh sửa Thông tin cơ bản", expanded=False):
+                edit_emp_key = f"edit_emp_type_{selected_t_id}"
+                if edit_emp_key not in st.session_state:
+                    st.session_state[edit_emp_key] = t_data['employment_type']
                 
-                if st.form_submit_button("Lưu thay đổi"):
-                    cursor = conn.cursor()
-                    is_edit_guest = st.session_state[edit_emp_key] == "GUEST"
-                    cursor.execute("""
-                        UPDATE teachers 
-                        SET name = ?, subject_group = ?, is_female = ?, employment_type = ?,
-                            guest_rank = ?, total_12m_salary = ?, police_rank_id = ?, salary_coefficient = ?
-                        WHERE id = ?
-                    """, (new_name, new_subj, 1 if new_fem == "Nữ" else 0,
-                          st.session_state[edit_emp_key],
-                          new_guest_rank if is_edit_guest else None,
-                          new_salary if is_edit_guest else edit_annual,
-                          new_police_rank_id if not is_edit_guest else None,
-                          new_coefficient if not is_edit_guest else None,
-                          selected_t_id))
-                    conn.commit()
-                    st.success("Đã cập nhật thông tin cơ bản!")
-                    st.rerun()
+                emp_types = ["TEACHER", "GUEST", "STAFF"]
+                emp_idx = emp_types.index(t_data['employment_type']) if t_data['employment_type'] in emp_types else 0
+                new_emp = st.selectbox(
+                    "Loại nhân sự", emp_types, index=emp_idx,
+                    format_func=lambda x: {"TEACHER": "Giảng viên cơ hữu", "GUEST": "Giảng viên thỉnh giảng", "STAFF": "Cán bộ quản lý"}[x],
+                    key=edit_emp_key
+                )
+                
+                new_guest_rank = t_data['guest_rank']
+                new_police_rank_id = t_data['police_rank_id'] if pd.notna(t_data['police_rank_id']) else None
+                new_coefficient = t_data['salary_coefficient'] if pd.notna(t_data['salary_coefficient']) else None
+                new_salary = t_data['total_12m_salary'] if pd.notna(t_data['total_12m_salary']) else 0.0
+                
+                if st.session_state[edit_emp_key] == "GUEST":
+                    ranks = list(GUEST_RATES.keys())
+                    rank_idx = ranks.index(new_guest_rank) if new_guest_rank in ranks else 0
+                    new_guest_rank = st.selectbox("Cấp bậc Khách mời", ranks, index=rank_idx)
+                else:
+                    rank_keys = list(police_rank_opts.keys())
+                    current_rank_key = None
+                    for k, r in police_rank_opts.items():
+                        if r['id'] == new_police_rank_id:
+                            current_rank_key = k
+                            break
+                    if current_rank_key is None and new_coefficient:
+                        current_rank_key = f"CMKT — (HS {new_coefficient})"
+                        rank_keys = [current_rank_key] + rank_keys
+                    edit_rank_idx = rank_keys.index(current_rank_key) if current_rank_key in rank_keys else 0
+                    selected_edit_rank_key = st.selectbox(
+                        "Cấp bậc hàm", options=rank_keys, index=edit_rank_idx,
+                        key=f"edit_police_rank_{selected_t_id}"
+                    )
+                    selected_edit_rank = police_rank_opts.get(selected_edit_rank_key)
+                    if selected_edit_rank:
+                        new_police_rank_id = selected_edit_rank['id']
+                        coeff_raw = selected_edit_rank.get('coefficient', 0.0)
+                        if not isinstance(coeff_raw, (int, float)):
+                            new_coefficient = 0.0
+                        else:
+                            new_coefficient = float(coeff_raw)
+                    edit_monthly = (new_coefficient or 0.0) * base_salary
+                    edit_annual = edit_monthly * 12
+                    st.markdown(
+                        f'<div style="padding: 8px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); '
+                        f'font-size: 0.9rem; line-height: 1.6;">'
+                        f'<strong>Hệ số:</strong> {new_coefficient or "N/A"} &nbsp;|&nbsp; '
+                        f'<strong>Lương tháng:</strong> {edit_monthly:,.0f} đ &nbsp;|&nbsp; '
+                        f'<strong>Tổng lương 12T:</strong> {edit_annual:,.0f} đ'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                
+                with st.form("edit_basic_info_form"):
+                    new_name = st.text_input("Họ và tên", value=t_data['name'])
+                    col_b1, col_b2 = st.columns(2)
+                    new_subj = col_b1.selectbox("Khối môn học", ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"], index=0 if t_data['subject_group'] == "Tự nhiên/Kỹ thuật" else 1)
+                    new_fem = col_b2.selectbox("Giới tính", ["Nam", "Nữ"], index=1 if t_data['is_female'] else 0)
+                    
+                    if st.form_submit_button("Lưu thay đổi"):
+                        cursor = conn.cursor()
+                        is_edit_guest = st.session_state[edit_emp_key] == "GUEST"
+                        if is_admin:
+                            cursor.execute("""
+                                UPDATE teachers 
+                                SET name = ?, subject_group = ?, is_female = ?, employment_type = ?,
+                                    guest_rank = ?, total_12m_salary = ?, police_rank_id = ?, salary_coefficient = ?
+                                WHERE id = ?
+                            """, (new_name, new_subj, 1 if new_fem == "Nữ" else 0,
+                                  st.session_state[edit_emp_key],
+                                  new_guest_rank if is_edit_guest else None,
+                                  new_salary if is_edit_guest else edit_annual,
+                                  new_police_rank_id if not is_edit_guest else None,
+                                  new_coefficient if not is_edit_guest else None,
+                                  selected_t_id))
+                            conn.commit()
+                            st.success("Đã cập nhật thông tin cơ bản!")
+                            st.rerun()
+                        else:
+                            # CRUD as request for Head Dept
+                            cursor.execute("""
+                                INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                                VALUES ('teachers', ?, 'pending', ?, ?, 1)
+                            """, (c_dept, f"User {user['username']}", f"Cập nhật thông tin {t_data['name']}", 1))
+                            batch_id = cursor.lastrowid
+                            
+                            cursor.execute("""
+                                INSERT INTO staging_teachers (
+                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                    teacher_name, subject_group, is_female, employment_type,
+                                    guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                batch_id, 1, 'UPDATE', f"Chỉnh sửa thông tin cơ bản: {new_name}", "",
+                                new_name, new_subj, 1 if new_fem == "Nữ" else 0, st.session_state[edit_emp_key],
+                                new_guest_rank if is_edit_guest else None,
+                                new_salary if is_edit_guest else edit_annual,
+                                new_coefficient if not is_edit_guest else None,
+                                c_title, c_dept, c_role,
+                                selected_t_id
+                            ))
+                            conn.commit()
+                            st.success(f"🎉 Đã gửi yêu cầu cập nhật thông tin cán bộ (Lô #{batch_id}) đến Quản trị viên phê duyệt!")
+                            st.rerun()
 
     with col_right:
-        # --- DYNAMIC ACTION FORM ---
-        st.subheader("Cập nhật Quá trình Công tác")
-        action_type = st.radio(
-            "Loại điều chỉnh",
-            ["Chức danh", "Đơn vị", "Chức vụ lãnh đạo", "Sự kiện miễn giảm", "Cấp bậc hàm"],
-            horizontal=True, label_visibility="collapsed"
-        )
-        
-        # Configure variables based on radio selection
-        form_title = ""
-        sql_opts = ""
-        field_type = ""
-        
-        if action_type == "Chức danh":
-            form_title = "Cập nhật Chức danh mới"
-            sql_opts = "SELECT name FROM titles"
-            field_type = "TITLE"
-        elif action_type == "Đơn vị":
-            form_title = "Chuyển Đơn vị công tác mới"
-            sql_opts = "SELECT name FROM departments"
-            field_type = "DEPARTMENT"
-        elif action_type == "Chức vụ lãnh đạo":
-            form_title = "Thêm Chức vụ Lãnh đạo mới"
-            sql_opts = "SELECT id, name FROM reduction_rules WHERE rule_type = 'ROLE'"
-            field_type = "ROLE"
-        elif action_type == "Cấp bậc hàm":
-            form_title = "Cập nhật Cấp bậc hàm (Ngạch lương)"
-            field_type = "RANK"
-        else:
-            form_title = "Thêm Sự kiện Miễn giảm (Thai sản, Học tập, ...)"
-            sql_opts = "SELECT id, name FROM reduction_rules WHERE rule_type = 'SPECIAL'"
-            field_type = "SPECIAL"
+        if user is not None:
+            # --- DYNAMIC ACTION FORM ---
+            st.subheader("Cập nhật Quá trình Công tác")
+            action_type = st.radio(
+                "Loại điều chỉnh",
+                ["Chức danh", "Đơn vị", "Chức vụ lãnh đạo", "Sự kiện miễn giảm", "Cấp bậc hàm"],
+                horizontal=True, label_visibility="collapsed"
+            )
+            
+            # Configure variables based on radio selection
+            form_title = ""
+            sql_opts = ""
+            field_type = ""
+            
+            if action_type == "Chức danh":
+                form_title = "Cập nhật Chức danh mới"
+                sql_opts = "SELECT name FROM titles"
+                field_type = "TITLE"
+            elif action_type == "Đơn vị":
+                form_title = "Chuyển Đơn vị công tác mới"
+                sql_opts = "SELECT name FROM departments"
+                field_type = "DEPARTMENT"
+            elif action_type == "Chức vụ lãnh đạo":
+                form_title = "Thêm Chức vụ Lãnh đạo mới"
+                sql_opts = "SELECT id, name FROM reduction_rules WHERE rule_type = 'ROLE'"
+                field_type = "ROLE"
+            elif action_type == "Cấp bậc hàm":
+                form_title = "Cập nhật Cấp bậc hàm (Ngạch lương)"
+                field_type = "RANK"
+            else:
+                form_title = "Thêm Sự kiện Miễn giảm (Thai sản, Học tập, ...)"
+                sql_opts = "SELECT id, name FROM reduction_rules WHERE rule_type = 'SPECIAL' AND name NOT LIKE 'Trợ giảng%'"
+                field_type = "SPECIAL"
 
-        if field_type == "RANK":
-            police_ranks = get_police_ranks()
-            rank_opts = {f"{r['rank_group']} — {r['rank_name']} (HS {r['coefficient']})": r for r in police_ranks}
-            rank_keys = list(rank_opts.keys())
-            base_salary_rank = get_base_salary()
-            with st.form("dynamic_form_RANK"):
-                st.markdown(f"**{form_title}**")
-                selected_rank_key = st.selectbox("Chọn Cấp bậc hàm mới", options=rank_keys)
-                selected_rank = rank_opts[selected_rank_key]
-                coeff = selected_rank['coefficient']
-                monthly = coeff * base_salary_rank
-                annual = monthly * 12
-                st.markdown(
-                    f'<div style="padding: 8px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); '
-                    f'font-size: 0.9rem; line-height: 1.6;">'
-                    f'Hệ số: <strong>{coeff}</strong> | '
-                    f'Lương tháng: <strong>{monthly:,.0f} đ</strong> | '
-                    f'Lương 12T: <strong>{annual:,.0f} đ</strong>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-                c1, c2 = st.columns(2)
-                start_date_inner = c1.date_input("Ngày bổ nhiệm")
-                rank_note = c2.text_input("Ghi chú (nếu có)", placeholder="Ví dụ: Xét nâng bậc lương")
-                if st.form_submit_button("Lưu Cấp bậc hàm"):
-                    if start_date_inner:
-                        cursor = conn.cursor()
-                        cursor.execute("""
-                            UPDATE teacher_rank_history
-                            SET end_date = date(?, '-1 day')
-                            WHERE teacher_id = ? AND end_date IS NULL
-                        """, (start_date_inner.isoformat(), selected_t_id))
-                        cursor.execute("""
-                            INSERT INTO teacher_rank_history (teacher_id, police_rank_id, salary_coefficient, start_date, note)
-                            VALUES (?, ?, ?, ?, ?)
-                        """, (selected_t_id, selected_rank['id'], coeff, start_date_inner.isoformat(), rank_note))
-                        cursor.execute("""
-                            UPDATE teachers SET police_rank_id = ?, salary_coefficient = ? WHERE id = ?
-                        """, (selected_rank['id'], coeff, selected_t_id))
-                        conn.commit()
-                        st.success("Đã cập nhật Cấp bậc hàm! Lương sẽ được tính theo tỷ lệ thời gian.")
-                        st.rerun()
-        else:
-            df_opts = pd.read_sql_query(sql_opts, conn)
-            options = df_opts['name'].tolist() if not df_opts.empty else ["(Chưa có dữ liệu)"]
-            opts_dict = {}
-
-            if field_type in ['ROLE', 'SPECIAL']:
-                if field_type == 'ROLE':
-                    unit_type = st.radio("Phạm vi công tác", ["Tại đơn vị giảng dạy", "Phòng/Trung tâm"], horizontal=True)
-                    school_roles = ["Hiệu trưởng", "Phó Hiệu trưởng", "Phó Bí thư Đảng ủy Trường"]
-                    if unit_type == "Tại đơn vị giảng dạy":
-                        df_opts = df_opts[df_opts['name'].str.contains("Tại đơn vị giảng dạy") | df_opts['name'].isin(["Trưởng khoa", "Phó Trưởng khoa"] + school_roles)]
+            if field_type == "RANK":
+                if not is_admin:
+                    st.warning("⚠️ Chỉ Quản trị viên hệ thống mới có quyền thay đổi Cấp bậc hàm (Ngạch lương).")
+                else:
+                    police_ranks = get_police_ranks()
+                    if not police_ranks:
+                        rank_opts = {"(Chưa có cấp bậc hàm)": {'id': None, 'coefficient': 0.0, 'rank_name': '', 'rank_group': ''}}
                     else:
-                        df_opts = df_opts[df_opts['name'].str.contains("Công tác quản lý đảng") | df_opts['name'].isin(["Trưởng phòng", "Phó Trưởng phòng", "Công tác tại phòng, trung tâm không giữ chức vụ lãnh đạo"] + school_roles)]
-                opts_dict = {f"{row['name']}": row['id'] for _, row in df_opts.iterrows()}
-                options = list(opts_dict.keys()) if opts_dict else ["(Chưa có dữ liệu)"]
-
-            with st.form(f"dynamic_form_{field_type}"):
-                st.markdown(f"**{form_title}**")
-                selected_val = st.selectbox("Chọn giá trị mới", options=options)
-                
-                c1, c2 = st.columns(2)
-                start_date_inner = c1.date_input("Ngày bắt đầu hiệu lực")
-                
-                is_ongoing = True
-                weeks_override = None
-                if field_type in ['ROLE', 'SPECIAL']:
-                    is_ongoing = c2.checkbox("Đang diễn ra", value=True)
-                    end_date_inner = c2.date_input("Ngày kết thúc", disabled=is_ongoing)
-                    
-                    with st.expander("Ghi đè số tuần (Nâng cao)"):
-                        use_override = st.checkbox("Ghi đè số tuần tự động")
-                        if use_override:
-                            weeks_override = st.number_input("Số tuần thực tế", min_value=0.0, max_value=52.0, value=44.0, step=0.5)
-                            
-                if st.form_submit_button("Lưu Lịch sử"):
-                    if not options or options[0] == "(Chưa có dữ liệu)":
-                        st.error("Vui lòng cài đặt danh mục trước.")
-                    else:
-                        active_rec = df_current[df_current['record_type'] == field_type] if field_type in ['TITLE', 'DEPARTMENT'] else df_current[df_current['rule_type'] == field_type]
-
-                        if not active_rec.empty and active_rec.iloc[0]['start_date']:
-                            try:
-                                current_start = datetime.strptime(active_rec.iloc[0]['start_date'], '%Y-%m-%d').date()
-                                if start_date_inner <= current_start:
-                                    st.error(f"Ngày bắt đầu mới phải sau ngày bắt đầu của bản ghi hiện tại ({current_start})!")
-                                    st.stop()
-                            except Exception:
-                                pass
-
-                        cursor = conn.cursor()
-                        if field_type in ['TITLE', 'DEPARTMENT']:
-                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = ? AND end_date IS NULL", (start_date_inner.isoformat(), selected_t_id, field_type))
-                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, ?, ?, ?)", (selected_t_id, field_type, selected_val, start_date_inner.isoformat()))
-                        else:
-                            rule_id = opts_dict[selected_val]
-                            if field_type == 'ROLE':
+                        rank_opts = {f"{r['rank_group']} — {r['rank_name']} (HS {r['coefficient']})": r for r in police_ranks}
+                    rank_keys = list(rank_opts.keys())
+                    base_salary_rank = get_base_salary()
+                    with st.form("dynamic_form_RANK"):
+                        st.markdown(f"**{form_title}**")
+                        selected_rank_key = st.selectbox("Chọn Cấp bậc hàm mới", options=rank_keys)
+                        selected_rank = rank_opts.get(selected_rank_key, {'id': None, 'coefficient': 0.0})
+                        coeff = selected_rank.get('coefficient', 0.0)
+                        monthly = (coeff or 0.0) * base_salary_rank
+                        annual = monthly * 12
+                        st.markdown(
+                            f'<div style="padding: 8px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); '
+                            f'font-size: 0.9rem; line-height: 1.6;">'
+                            f'Hệ số: <strong>{coeff}</strong> | '
+                            f'Lương tháng: <strong>{monthly:,.0f} đ</strong> | '
+                            f'Lương 12T: <strong>{annual:,.0f} đ</strong>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                        c1, c2 = st.columns(2)
+                        start_date_inner = c1.date_input("Ngày bổ nhiệm")
+                        rank_note = c2.text_input("Ghi chú (nếu có)", placeholder="Ví dụ: Xét nâng bậc lương")
+                        if st.form_submit_button("Lưu Cấp bậc hàm"):
+                            if start_date_inner:
+                                cursor = conn.cursor()
                                 cursor.execute("""
-                                    UPDATE teacher_role_history
+                                    UPDATE teacher_rank_history
                                     SET end_date = date(?, '-1 day')
-                                    WHERE teacher_id = ?
-                                    AND end_date IS NULL
-                                    AND reduction_rule_id IN (SELECT id FROM reduction_rules WHERE rule_type = 'ROLE')
+                                    WHERE teacher_id = ? AND end_date IS NULL
                                 """, (start_date_inner.isoformat(), selected_t_id))
+                                cursor.execute("""
+                                    INSERT INTO teacher_rank_history (teacher_id, police_rank_id, salary_coefficient, start_date, note)
+                                    VALUES (?, ?, ?, ?, ?)
+                                """, (selected_t_id, selected_rank['id'], coeff, start_date_inner.isoformat(), rank_note))
+                                cursor.execute("""
+                                    UPDATE teachers SET police_rank_id = ?, salary_coefficient = ? WHERE id = ?
+                                """, (selected_rank['id'], coeff, selected_t_id))
+                                conn.commit()
+                                st.success("Đã cập nhật Cấp bậc hàm! Lương sẽ được tính theo tỷ lệ thời gian.")
+                                st.rerun()
+            else:
+                if field_type == "SPECIAL" and not is_admin:
+                    st.warning("⚠️ Chỉ Quản trị viên hệ thống mới có quyền thêm Sự kiện miễn giảm.")
+                else:
+                    df_opts = pd.read_sql_query(sql_opts, conn)
+                    options = df_opts['name'].tolist() if not df_opts.empty else ["(Chưa có dữ liệu)"]
+                    opts_dict = {}
 
-                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, reduction_rule_id, start_date, end_date, actual_weeks_override) VALUES (?, 'REDUCTION', ?, ?, ?, ?)", (selected_t_id, rule_id, start_date_inner.isoformat(), None if is_ongoing else end_date_inner.isoformat(), weeks_override))
-                        conn.commit()
-                        st.success("Đã cập nhật lịch sử!")
-                        st.rerun()
+                    if field_type in ['ROLE', 'SPECIAL']:
+                        if field_type == 'ROLE':
+                            unit_type = st.radio("Phạm vi công tác", ["Tại đơn vị giảng dạy", "Phòng/Trung tâm"], horizontal=True)
+                            school_roles = ["Hiệu trưởng", "Phó Hiệu trưởng", "Phó Bí thư Đảng ủy Trường"]
+                            if unit_type == "Tại đơn vị giảng dạy":
+                                df_opts = df_opts[df_opts['name'].str.contains("Tại đơn vị giảng dạy") | df_opts['name'].isin(["Trưởng khoa", "Phó Trưởng khoa"] + school_roles)]
+                            else:
+                                df_opts = df_opts[df_opts['name'].str.contains("Công tác quản lý đảng") | df_opts['name'].isin(["Trưởng phòng", "Phó Trưởng phòng", "Công tác tại phòng, trung tâm không giữ chức vụ lãnh đạo"] + school_roles)]
+                        opts_dict = {f"{row['name']}": row['id'] for _, row in df_opts.iterrows()}
+                        options = list(opts_dict.keys()) if opts_dict else ["(Chưa có dữ liệu)"]
 
-        st.markdown('<hr style="border-color: var(--md-outline-variant); margin: 16px 0;">', unsafe_allow_html=True)
+                    with st.form(f"dynamic_form_{field_type}"):
+                        st.markdown(f"**{form_title}**")
+                        selected_val = st.selectbox("Chọn giá trị mới", options=options)
+                        
+                        c1, c2 = st.columns(2)
+                        start_date_inner = c1.date_input("Ngày bắt đầu hiệu lực")
+                        
+                        is_ongoing = True
+                        weeks_override = None
+                        if field_type in ['ROLE', 'SPECIAL']:
+                            is_ongoing = c2.checkbox("Đang diễn ra", value=True)
+                            end_date_inner = c2.date_input("Ngày kết thúc", disabled=is_ongoing)
+                            
+                            with st.expander("Ghi đè số tuần (Nâng cao)"):
+                                use_override = st.checkbox("Ghi đè số tuần tự động")
+                                if use_override:
+                                    weeks_override = st.number_input("Số tuần thực tế", min_value=0.0, max_value=52.0, value=44.0, step=0.5)
+                                    
+                        if st.form_submit_button("Lưu Lịch sử"):
+                            if not options or options[0] == "(Chưa có dữ liệu)":
+                                st.error("Vui lòng cài đặt danh mục trước.")
+                            else:
+                                active_rec = df_current[df_current['record_type'] == field_type] if field_type in ['TITLE', 'DEPARTMENT'] else df_current[df_current['rule_type'] == field_type]
+
+                                if not active_rec.empty and active_rec.iloc[0]['start_date']:
+                                    try:
+                                        current_start = datetime.strptime(active_rec.iloc[0]['start_date'], '%Y-%m-%d').date()
+                                        if start_date_inner <= current_start:
+                                            st.error(f"Ngày bắt đầu mới phải sau ngày bắt đầu của bản ghi hiện tại ({current_start})!")
+                                            st.stop()
+                                    except Exception:
+                                        pass
+
+                                cursor = conn.cursor()
+                                if is_admin:
+                                    if field_type in ['TITLE', 'DEPARTMENT']:
+                                        cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = ? AND end_date IS NULL", (start_date_inner.isoformat(), selected_t_id, field_type))
+                                        cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, ?, ?, ?)", (selected_t_id, field_type, selected_val, start_date_inner.isoformat()))
+                                    else:
+                                        rule_id = opts_dict[selected_val]
+                                        if field_type == 'ROLE':
+                                            cursor.execute("""
+                                                UPDATE teacher_role_history
+                                                SET end_date = date(?, '-1 day')
+                                                WHERE teacher_id = ?
+                                                AND end_date IS NULL
+                                                AND reduction_rule_id IN (SELECT id FROM reduction_rules WHERE rule_type = 'ROLE')
+                                            """, (start_date_inner.isoformat(), selected_t_id))
+
+                                        cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, reduction_rule_id, start_date, end_date, actual_weeks_override) VALUES (?, 'REDUCTION', ?, ?, ?, ?)", (selected_t_id, rule_id, start_date_inner.isoformat(), None if is_ongoing else end_date_inner.isoformat(), weeks_override))
+                                    conn.commit()
+                                    st.success("Đã cập nhật lịch sử!")
+                                    st.rerun()
+                                else:
+                                    # Submit UPDATE request for head_dept
+                                    target_title = selected_val if field_type == "TITLE" else c_title
+                                    target_dept = selected_val if field_type == "DEPARTMENT" else c_dept
+                                    target_role = selected_val if field_type == "ROLE" else c_role
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                                        VALUES ('teachers', ?, 'pending', ?, ?, 1)
+                                    """, (c_dept, f"User {user['username']}", f"Yêu cầu điều chỉnh {action_type} - {t_data['name']}", 1))
+                                    batch_id = cursor.lastrowid
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO staging_teachers (
+                                            batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                            teacher_name, subject_group, is_female, employment_type,
+                                            guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (
+                                        batch_id, 1, 'UPDATE', f"Yêu cầu điều chỉnh {action_type} thành: {selected_val}", "",
+                                        t_data['name'], t_data['subject_group'], int(t_data['is_female']), t_data['employment_type'],
+                                        t_data['guest_rank'], t_data['total_12m_salary'], t_data['salary_coefficient'],
+                                        target_title, target_dept, target_role,
+                                        selected_t_id
+                                    ))
+                                    conn.commit()
+                                    st.success(f"🎉 Đã gửi yêu cầu điều chỉnh {action_type} (Lô #{batch_id}) đến Quản trị viên phê duyệt!")
+                                    st.rerun()
+
+            st.markdown('<hr style="border-color: var(--md-outline-variant); margin: 16px 0;">', unsafe_allow_html=True)
         
         # --- HISTORY TIMELINE ---
         st.subheader("Toàn bộ quá trình công tác")
@@ -473,6 +748,45 @@ font-size: 24px; font-weight: bold;
         rank_hist_df = pd.read_sql_query(rank_query, conn, params=[selected_t_id])
 
         combined = pd.concat([hist_df, rank_hist_df], ignore_index=True)
+
+        # Virtualize Trợ giảng default reductions in the timeline
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT start_date FROM teacher_role_history
+            WHERE teacher_id = ? AND record_type = 'TITLE' AND value_text = 'Trợ giảng'
+        """, (selected_t_id,))
+        tro_giang_rows = cursor.fetchall()
+
+        virtual_rows = []
+        for (start_str,) in tro_giang_rows:
+            if start_str:
+                app_date = pd.to_datetime(start_str)
+                t12_start = app_date
+                t12_end = app_date + pd.DateOffset(months=12) - pd.Timedelta(days=1)
+                t24_start = app_date + pd.DateOffset(months=12)
+                t24_end = app_date + pd.DateOffset(months=24) - pd.Timedelta(days=1)
+
+                virtual_rows.append({
+                    "id": -1,
+                    "Loại": "Sự kiện",
+                    "Chi tiết": "Trợ giảng (12 tháng đầu) — Mặc định giảm 50% định mức",
+                    "Từ ngày": t12_start.strftime('%Y-%m-%d'),
+                    "Đến ngày": t12_end.strftime('%Y-%m-%d'),
+                    "Số tuần thực tế": "Tự động"
+                })
+                virtual_rows.append({
+                    "id": -2,
+                    "Loại": "Sự kiện",
+                    "Chi tiết": "Trợ giảng (tháng 13-24) — Mặc định giảm 20% định mức",
+                    "Từ ngày": t24_start.strftime('%Y-%m-%d'),
+                    "Đến ngày": t24_end.strftime('%Y-%m-%d'),
+                    "Số tuần thực tế": "Tự động"
+                })
+
+        if virtual_rows:
+            v_df = pd.DataFrame(virtual_rows)
+            combined = pd.concat([combined, v_df], ignore_index=True)
+
         if not combined.empty:
             combined = combined.sort_values("Từ ngày", ascending=False)
             st.dataframe(combined, width='stretch', hide_index=True, use_container_width=True,
@@ -486,36 +800,65 @@ font-size: 24px; font-weight: bold;
             st.info("Chưa có dữ liệu lịch sử.")
 
         # --- DANGER ZONE ---
-        with st.expander("⚠️ Xóa dữ liệu lỗi / Xóa Hồ sơ"):
-            # Delete History Row
-            st.markdown("**Xóa dòng lịch sử bị lỗi**")
-            df_all_hist = pd.read_sql_query("""
-                SELECT h.id, h.record_type, COALESCE(h.value_text, r.name) as detail
-                FROM teacher_role_history h
-                LEFT JOIN reduction_rules r ON h.reduction_rule_id = r.id
-                WHERE h.teacher_id = ?
-            """, conn, params=[selected_t_id])
+        if user is not None:
+            with st.expander("⚠️ Xóa dữ liệu lỗi / Xóa Hồ sơ"):
+                # Delete History Row
+                st.markdown("**Xóa dòng lịch sử bị lỗi**")
+                if not is_admin:
+                    st.warning("⚠️ Chỉ Quản trị viên hệ thống mới có quyền xóa dòng lịch sử.")
+                else:
+                    df_all_hist = pd.read_sql_query("""
+                        SELECT h.id, h.record_type, COALESCE(h.value_text, r.name) as detail
+                        FROM teacher_role_history h
+                        LEFT JOIN reduction_rules r ON h.reduction_rule_id = r.id
+                        WHERE h.teacher_id = ?
+                    """, conn, params=[selected_t_id])
 
-            if not df_all_hist.empty:
-                del_opts = {f"[{row['record_type']}] {row['detail']}": row['id'] for _, row in df_all_hist.iterrows()}
-                selected_del = st.selectbox("Chọn dòng lịch sử", options=list(del_opts.keys()), key="select_del_hist")
-                del_id = del_opts[selected_del]
-                
-                if st.button("Xóa dòng lịch sử này", type="primary"):
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM teacher_role_history WHERE id = ?", (del_id,))
-                    conn.commit()
-                    st.success("Đã xoá dòng lịch sử!")
-                    st.rerun()
-            else:
-                st.caption("Không có lịch sử.")
-                
-            st.markdown("---")
-            st.markdown("**Xóa toàn bộ hồ sơ nhà giáo này**")
-            confirm_delete = st.checkbox("Tôi hiểu và xác nhận xóa vĩnh viễn toàn bộ dữ liệu.", key="confirm_delete_teacher_check")
-            if st.button("Xóa vĩnh viễn Nhà giáo này", disabled=not confirm_delete, type="primary"):
-                delete_teacher(selected_t_id)
-                st.success("Đã xóa vĩnh viễn dữ liệu!")
-                st.rerun()
+                    if not df_all_hist.empty:
+                        del_opts = {f"[{row['record_type']}] {row['detail']}": row['id'] for _, row in df_all_hist.iterrows()}
+                        selected_del = st.selectbox("Chọn dòng lịch sử", options=list(del_opts.keys()), key="select_del_hist")
+                        del_id = del_opts[selected_del]
+                        
+                        if st.button("Xóa dòng lịch sử này", type="primary"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM teacher_role_history WHERE id = ?", (del_id,))
+                            conn.commit()
+                            st.success("Đã xoá dòng lịch sử!")
+                            st.rerun()
+                    else:
+                        st.caption("Không có lịch sử.")
+                    
+                st.markdown("---")
+                st.markdown("**Xóa toàn bộ hồ sơ nhà giáo này**")
+                confirm_delete = st.checkbox("Tôi hiểu và xác nhận xóa vĩnh viễn toàn bộ dữ liệu.", key="confirm_delete_teacher_check")
+                if st.button("Xóa vĩnh viễn Nhà giáo này", disabled=not confirm_delete, type="primary"):
+                    if is_admin:
+                        delete_teacher(selected_t_id)
+                        st.success("Đã xóa vĩnh viễn dữ liệu!")
+                        st.rerun()
+                    else:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                            VALUES ('teachers', ?, 'pending', ?, ?, 1)
+                        """, (c_dept, f"User {user['username']}", f"Yêu cầu xóa hồ sơ - {t_data['name']}", 1))
+                        batch_id = cursor.lastrowid
+                        
+                        cursor.execute("""
+                            INSERT INTO staging_teachers (
+                                batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                teacher_name, subject_group, is_female, employment_type,
+                                guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            batch_id, 1, 'DELETE', f"Yêu cầu xóa toàn bộ hồ sơ của nhà giáo: {t_data['name']}", "",
+                            t_data['name'], t_data['subject_group'], int(t_data['is_female']), t_data['employment_type'],
+                            t_data['guest_rank'], t_data['total_12m_salary'], t_data['salary_coefficient'],
+                            c_title, c_dept, c_role,
+                            selected_t_id
+                        ))
+                        conn.commit()
+                        st.success(f"🎉 Đã gửi yêu cầu xóa hồ sơ nhà giáo (Lô #{batch_id}) đến Quản trị viên phê duyệt!")
+                        st.rerun()
 
 conn.close()

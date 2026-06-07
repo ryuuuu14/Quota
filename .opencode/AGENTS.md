@@ -30,6 +30,8 @@ Tracks Giảng dạy, Hoạt động chuyên môn, Bồi dưỡng, NCKH, and Ch�
 
 ## Key Decisions
 1. **DB_PATH**: Absolute from `__file__`, no silent fallback. Env var overrides.
+2. **Auth redirect**: `st.switch_page()` replaces `st.warning()` + `st.page_link()` for unauthorized access. Page guard now does full redirect to login page. `st.stop()` prevents any content from rendering after redirect.
+3. **Auth gate pattern**: `app.py` (Trang chủ) has a root auth gate, but every protected page also has its own `require_role()` because Streamlit pages load independently (bypassing `app.py`). Dashboard, Teacher, and Activity pages require `["admin", "head_dept"]`; Settings, Payroll, Approval require specific roles.
 2. **Pipeline files**: `pipeline.py` (design/Stitch) vs `debug_pipeline.py` (test/Playwright). Separate lifecycle stages.
 3. **Debug pipeline fix**: `wait_until="load"` not `"networkidle"` (Streamlit WebSockets prevent idle).
 4. **NVK rename**: "Nhiệm vụ khác"→"Hoạt động chuyên môn". True catch-all = "Chấp hành Nhiệm vụ khác".
@@ -128,3 +130,106 @@ python -m src.dev_pipeline --interactive
 
 ## URLs
 - Source regulation: `Quy định chế độ làm việc đối với nhà giáo (Bản chuẩn toàn văn).md` (in project root)
+
+---
+## Multi-Agent Architect — Review Loop
+
+### Architecture
+`task` tool-based subagent delegation with 4 roles:
+
+| Role | Implementation | Responsibility |
+|------|---------------|----------------|
+| **Orchestrator** | Main agent (me) | Decompose, delegate, route feedback, update memory |
+| **Implementer** | `task` subagent (general) | Write code for one task. Self-review before report. |
+| **Reviewer** | `task` subagent (general) | Two-stage: spec compliance → code quality |
+| **Tester** | `task` subagent (explore/general) | Run test commands, parse results |
+
+### The Loop
+```
+Orchestrator → Plan → [FOR each task: Implement → Spec Review → Code Review → Fix → Test] → Merge → Update AGENTS.md
+```
+
+### Quality Gates
+1. Spec review must pass (no missing/extra features)
+2. Code quality review: no Critical issues
+3. All tests pass
+4. Orchestrator reviews final diff for consistency
+
+### Skills
+- **`.opencode/skills/review-loop/SKILL.md`** — Full workflow definition with prompt templates
+- **`.opencode/agents/orchestrator.md`** — Orchestrator agent definition
+- **`docs/plans/<feature>-plan.md`** — Feature plans with decomposed tasks
+- **`docs/plans/task.md`** — Live task tracker
+
+### Current Feature: Auth Portal — COMPLETED ✅
+Full-screen login portal with st.switch_page() redirect.
+- Plan: `docs/plans/auth-portal-plan.md`
+- Status: 6/6 tasks done
+- Files changed:
+  - `requirements.txt`: `streamlit>=1.36.0` (upgraded from 1.32.2)
+  - `src/pages/8_DangNhap.py`: Full-screen portal, hides sidebar via CSS, `st.switch_page("app.py")` on login, `st.switch_page("pages/8_DangNhap.py")` on logout
+  - `src/auth.py`: `require_role()` redirects via `st.switch_page()` + `st.stop()`
+  - `src/app.py`: Root auth gate before `render_sidebar()`
+  - `src/components.py`: Logout button in sidebar
+  - `src/pages/1_Dashboard.py`: Added `require_role(["admin", "head_dept"])`
+  - `src/pages/2_QuanLyCanBo.py`: Added `require_role(["admin", "head_dept"])`
+  - `src/pages/3_NhatKyHoatDong.py`: Added `require_role(["admin", "head_dept"])`
+- Tests: 85/85 pass across 6 test suites
+
+---
+## Understand Anything — Knowledge Graph Tool
+- Installed: `Lum1104/Understand-Anything` (MIT, ~21k+ stars)
+- Location: `~\.understand-anything\repo\`
+- Skills (auto-discovered from `~\.agents\skills\`):
+  `/understand`, `/understand-dashboard`, `/understand-chat`
+  `/understand-diff`, `/understand-explain`, `/understand-onboard`
+  `/understand-domain`, `/understand-knowledge`
+- Plugin root: `~\.understand-anything-plugin` (junction → repo plugin dir)
+- Must restart opencode after install for skills to load
+- Only works on repos with a `.git` directory
+- After `/understand`, graph saved to `.understand-anything/knowledge-graph.json`
+- To update: re-run install steps or `git pull`
+
+---
+## Pending: Template Restructure — Bulk Import  → 17-column format
+**Context:** The bulk import template is being restructured from 11 columns to 17 columns to match the actual teaching schedule format used by the university.
+
+### New Template Columns (B→R, A blank)
+
+| Col | Header | Source | Editable |
+|-----|--------|--------|----------|
+| B | STT | auto 1,2,3… | Locked |
+| C | Mã GV | DB (`teachers.id`) | Locked |
+| D | Họ lót | DB (`teachers.name` split: last space = Tên) | Locked |
+| E | Tên | DB | Locked |
+| F | Chức danh | DB (teacher_role_history TITLE) | Locked |
+| G | Đơn vị | DB (teacher_role_history DEPARTMENT) | Locked |
+| H | Mã môn | User input | Editable |
+| I | Tên môn | User input | Editable |
+| J | Loại | Dropdown (ALLOWED_LOAI) | Editable |
+| K | Nhóm | User input | Editable |
+| L | Mã lớp | User input | Editable |
+| M | Sỉ số | User input (numeric) | Editable |
+| N | TKB | User input (text) | Editable |
+| O | Tiết quy đổi | User input (numeric) | Editable |
+| P | Hệ số tín chỉ | User input (numeric) | Editable |
+| Q | Hệ số lớp đông | Calculated (trống, khóa) | Locked |
+| R | Tiết thực dạy | Calculated (trống, khóa) | Locked |
+
+### Files to change
+| File | Changes |
+|------|---------|
+| `src/database.py` | ALTER TABLE `bulk_teaching_assignments` ADD `ma_mon`, `ma_lop`, `tkb`; DROP `ghi_chu` (or keep for compat) |
+| `src/bulk_import/templates.py` | Rewrite headers (B→R, A blank), split `name`→họ lót/tên, STT auto-gen, merge A1:R1, A2:R2 |
+| `src/bulk_import/validator.py` | 17 expected headers, map columns accordingly, validate optional fields |
+| `src/bulk_import/calculator.py` | No change needed (uses loai, si_so, tiet_quy_doi, he_so_tin_chi) |
+| `src/bulk_import/importer.py` | INSERT add `ma_mon`, `ma_lop`, `tkb`; remove `ghi_chu` |
+| `src/pages/5_NhapDuLieu.py` | Raw preview + calculated table columns match new layout |
+| `test_bulk_import.py` | Update template + full flow tests |
+
+### User decisions
+- **Mã môn**: Subject code from import file, store in DB for reference
+- **TKB**: Stored but not used in calculation
+- **Hệ số lớp đông / Tiết thực dạy**: Show as locked empty columns in template AND in calculated results
+- **Họ lót / Tên**: Split `teachers.name` at last space
+- **Ghi chú**: User said to remove it (not in their column list; confirmed via question)

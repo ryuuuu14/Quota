@@ -166,15 +166,24 @@ def _local_a11y_check(ax_tree: str, is_streamlit: bool = True) -> Optional[str]:
 
 def _run_gemini_vision(screenshot_b64: str, console_logs: List[str],
                        network_errors: List[str], ax_tree: str) -> Optional[str]:
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        return None
+    import time
     try:
-        from google import genai
+        from agent_core.llm import GeminiPool
         from google.genai.types import Part
-        client = genai.Client(api_key=api_key)
+        
+        # Check budget limits
+        if GeminiPool._cost.over_budget("gemini-2.0-flash"):
+            print("[Debug Pipeline] Over budget, skipping vision check")
+            return None
+            
+        client = GeminiPool.get_client()
+        GeminiPool._cost.record_call("gemini-2.0-flash")
+        
         log_summary = "\n".join(console_logs[-20:]) if console_logs else "(empty)"
         net_summary = "\n".join(network_errors[-10:]) if network_errors else "(empty)"
+        
+        start_time = time.time()
+        
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[
@@ -188,10 +197,22 @@ def _run_gemini_vision(screenshot_b64: str, console_logs: List[str],
             ],
         )
         text = response.text.strip()
+        
+        duration_ms = (time.time() - start_time) * 1000
+        GeminiPool._metrics.log_call(
+            agent_name="telemetry_critic",
+            pipeline_name="debug_pipeline",
+            duration_ms=duration_ms,
+            tokens_in=0,
+            tokens_out=len(text.split()),
+            model_used="gemini-2.0-flash"
+        )
+        
         if "VERDICT: FAILED" in text:
             report = text.split("DEBUG_REPORT:", 1)[1].strip() if "DEBUG_REPORT:" in text else text
             return f"Gemini Vision: {report[:300]}"
-    except Exception:
+    except Exception as e:
+        print(f"[Debug Pipeline Vision Warning] Vision call failed or not configured: {e}")
         pass
     return None
 

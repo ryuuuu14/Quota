@@ -24,6 +24,9 @@ class StreamlitMock(mock.MagicMock):
     def button(self, label, **kwargs):
         return False
 
+    def file_uploader(self, *args, **kwargs):
+        return None
+
 # Mock get_connection to avoid hitting the SQLite file on disk
 database_mock = mock.MagicMock()
 database_mock.get_connection.return_value = mock.MagicMock()
@@ -37,11 +40,17 @@ def test_imports():
     orig_pandas = sys.modules.get('pandas')
     orig_streamlit = sys.modules.get('streamlit')
     orig_database = sys.modules.get('database')
+    orig_auth = sys.modules.get('auth')
+    orig_components = sys.modules.get('components')
     
     # Mock them
     sys.modules['pandas'] = mock.MagicMock()
     sys.modules['streamlit'] = StreamlitMock()
     sys.modules['database'] = database_mock
+    auth_mock = mock.MagicMock()
+    auth_mock.get_department_by_code.return_value = None
+    sys.modules['auth'] = auth_mock
+    sys.modules['components'] = mock.MagicMock()
     
     try:
         if 'src.pages.2_QuanLyCanBo' in sys.modules:
@@ -71,3 +80,13 @@ def test_imports():
             sys.modules['database'] = orig_database
         else:
             sys.modules.pop('database', None)
+
+        if orig_auth is not None:
+            sys.modules['auth'] = orig_auth
+        else:
+            sys.modules.pop('auth', None)
+
+        if orig_components is not None:
+            sys.modules['components'] = orig_components
+        else:
+            sys.modules.pop('components', None)
