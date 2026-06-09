@@ -137,6 +137,66 @@ def test_bui_thi_x():
 
     print("test_bui_thi_x passed.")
 
+from calculations import _apply_auto_compensation
+
+def test_apply_auto_compensation_cases():
+    # Case 1: GC excess, NCKH deficit.
+    # NCKH norm is 600, NCKH done is 150 (exactly 25%). GC excess is 50, NCKH deficit is -300.
+    # 1 GC = 3 NCKH.
+    # We want to transfer. Deficit is -300. In GC, we need -(-300) / 3 = 100 GC.
+    # Since GC excess is 50, we transfer all 50 GC to get 150 NCKH.
+    # Expected: GC excess remains 0, NCKH deficit becomes -150.
+    row1 = pd.Series({
+        'gc_vuot_thieu': 50.0,
+        'nckh_vuot_thieu': -300.0,
+        'dinh_muc_nckh_phai_thuc_hien': 600.0,
+        'nckh_da_thuc_hien': 150.0
+    })
+    gc_res, nckh_res = _apply_auto_compensation(row1)
+    assert gc_res == 0.0, f"Expected GC 0.0, got {gc_res}"
+    assert nckh_res == -150.0, f"Expected NCKH -150.0, got {nckh_res}"
+
+    # Case 2: GC excess, NCKH deficit, but NCKH done < 25% of norm.
+    # No transfer should occur.
+    row2 = pd.Series({
+        'gc_vuot_thieu': 50.0,
+        'nckh_vuot_thieu': -300.0,
+        'dinh_muc_nckh_phai_thuc_hien': 600.0,
+        'nckh_da_thuc_hien': 149.0
+    })
+    gc_res, nckh_res = _apply_auto_compensation(row2)
+    assert gc_res == 50.0
+    assert nckh_res == -300.0
+
+    # Case 3: GC deficit, NCKH excess.
+    # GC norm is 270, direct teaching is 135 (exactly 50%). GC deficit is -50, NCKH excess is 300.
+    # 3 NCKH = 1 GC.
+    # Deficit is -50 GC. In NCKH, we need -(-50) * 3 = 150 NCKH.
+    # Since NCKH excess is 300, we transfer 150 NCKH to cover all -50 GC.
+    # Expected: GC deficit becomes 0.0, NCKH excess becomes 150.0.
+    row3 = pd.Series({
+        'gc_vuot_thieu': -50.0,
+        'nckh_vuot_thieu': 300.0,
+        'dinh_muc_gc_phai_thuc_hien': 270.0,
+        'giang_day_truc_tiep': 135.0
+    })
+    gc_res, nckh_res = _apply_auto_compensation(row3)
+    assert gc_res == 0.0, f"Expected GC 0.0, got {gc_res}"
+    assert nckh_res == 150.0, f"Expected NCKH 150.0, got {nckh_res}"
+
+    # Case 4: GC deficit, NCKH excess, but direct teaching < 50% GC norm.
+    # No transfer should occur.
+    row4 = pd.Series({
+        'gc_vuot_thieu': -50.0,
+        'nckh_vuot_thieu': 300.0,
+        'dinh_muc_gc_phai_thuc_hien': 270.0,
+        'giang_day_truc_tiep': 134.0
+    })
+    gc_res, nckh_res = _apply_auto_compensation(row4)
+    assert gc_res == -50.0
+    assert nckh_res == 300.0
+    print("test_apply_auto_compensation_cases passed.")
+
 if __name__ == "__main__":
     test_dai_hoc_ly_thuyet()
     test_dai_hoc_ngoai_ngu()
@@ -144,4 +204,5 @@ if __name__ == "__main__":
     test_thao_luan_equivalent()
     test_calculate_t04_weeks_with_holidays()
     test_bui_thi_x()
+    test_apply_auto_compensation_cases()
     print("All tests passed!")

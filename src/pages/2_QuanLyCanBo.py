@@ -86,8 +86,8 @@ if is_admin or is_head:
                     
                     try:
                         df_parsed = parse_excel_to_df(file_bytes, header_row=3)
-                        if len(df_parsed) > 1000:
-                            st.error("❌ Số lượng dòng trong file Excel vượt quá giới hạn cho phép (1000 dòng). Vui lòng chia nhỏ file.")
+                        if len(df_parsed) > 100000:
+                            st.error("File Excel qua lon (>100.000 dong). Vui long chia nho file.")
                         else:
                             # Validate
                             errors = validate_teachers_data(df_parsed, get_connection())

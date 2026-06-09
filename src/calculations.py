@@ -126,12 +126,306 @@ def calculate_activity_hours(log_row, activity_type_row):
     else:
         return base
 
+def _generate_timeline_segments(tf_start, tf_end, title_recs, dept_recs, role_recs, rules_dict):
+    """
+    Tạo các đoạn thời gian (segments) dựa trên thay đổi về chức danh, khoa/phòng, nhiệm vụ kiêm nhiệm,
+    và các mốc thời gian đặc biệt của Trợ giảng (12 và 24 tháng).
+    """
+    dates = set()
+    dates.add(pd.to_datetime(tf_start))
+    dates.add(pd.to_datetime(tf_end) + pd.Timedelta(days=1))
+    
+    for r_list in [title_recs, dept_recs]:
+        for _, r in r_list.iterrows():
+            r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
+            r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date'])) if pd.notnull(r['end_date']) else pd.to_datetime(tf_end)
+            if r_start <= r_end:
+                dates.add(r_start)
+                dates.add(r_end + pd.Timedelta(days=1))
+
+    for _, r in role_recs.iterrows():
+        rid = r['reduction_rule_id']
+        if rid in rules_dict and rules_dict[rid]['rule_type'] == 'ROLE':
+            r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
+            r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date'])) if pd.notnull(r['end_date']) else pd.to_datetime(tf_end)
+            if r_start <= r_end:
+                dates.add(r_start)
+                dates.add(r_end + pd.Timedelta(days=1))
+                
+    # Add dynamic transition points for Trợ giảng reductions (months 12 and 24)
+    for _, r in title_recs.iterrows():
+        if r['value_text'] == 'Trợ giảng':
+            app_date = pd.to_datetime(r['start_date'])
+            t12 = app_date + pd.DateOffset(months=12)
+            t24 = app_date + pd.DateOffset(months=24)
+            for t in [t12, t24]:
+                if pd.to_datetime(tf_start) <= t <= pd.to_datetime(tf_end):
+                    dates.add(t)
+                    
+    sorted_dates = sorted(list(dates))
+    segments = []
+    for i in range(len(sorted_dates) - 1):
+        seg_start = sorted_dates[i]
+        seg_end = sorted_dates[i+1] - pd.Timedelta(days=1)
+        if seg_start <= seg_end:
+            segments.append((seg_start, seg_end))
+            
+    return segments
+
+
+def _calculate_tro_giang_reductions(seg_start, seg_end, title_name, title_recs, seg_base_gc, role_t_red, holidays_list, std_weeks):
+    """
+    Tính số giờ chuẩn được giảm cho chức danh Trợ giảng (Điều 10.3.a).
+    """
+    reduced_gc = 0.0
+    reductions_desc = []
+    
+    if title_name == 'Trợ giảng':
+        tro_giang_rec = title_recs[title_recs['value_text'] == 'Trợ giảng'].iloc[0]
+        appointment_date = pd.to_datetime(tro_giang_rec['start_date'])
+        
+        # 1st 12 months (exclusive end date)
+        end_12m = appointment_date + pd.DateOffset(months=12)
+        # Next 12 months (exclusive end date)
+        end_24m = appointment_date + pd.DateOffset(months=24)
+        
+        # Check segment overlap with 1st 12 months: [appointment_date, end_12m - 1 day]
+        p1_start = max(seg_start, appointment_date)
+        p1_end = min(seg_end, end_12m - pd.Timedelta(days=1))
+        if p1_start <= p1_end:
+            p1_weeks = calculate_t04_weeks(p1_start, p1_end, holidays_list)
+            red_gc = seg_base_gc * (1 - role_t_red / 100.0) * 0.5 * (p1_weeks / std_weeks)
+            reduced_gc += red_gc
+            reductions_desc.append(f"Trợ giảng 12 tháng đầu (giảm 50% x {p1_weeks:.1f} tuần)")
+                
+        # Check segment overlap with next 12 months: [end_12m, end_24m - 1 day]
+        p2_start = max(seg_start, end_12m)
+        p2_end = min(seg_end, end_24m - pd.Timedelta(days=1))
+        if p2_start <= p2_end:
+            p2_weeks = calculate_t04_weeks(p2_start, p2_end, holidays_list)
+            red_gc = seg_base_gc * (1 - role_t_red / 100.0) * 0.2 * (p2_weeks / std_weeks)
+            reduced_gc += red_gc
+            reductions_desc.append(f"Trợ giảng tháng 13-24 (giảm 20% x {p2_weeks:.1f} tuần)")
+            
+    return reduced_gc, reductions_desc
+
+
+def _calculate_point2_reductions(point2_leaves, seg_data, tf_start, tf_end, holidays_list):
+    """
+    Tính giảm trừ theo điểm (2) của quy định (giảm 100% định mức giảng dạy & các nhiệm vụ khác).
+    Trả về (reduced_gc, reduced_nvk, max_flat_nckh_pct, reductions_desc).
+    """
+    reduced_gc = 0.0
+    reduced_nvk = 0.0
+    max_flat_nckh_pct = 0.0
+    reductions_desc = []
+    
+    for r, rule in point2_leaves:
+        nckh_pct = rule['nckh_reduction_pct']
+        if nckh_pct > 0:
+            r_start_full = pd.to_datetime(r['start_date'])
+            r_end_full = pd.to_datetime(r['end_date'])
+            if nckh_pct == 60.0:
+                if r_start_full < pd.to_datetime(tf_start) or r_end_full > pd.to_datetime(tf_end):
+                    nckh_pct = 30.0
+            if nckh_pct > max_flat_nckh_pct:
+                max_flat_nckh_pct = nckh_pct
+
+    for seg in seg_data:
+        seg_intervals = []
+        for r, rule in point2_leaves:
+            r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
+            r_end_full = pd.to_datetime(r['end_date'])
+            r_end = min(pd.to_datetime(tf_end), r_end_full)
+
+            has_override = pd.notnull(r.get('actual_weeks_override')) and str(r.get('actual_weeks_override')).strip() != ''
+            override_val = float(r['actual_weeks_override']) if has_override else None
+            total_leaf_days = max(1, (r_end - r_start).days + 1) if has_override else 0
+
+            inter_start = max(seg['start'], r_start)
+            inter_end = min(seg['end'], r_end)
+            if inter_start <= inter_end:
+                seg_days = (inter_end - inter_start).days + 1
+                seg_override = (override_val * (seg_days / total_leaf_days)) if has_override else None
+                seg_intervals.append((inter_start, inter_end, rule, r_end_full, seg_override))
+        if not seg_intervals:
+            continue
+        seg_intervals.sort(key=lambda x: x[0])
+        merged = []
+        cur_start, cur_end, cur_rule, cur_r_end_full, cur_override = seg_intervals[0]
+        for s, e, rule, r_end_full, seg_override in seg_intervals[1:]:
+            if s <= cur_end:
+                cur_end = max(cur_end, e)
+                cur_r_end_full = max(cur_r_end_full, r_end_full)
+                if rule['nckh_reduction_pct'] > cur_rule['nckh_reduction_pct']:
+                    cur_rule = rule
+                    cur_override = seg_override if seg_override is not None else cur_override
+            else:
+                merged.append((cur_start, cur_end, cur_rule, cur_r_end_full, cur_override))
+                cur_start, cur_end, cur_rule, cur_r_end_full, cur_override = s, e, rule, r_end_full, seg_override
+        merged.append((cur_start, cur_end, cur_rule, cur_r_end_full, cur_override))
+
+        for m_start, m_end, rule, m_r_end_full, m_override in merged:
+            if m_override is not None:
+                inter_weeks = m_override
+            elif m_r_end_full > seg['end']:
+                inter_weeks = min(calculate_t04_weeks(m_start, m_r_end_full, holidays_list), seg['weeks'])
+            else:
+                inter_weeks = calculate_t04_weeks(m_start, m_end, holidays_list)
+            if seg['weeks'] > 0:
+                red_gc = seg['req_gc'] * (inter_weeks / seg['weeks'])
+                red_nvk = seg['req_nvk'] * (inter_weeks / seg['weeks'])
+            else:
+                red_gc = 0.0
+                red_nvk = 0.0
+            reduced_gc += red_gc
+            reduced_nvk += red_nvk
+
+    for r, rule in point2_leaves:
+        desc = f"{rule['name']} ({rule['rule_type']})"
+        reductions_desc.append(desc)
+
+    return reduced_gc, reduced_nvk, max_flat_nckh_pct, reductions_desc
+
+
+def _calculate_point3_reductions(point3_leaves, point2_leaves, seg_data, tf_start, tf_end, holidays_list):
+    """
+    Tính giảm trừ theo điểm (3) của quy định (giảm theo tỷ lệ % định mức giảng dạy & NCKH).
+    Tránh trùng lặp với thời gian nghỉ điểm (2).
+    Trả về (reduced_gc, reduced_nckh, reductions_desc).
+    """
+    reduced_gc = 0.0
+    reduced_nckh = 0.0
+    reductions_desc = []
+
+    for seg in seg_data:
+        seg_intervals = []
+        for r, rule in point3_leaves:
+            r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
+            r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date']))
+            if r_start > r_end: continue
+
+            has_override = pd.notnull(r.get('actual_weeks_override')) and str(r.get('actual_weeks_override')).strip() != ''
+            override_val = float(r['actual_weeks_override']) if has_override else None
+            total_leaf_days = max(1, (r_end - r_start).days + 1) if has_override else 0
+
+            inter_start = max(seg['start'], r_start)
+            inter_end = min(seg['end'], r_end)
+            if inter_start <= inter_end:
+                seg_days = (inter_end - inter_start).days + 1
+                seg_override = (override_val * (seg_days / total_leaf_days)) if has_override else None
+                seg_intervals.append((inter_start, inter_end, rule, r_end, seg_override))
+
+        if not seg_intervals:
+            continue
+
+        seg_intervals.sort(key=lambda x: x[0])
+        merged = []
+        cur_start, cur_end, cur_rule, cur_r_end, cur_override = seg_intervals[0]
+        for s, e, rule, r_end, seg_override in seg_intervals[1:]:
+            if s <= cur_end:
+                cur_end = max(cur_end, e)
+                cur_r_end = max(cur_r_end, r_end)
+                merged_rule = dict(cur_rule)
+                merged_rule['teaching_reduction_pct'] = max(cur_rule['teaching_reduction_pct'], rule['teaching_reduction_pct'])
+                merged_rule['nckh_reduction_pct'] = max(cur_rule['nckh_reduction_pct'], rule['nckh_reduction_pct'])
+                cur_rule = merged_rule
+                if cur_override is not None or seg_override is not None:
+                    cur_override = max(cur_override or 0, seg_override or 0)
+            else:
+                merged.append((cur_start, cur_end, cur_rule, cur_r_end, cur_override))
+                cur_start, cur_end, cur_rule, cur_r_end, cur_override = s, e, rule, r_end, seg_override
+        merged.append((cur_start, cur_end, cur_rule, cur_r_end, cur_override))
+
+        for m_start, m_end, rule, m_r_end, m_override in merged:
+            # Thu thập ngày làm việc thực tế (bỏ qua kỳ nghỉ điểm 2)
+            working_days = []
+            curr_date = m_start
+            while curr_date <= m_end:
+                overlap = False
+                for p2_r, _ in point2_leaves:
+                    p2_start = max(pd.to_datetime(tf_start), pd.to_datetime(p2_r['start_date']))
+                    p2_end = min(pd.to_datetime(tf_end), pd.to_datetime(p2_r['end_date']))
+                    if p2_start <= curr_date <= p2_end:
+                        overlap = True
+                        break
+                if not overlap:
+                    working_days.append(curr_date)
+                curr_date += pd.Timedelta(days=1)
+
+            if working_days:
+                blocks = []
+                block_start = working_days[0]
+                prev_day = working_days[0]
+                for day in working_days[1:]:
+                    if day == prev_day + pd.Timedelta(days=1):
+                        prev_day = day
+                    else:
+                        blocks.append((block_start, prev_day))
+                        block_start = day
+                        prev_day = day
+                blocks.append((block_start, prev_day))
+
+                inter_weeks = 0.0
+                if m_override is not None:
+                    inter_weeks = m_override * (len(working_days) / ((m_end - m_start).days + 1))
+                else:
+                    for b_start, b_end in blocks:
+                        inter_weeks += calculate_t04_weeks(b_start, b_end, holidays_list)
+
+                if seg['weeks'] > 0:
+                    red_gc = seg['req_gc'] * (rule['teaching_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
+                    red_nckh = seg['req_nckh'] * (rule['nckh_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
+                else:
+                    red_gc = 0.0
+                    red_nckh = 0.0
+
+                reduced_gc += red_gc
+                reduced_nckh += red_nckh
+
+    for r, rule in point3_leaves:
+        desc = f"{rule['name']} ({rule['rule_type']})"
+        reductions_desc.append(desc)
+
+    return reduced_gc, reduced_nckh, reductions_desc
+
+
+def _apply_auto_compensation(row, nckh_to_gc_ratio=3.0, gc_to_nckh_ratio=3.0, min_direct_teaching_ratio=0.5, min_nckh_ratio=0.25):
+    gc = row['gc_vuot_thieu']
+    nckh = row['nckh_vuot_thieu']
+    
+    # NCKH deficit, GC excess: compensate NCKH using excess GC (1 GC = gc_to_nckh_ratio NCKH)
+    if gc > 0 and nckh < 0:
+        nckh_norm = row['dinh_muc_nckh_phai_thuc_hien']
+        nckh_done = row['nckh_da_thuc_hien']
+        if nckh_norm > 0 and nckh_done >= (nckh_norm * min_nckh_ratio):
+            transfer_gc = min(gc, -nckh / gc_to_nckh_ratio)
+            return gc - transfer_gc, nckh + (transfer_gc * gc_to_nckh_ratio)
+            
+    # GC deficit, NCKH excess: compensate GC using excess NCKH (nckh_to_gc_ratio NCKH = 1 GC)
+    elif nckh > 0 and gc < 0:
+        min_required_teaching = row['dinh_muc_gc_phai_thuc_hien'] * min_direct_teaching_ratio
+        direct_teaching = row['giang_day_truc_tiep']
+        if direct_teaching >= min_required_teaching:
+            transfer_nckh = min(nckh, -gc * nckh_to_gc_ratio)
+            return gc + (transfer_nckh / nckh_to_gc_ratio), nckh - transfer_nckh
+            
+    return gc, nckh
+
+
 def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_override=None):
     """
     Tính toán định mức động cho giảng viên, sử dụng logic proportional timeline
     """
     conn = get_connection()
     tf_id, tf_start, tf_end, std_weeks = get_timeframe_dates(conn, timeframe_id)
+    
+    # Load config constants
+    from database import get_setting_value
+    nckh_to_gc_ratio = float(get_setting_value('nckh_to_gc_ratio', '3.0'))
+    gc_to_nckh_ratio = float(get_setting_value('gc_to_nckh_ratio', '3.0'))
+    min_direct_teaching_ratio = float(get_setting_value('min_direct_teaching_ratio', '0.50'))
+    min_nckh_ratio = float(get_setting_value('min_nckh_ratio', '0.25'))
     
     if not tf_id:
         conn.close()
@@ -191,45 +485,7 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
         dept_recs = t_hist[t_hist['record_type'] == 'DEPARTMENT'].copy()
         role_recs = t_hist[t_hist['record_type'] == 'REDUCTION'].copy()
         
-        # Construct change points (dates)
-        dates = set()
-        dates.add(pd.to_datetime(tf_start))
-        dates.add(pd.to_datetime(tf_end) + pd.Timedelta(days=1))
-        
-        for r_list in [title_recs, dept_recs]:
-            for _, r in r_list.iterrows():
-                r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
-                r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date'])) if pd.notnull(r['end_date']) else pd.to_datetime(tf_end)
-                if r_start <= r_end:
-                    dates.add(r_start)
-                    dates.add(r_end + pd.Timedelta(days=1))
-
-        for _, r in role_recs.iterrows():
-            rid = r['reduction_rule_id']
-            if rid in rules_dict and rules_dict[rid]['rule_type'] == 'ROLE':
-                r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
-                r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date'])) if pd.notnull(r['end_date']) else pd.to_datetime(tf_end)
-                if r_start <= r_end:
-                    dates.add(r_start)
-                    dates.add(r_end + pd.Timedelta(days=1))
-                    
-        # Add dynamic transition points for Trợ giảng reductions (months 12 and 24)
-        for _, r in title_recs.iterrows():
-            if r['value_text'] == 'Trợ giảng':
-                app_date = pd.to_datetime(r['start_date'])
-                t12 = app_date + pd.DateOffset(months=12)
-                t24 = app_date + pd.DateOffset(months=24)
-                for t in [t12, t24]:
-                    if pd.to_datetime(tf_start) <= t <= pd.to_datetime(tf_end):
-                        dates.add(t)
-                        
-        sorted_dates = sorted(list(dates))
-        segments = []
-        for i in range(len(sorted_dates) - 1):
-            seg_start = sorted_dates[i]
-            seg_end = sorted_dates[i+1] - pd.Timedelta(days=1)
-            if seg_start <= seg_end:
-                segments.append((seg_start, seg_end))
+        segments = _generate_timeline_segments(tf_start, tf_end, title_recs, dept_recs, role_recs, rules_dict)
                 
         total_required_gc = 0.0
         total_required_nckh = 0.0
@@ -306,11 +562,18 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
                         role_desc = f"{rule['name']} ({rule['rule_type']})"
                         break
                         
-            # Determine base_gc and base_nckh for the segment
-            seg_base_gc = 0
-            seg_base_nckh = 0
+            # Departments that use the natural/technical teaching hours standard
+            # (per T04 regulations: natural sciences, techniques, foreign languages, informatics)
+            NATURAL_DEPTS = {
+                # Legacy generic names (backward compatibility)
+                'Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học',
+                'Nhà giáo giảng dạy thực hành',
+                # Official Khoa using natural/technical/FL/IT hours
+                'Khoa Ngoại ngữ - Tin học',                          # K10
+                'Khoa Quân sự, võ thuật, thể dục thể thao',         # K12
+            }
             if title_name in titles_dict:
-                if dept_name == 'Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học':
+                if dept_name in NATURAL_DEPTS:
                     seg_base_gc = titles_dict[title_name]['base_teaching_hours_natural']
                 else:
                     seg_base_gc = titles_dict[title_name]['base_teaching_hours_social']
@@ -372,36 +635,13 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
             })
             
             # Automatic reduction for Trợ giảng (Điều 10.3.a)
-            if title_name == 'Trợ giảng':
-                tro_giang_rec = title_recs[title_recs['value_text'] == 'Trợ giảng'].iloc[0]
-                appointment_date = pd.to_datetime(tro_giang_rec['start_date'])
-                
-                # 1st 12 months (exclusive end date)
-                end_12m = appointment_date + pd.DateOffset(months=12)
-                # Next 12 months (exclusive end date)
-                end_24m = appointment_date + pd.DateOffset(months=24)
-                
-                # Check segment overlap with 1st 12 months: [appointment_date, end_12m - 1 day]
-                p1_start = max(seg_start, appointment_date)
-                p1_end = min(seg_end, end_12m - pd.Timedelta(days=1))
-                if p1_start <= p1_end:
-                    p1_weeks = calculate_t04_weeks(p1_start, p1_end, holidays_list)
-                    red_gc = seg_base_gc * (1 - role_t_red / 100.0) * 0.5 * (p1_weeks / std_weeks)
-                    total_reduced_gc += red_gc
-                    desc = f"Trợ giảng 12 tháng đầu (giảm 50% x {p1_weeks:.1f} tuần)"
-                    if desc not in applied_reductions:
-                        applied_reductions.append(desc)
-                        
-                # Check segment overlap with next 12 months: [end_12m, end_24m - 1 day]
-                p2_start = max(seg_start, end_12m)
-                p2_end = min(seg_end, end_24m - pd.Timedelta(days=1))
-                if p2_start <= p2_end:
-                    p2_weeks = calculate_t04_weeks(p2_start, p2_end, holidays_list)
-                    red_gc = seg_base_gc * (1 - role_t_red / 100.0) * 0.2 * (p2_weeks / std_weeks)
-                    total_reduced_gc += red_gc
-                    desc = f"Trợ giảng tháng 13-24 (giảm 20% x {p2_weeks:.1f} tuần)"
-                    if desc not in applied_reductions:
-                        applied_reductions.append(desc)
+            tg_red, tg_descs = _calculate_tro_giang_reductions(
+                seg_start, seg_end, title_name, title_recs, seg_base_gc, role_t_red, holidays_list, std_weeks
+            )
+            total_reduced_gc += tg_red
+            for desc in tg_descs:
+                if desc not in applied_reductions:
+                    applied_reductions.append(desc)
                         
         # 2. Distinguish and process Point (2) and Point (3) SPECIAL reductions
         point2_leaves = []
@@ -412,169 +652,29 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
             if rid in rules_dict and rules_dict[rid]['rule_type'] == 'SPECIAL':
                 rule = rules_dict[rid]
                 if rule['name'].startswith('Trợ giảng'):
-                    # Skip manual duplicate rules to prevent double counting
                     continue
                 if rule['teaching_reduction_pct'] == 100.0:
                     point2_leaves.append((r, rule))
                 else:
                     point3_leaves.append((r, rule))
                     
-        # Apply Point (2) leaves — merge overlapping intervals to avoid double-count
-        max_flat_nckh_pct = 0.0
-        for r, rule in point2_leaves:
-            nckh_pct = rule['nckh_reduction_pct']
-            if nckh_pct > 0:
-                r_start_full = pd.to_datetime(r['start_date'])
-                r_end_full = pd.to_datetime(r['end_date'])
-                if nckh_pct == 60.0:
-                    if r_start_full < pd.to_datetime(tf_start) or r_end_full > pd.to_datetime(tf_end):
-                        nckh_pct = 30.0
-                if nckh_pct > max_flat_nckh_pct:
-                    max_flat_nckh_pct = nckh_pct
-
-        for seg in seg_data:
-            seg_intervals = []
-            for r, rule in point2_leaves:
-                r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
-                r_end_full = pd.to_datetime(r['end_date'])
-                r_end = min(pd.to_datetime(tf_end), r_end_full)
-
-                has_override = pd.notnull(r.get('actual_weeks_override')) and str(r.get('actual_weeks_override')).strip() != ''
-                override_val = float(r['actual_weeks_override']) if has_override else None
-                total_leaf_days = max(1, (r_end - r_start).days + 1) if has_override else 0
-
-                inter_start = max(seg['start'], r_start)
-                inter_end = min(seg['end'], r_end)
-                if inter_start <= inter_end:
-                    seg_days = (inter_end - inter_start).days + 1
-                    seg_override = (override_val * (seg_days / total_leaf_days)) if has_override else None
-                    seg_intervals.append((inter_start, inter_end, rule, r_end_full, seg_override))
-            if not seg_intervals:
-                continue
-            seg_intervals.sort(key=lambda x: x[0])
-            merged = []
-            cur_start, cur_end, cur_rule, cur_r_end_full, cur_override = seg_intervals[0]
-            for s, e, rule, r_end_full, seg_override in seg_intervals[1:]:
-                if s <= cur_end:
-                    cur_end = max(cur_end, e)
-                    cur_r_end_full = max(cur_r_end_full, r_end_full)
-                    if rule['nckh_reduction_pct'] > cur_rule['nckh_reduction_pct']:
-                        cur_rule = rule
-                        cur_override = seg_override if seg_override is not None else cur_override
-                else:
-                    merged.append((cur_start, cur_end, cur_rule, cur_r_end_full, cur_override))
-                    cur_start, cur_end, cur_rule, cur_r_end_full, cur_override = s, e, rule, r_end_full, seg_override
-            merged.append((cur_start, cur_end, cur_rule, cur_r_end_full, cur_override))
-
-            for m_start, m_end, rule, m_r_end_full, m_override in merged:
-                if m_override is not None:
-                    inter_weeks = m_override
-                elif m_r_end_full > seg['end']:
-                    inter_weeks = min(calculate_t04_weeks(m_start, m_r_end_full, holidays_list), seg['weeks'])
-                else:
-                    inter_weeks = calculate_t04_weeks(m_start, m_end, holidays_list)
-                if seg['weeks'] > 0:
-                    red_gc = seg['req_gc'] * (inter_weeks / seg['weeks'])
-                    red_nvk = seg['req_nvk'] * (inter_weeks / seg['weeks'])
-                else:
-                    red_gc = 0.0
-                    red_nvk = 0.0
-                total_reduced_gc += red_gc
-                total_reduced_nvk += red_nvk
-
-        for r, rule in point2_leaves:
-            desc = f"{rule['name']} ({rule['rule_type']})"
+        # Apply Point (2) leaves
+        p2_gc, p2_nvk, max_flat_nckh_pct, p2_descs = _calculate_point2_reductions(
+            point2_leaves, seg_data, tf_start, tf_end, holidays_list
+        )
+        total_reduced_gc += p2_gc
+        total_reduced_nvk += p2_nvk
+        for desc in p2_descs:
             if desc not in applied_reductions:
                 applied_reductions.append(desc)
-                
-        # Apply Point (3) leaves — merge overlapping intervals to take max reduction (Điều 10.1.c)
-        for seg in seg_data:
-            seg_intervals = []
-            for r, rule in point3_leaves:
-                r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
-                r_end = min(pd.to_datetime(tf_end), pd.to_datetime(r['end_date']))
-                if r_start > r_end: continue
 
-                has_override = pd.notnull(r.get('actual_weeks_override')) and str(r.get('actual_weeks_override')).strip() != ''
-                override_val = float(r['actual_weeks_override']) if has_override else None
-                total_leaf_days = max(1, (r_end - r_start).days + 1) if has_override else 0
-
-                inter_start = max(seg['start'], r_start)
-                inter_end = min(seg['end'], r_end)
-                if inter_start <= inter_end:
-                    seg_days = (inter_end - inter_start).days + 1
-                    seg_override = (override_val * (seg_days / total_leaf_days)) if has_override else None
-                    seg_intervals.append((inter_start, inter_end, rule, r_end, seg_override))
-
-            if not seg_intervals:
-                continue
-
-            seg_intervals.sort(key=lambda x: x[0])
-            merged = []
-            cur_start, cur_end, cur_rule, cur_r_end, cur_override = seg_intervals[0]
-            for s, e, rule, r_end, seg_override in seg_intervals[1:]:
-                if s <= cur_end:
-                    cur_end = max(cur_end, e)
-                    cur_r_end = max(cur_r_end, r_end)
-                    merged_rule = dict(cur_rule)
-                    merged_rule['teaching_reduction_pct'] = max(cur_rule['teaching_reduction_pct'], rule['teaching_reduction_pct'])
-                    merged_rule['nckh_reduction_pct'] = max(cur_rule['nckh_reduction_pct'], rule['nckh_reduction_pct'])
-                    cur_rule = merged_rule
-                    if cur_override is not None or seg_override is not None:
-                        cur_override = max(cur_override or 0, seg_override or 0)
-                else:
-                    merged.append((cur_start, cur_end, cur_rule, cur_r_end, cur_override))
-                    cur_start, cur_end, cur_rule, cur_r_end, cur_override = s, e, rule, r_end, seg_override
-            merged.append((cur_start, cur_end, cur_rule, cur_r_end, cur_override))
-
-            for m_start, m_end, rule, m_r_end, m_override in merged:
-                # Collect working days (skip Point 2 leaves)
-                working_days = []
-                curr_date = m_start
-                while curr_date <= m_end:
-                    overlap = False
-                    for p2_r, _ in point2_leaves:
-                        p2_start = max(pd.to_datetime(tf_start), pd.to_datetime(p2_r['start_date']))
-                        p2_end = min(pd.to_datetime(tf_end), pd.to_datetime(p2_r['end_date']))
-                        if p2_start <= curr_date <= p2_end:
-                            overlap = True
-                            break
-                    if not overlap:
-                        working_days.append(curr_date)
-                    curr_date += pd.Timedelta(days=1)
-
-                if working_days:
-                    blocks = []
-                    block_start = working_days[0]
-                    prev_day = working_days[0]
-                    for day in working_days[1:]:
-                        if day == prev_day + pd.Timedelta(days=1):
-                            prev_day = day
-                        else:
-                            blocks.append((block_start, prev_day))
-                            block_start = day
-                            prev_day = day
-                    blocks.append((block_start, prev_day))
-
-                    inter_weeks = 0.0
-                    if m_override is not None:
-                        inter_weeks = m_override * (len(working_days) / ((m_end - m_start).days + 1))
-                    else:
-                        for b_start, b_end in blocks:
-                            inter_weeks += calculate_t04_weeks(b_start, b_end, holidays_list)
-
-                    if seg['weeks'] > 0:
-                        red_gc = seg['req_gc'] * (rule['teaching_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
-                        red_nckh = seg['req_nckh'] * (rule['nckh_reduction_pct'] / 100.0) * (inter_weeks / seg['weeks'])
-                    else:
-                        red_gc = 0.0
-                        red_nckh = 0.0
-
-                    total_reduced_gc += red_gc
-                    total_reduced_nckh += red_nckh
-
-        for r, rule in point3_leaves:
-            desc = f"{rule['name']} ({rule['rule_type']})"
+        # Apply Point (3) leaves
+        p3_gc, p3_nckh, p3_descs = _calculate_point3_reductions(
+            point3_leaves, point2_leaves, seg_data, tf_start, tf_end, holidays_list
+        )
+        total_reduced_gc += p3_gc
+        total_reduced_nckh += p3_nckh
+        for desc in p3_descs:
             if desc not in applied_reductions:
                 applied_reductions.append(desc)
                 
@@ -722,19 +822,15 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
     df_out['trang_thai_chung'] = df_out.apply(overall_status, axis=1)
     
     # Điều 12: Bù trừ tự động giữa Giảng dạy và NCKH
-    def apply_auto_compensation(row):
-        gc = row['gc_vuot_thieu']
-        nckh = row['nckh_vuot_thieu']
-        if gc > 0 and nckh < 0:
-            transfer = min(gc, -nckh)
-            return gc - transfer, nckh + transfer
-        elif nckh > 0 and gc < 0:
-            transfer = min(nckh, -gc)
-            return gc + transfer, nckh - transfer
-        return gc, nckh
-
     if not df_out.empty:
-        df_out['gc_sau_bu_tru'], df_out['nckh_sau_bu_tru'] = zip(*df_out.apply(apply_auto_compensation, axis=1))
+        df_out['gc_sau_bu_tru'], df_out['nckh_sau_bu_tru'] = zip(*df_out.apply(
+            _apply_auto_compensation, 
+            axis=1,
+            nckh_to_gc_ratio=nckh_to_gc_ratio,
+            gc_to_nckh_ratio=gc_to_nckh_ratio,
+            min_direct_teaching_ratio=min_direct_teaching_ratio,
+            min_nckh_ratio=min_nckh_ratio
+        ))
     else:
         df_out['gc_sau_bu_tru'] = pd.Series(dtype='float64')
         df_out['nckh_sau_bu_tru'] = pd.Series(dtype='float64')
@@ -767,6 +863,13 @@ def get_conversion_limits(teacher_id, timeframe_id):
     """
     Trả về số giờ tối đa có thể quy đổi (Điều 12)
     """
+    # Load config constants
+    from database import get_setting_value
+    nckh_to_gc_ratio = float(get_setting_value('nckh_to_gc_ratio', '3.0'))
+    gc_to_nckh_ratio = float(get_setting_value('gc_to_nckh_ratio', '3.0'))
+    min_direct_teaching_ratio = float(get_setting_value('min_direct_teaching_ratio', '0.50'))
+    min_nckh_ratio = float(get_setting_value('min_nckh_ratio', '0.25'))
+
     df = calculate_teacher_metrics(teacher_id, timeframe_id)
     if df.empty: return None
     
@@ -781,49 +884,45 @@ def get_conversion_limits(teacher_id, timeframe_id):
         'warning': None
     }
     
-    # NCKH -> Giảng dạy (3 NCKH = 1 GC)
+    # NCKH -> Giảng dạy (nckh_to_gc_ratio NCKH = 1 GC)
     if row['nckh_vuot_thieu_sau_quy_doi'] > 0 and row['gc_vuot_thieu_sau_quy_doi'] < 0:
         res['can_convert_nckh_to_gc'] = True
         nckh_excess = row['nckh_vuot_thieu_sau_quy_doi']
         gc_deficit = abs(row['gc_vuot_thieu_sau_quy_doi'])
         
-        # Max NCKH to spend is limited by GC deficit AND the 50% rule (cannot reduce teaching below 50%)
-        # Rule check: The converted teaching hours (gc_gained) plus actual teaching hours shouldn't make
-        # actual teaching < 50% of original base norm. However, actual teaching is already done,
-        # so this rule means "You must have actually taught at least 50% of the norm before you can compensate the rest".
-        min_required_teaching = row['dinh_muc_gc_phai_thuc_hien'] * 0.5
+        min_required_teaching = row['dinh_muc_gc_phai_thuc_hien'] * min_direct_teaching_ratio
 
         if row['giang_day_truc_tiep'] >= min_required_teaching:
-            nckh_needed = gc_deficit * 3
+            nckh_needed = gc_deficit * nckh_to_gc_ratio
             if nckh_excess >= nckh_needed:
                 res['max_nckh_to_spend'] = nckh_needed
                 res['gc_gained'] = gc_deficit
             else:
                 res['max_nckh_to_spend'] = nckh_excess
-                res['gc_gained'] = nckh_excess / 3.0
+                res['gc_gained'] = nckh_excess / nckh_to_gc_ratio
         else:
             res['can_convert_nckh_to_gc'] = False
-            res['warning'] = f"Không đủ điều kiện: Số giờ giảng trực tiếp ({row['giang_day_truc_tiep']:.1f}) chưa đạt 50% định mức ({min_required_teaching:.1f})."
+            res['warning'] = f"Không đủ điều kiện: Số giờ giảng trực tiếp ({row['giang_day_truc_tiep']:.1f}) chưa đạt {min_direct_teaching_ratio*100:.0f}% định mức ({min_required_teaching:.1f})."
             
-    # Giảng dạy -> NCKH (1 GC = 3 NCKH)
+    # Giảng dạy -> NCKH (1 GC = gc_to_nckh_ratio NCKH)
     if row['gc_vuot_thieu_sau_quy_doi'] > 0 and row['nckh_vuot_thieu_sau_quy_doi'] < 0:
         nckh_norm = row['dinh_muc_nckh_phai_thuc_hien']
         nckh_done = row['nckh_da_thuc_hien']
         
-        if nckh_done >= (nckh_norm * 0.25):
+        if nckh_done >= (nckh_norm * min_nckh_ratio):
             res['can_convert_gc_to_nckh'] = True
             gc_excess = row['gc_vuot_thieu_sau_quy_doi']
             nckh_deficit = abs(row['nckh_vuot_thieu_sau_quy_doi'])
             
-            gc_needed = nckh_deficit / 3.0
+            gc_needed = nckh_deficit / gc_to_nckh_ratio
             if gc_excess >= gc_needed:
                 res['max_gc_to_spend'] = gc_needed
                 res['nckh_gained'] = nckh_deficit
             else:
                 res['max_gc_to_spend'] = gc_excess
-                res['nckh_gained'] = gc_excess * 3.0
+                res['nckh_gained'] = gc_excess * gc_to_nckh_ratio
         else:
-            res['warning'] = "Không đủ điều kiện: Phải hoàn thành tối thiểu 25% định mức NCKH mới được quy đổi Giảng dạy bù sang NCKH."
+            res['warning'] = f"Không đủ điều kiện: Phải hoàn thành tối thiểu {min_nckh_ratio*100:.0f}% định mức NCKH mới được quy đổi Giảng dạy bù sang NCKH."
             
     return res
 

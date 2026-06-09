@@ -130,57 +130,55 @@ with col2:
             col_act1, col_act2 = st.columns(2)
             
             if col_act1.button("✅ Phê duyệt & Đưa vào hệ thống", type="primary", key="btn_approve_batch"):
-                cursor = conn.cursor()
                 try:
-                    cursor.execute("BEGIN TRANSACTION")
-                    decided_by = st.session_state["admin_username"]
-                    now_str = datetime.now().isoformat()
-                    
-                    if action == "create":
-                        cursor.execute("""
-                            INSERT INTO reduction_rules (name, rule_type, teaching_reduction_pct, nckh_reduction_pct)
-                            VALUES (?, ?, ?, ?)
-                        """, (name, rule_type, teaching_pct, nckh_pct))
-                    elif action == "update":
-                        cursor.execute("""
-                            UPDATE reduction_rules
-                            SET name = ?, teaching_reduction_pct = ?, nckh_reduction_pct = ?
-                            WHERE id = ?
-                        """, (name, teaching_pct, nckh_pct, rule_id))
-                    elif action == "delete":
-                        cursor.execute("DELETE FROM reduction_rules WHERE id = ?", (rule_id,))
+                    with conn:
+                        cursor = conn.cursor()
+                        decided_by = st.session_state["admin_username"]
+                        now_str = datetime.now().isoformat()
                         
-                    # Update batch status
-                    cursor.execute("""
-                        UPDATE import_batches 
-                        SET status = 'approved', decided_at = ?, decided_by = ?
-                        WHERE id = ?
-                    """, (now_str, decided_by, selected_batch_id))
-                    
-                    cursor.execute("COMMIT")
+                        if action == "create":
+                            cursor.execute("""
+                                INSERT INTO reduction_rules (name, rule_type, teaching_reduction_pct, nckh_reduction_pct)
+                                VALUES (?, ?, ?, ?)
+                            """, (name, rule_type, teaching_pct, nckh_pct))
+                        elif action == "update":
+                            cursor.execute("""
+                                UPDATE reduction_rules
+                                SET name = ?, teaching_reduction_pct = ?, nckh_reduction_pct = ?
+                                WHERE id = ?
+                            """, (name, teaching_pct, nckh_pct, rule_id))
+                        elif action == "delete":
+                            cursor.execute("DELETE FROM reduction_rules WHERE id = ?", (rule_id,))
+                            
+                        # Update batch status
+                        cursor.execute("""
+                            UPDATE import_batches 
+                            SET status = 'approved', decided_at = ?, decided_by = ?
+                            WHERE id = ?
+                        """, (now_str, decided_by, selected_batch_id))
+                        
                     st.success("✅ Đã phê duyệt và cập nhật dữ liệu thành công!")
                     st.session_state["selected_batch_id"] = None
                     st.rerun()
                 except Exception as e:
-                    cursor.execute("ROLLBACK")
                     st.error(f"Lỗi khi phê duyệt: {str(e)}")
             
             if col_act2.button("❌ Từ chối yêu cầu", key="btn_reject_batch"):
                 if not rejection_reason.strip():
                     st.error("Vui lòng nhập lý do từ chối.")
                 else:
-                    cursor = conn.cursor()
                     try:
-                        decided_by = st.session_state["admin_username"]
-                        now_str = datetime.now().isoformat()
-                        
-                        cursor.execute("""
-                            UPDATE import_batches 
-                            SET status = 'rejected', rejection_reason = ?, decided_at = ?, decided_by = ?
-                            WHERE id = ?
-                        """, (rejection_reason, now_str, decided_by, selected_batch_id))
-                        
-                        conn.commit()
+                        with conn:
+                            cursor = conn.cursor()
+                            decided_by = st.session_state["admin_username"]
+                            now_str = datetime.now().isoformat()
+                            
+                            cursor.execute("""
+                                UPDATE import_batches 
+                                SET status = 'rejected', rejection_reason = ?, decided_at = ?, decided_by = ?
+                                WHERE id = ?
+                            """, (rejection_reason, now_str, decided_by, selected_batch_id))
+                            
                         st.success("❌ Đã từ chối lô dữ liệu và phản hồi lại Đơn vị.")
                         st.session_state["selected_batch_id"] = None
                         st.rerun()
@@ -252,14 +250,14 @@ with col2:
                 col_act1, col_act2 = st.columns(2)
                 
                 if col_act1.button("✅ Phê duyệt & Đưa vào hệ thống", type="primary", key="btn_approve_batch"):
-                    cursor = conn.cursor()
                     try:
-                        cursor.execute("BEGIN TRANSACTION")
-                        
-                        decided_by = st.session_state["admin_username"]
-                        now_str = datetime.now().isoformat()
-                        
-                        # Core commit logic per domain
+                        with conn:
+                            cursor = conn.cursor()
+                            
+                            decided_by = st.session_state["admin_username"]
+                            now_str = datetime.now().isoformat()
+                            
+                            # Core commit logic per domain
                         if domain == "teachers":
                             for _, r in staging_df.iterrows():
                                 marker = r["diff_marker"]
@@ -489,33 +487,31 @@ with col2:
                         # Delete staging rows
                         cursor.execute(f"DELETE FROM {staging_table} WHERE batch_id = ?", (selected_batch_id,))
                         
-                        cursor.execute("COMMIT")
                         st.success("✅ Đã phê duyệt và cập nhật dữ liệu thành công!")
                         st.session_state["selected_batch_id"] = None
                         st.rerun()
                     except Exception as e:
-                        cursor.execute("ROLLBACK")
                         st.error(f"Lỗi khi phê duyệt: {str(e)}")
     
                 if col_act2.button("❌ Từ chối yêu cầu", key="btn_reject_batch"):
                     if not rejection_reason.strip():
                         st.error("Vui lòng nhập lý do từ chối.")
                     else:
-                        cursor = conn.cursor()
                         try:
-                            decided_by = st.session_state["admin_username"]
-                            now_str = datetime.now().isoformat()
-                            
-                            cursor.execute("""
-                                UPDATE import_batches 
-                                SET status = 'rejected', rejection_reason = ?, decided_at = ?, decided_by = ?
-                                WHERE id = ?
-                            """, (rejection_reason, now_str, decided_by, selected_batch_id))
-                            
-                            # Delete staging rows
-                            cursor.execute(f"DELETE FROM {staging_table} WHERE batch_id = ?", (selected_batch_id,))
-                            
-                            conn.commit()
+                            with conn:
+                                cursor = conn.cursor()
+                                decided_by = st.session_state["admin_username"]
+                                now_str = datetime.now().isoformat()
+                                
+                                cursor.execute("""
+                                    UPDATE import_batches 
+                                    SET status = 'rejected', rejection_reason = ?, decided_at = ?, decided_by = ?
+                                    WHERE id = ?
+                                """, (rejection_reason, now_str, decided_by, selected_batch_id))
+                                
+                                # Delete staging rows
+                                cursor.execute(f"DELETE FROM {staging_table} WHERE batch_id = ?", (selected_batch_id,))
+                                
                             st.success("❌ Đã từ chối lô dữ liệu và phản hồi lại Đơn vị.")
                             st.session_state["selected_batch_id"] = None
                             st.rerun()

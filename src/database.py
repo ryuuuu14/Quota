@@ -451,13 +451,27 @@ def init_db():
 
 def cleanup_old_batches():
     """
-    Dọn dẹp các lô nhập dữ liệu tạm thời (staging batches/records) cũ hơn 30 ngày.
+    Dọn dẹp các lô nhập dữ liệu tạm thời (staging batches/records) cũ hơn 30 ngày và đã được xử lý (không ở trạng thái pending).
     """
     conn = get_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM import_batches WHERE created_at < datetime('now', '-30 days')")
-        conn.commit()
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, domain FROM import_batches WHERE status != 'pending' AND created_at < datetime('now', '-30 days')")
+            batches_to_delete = cursor.fetchall()
+            
+            if batches_to_delete:
+                batch_ids = [row[0] for row in batches_to_delete]
+                for b_id, domain in batches_to_delete:
+                    if domain in ('teachers', 'activities', 'schedule', 'aggregate_totals'):
+                        staging_table = f"staging_{domain}"
+                        try:
+                            cursor.execute(f"DELETE FROM {staging_table} WHERE batch_id = ?", (b_id,))
+                        except Exception:
+                            pass
+                
+                placeholders = ','.join('?' for _ in batch_ids)
+                cursor.execute(f"DELETE FROM import_batches WHERE id IN ({placeholders})", batch_ids)
     except Exception as e:
         print(f"Error during cleanup of old batches: {e}")
     finally:
@@ -472,6 +486,13 @@ def seed_initial_data():
         cursor.execute("INSERT INTO settings (key, value, description) VALUES ('admin_to_teaching_ratio', '3', '3 giờ hành chính = 1 giờ chuẩn')")
         cursor.execute("INSERT INTO settings (key, value, description) VALUES ('standard_academic_weeks', '44', 'Số tuần tiêu chuẩn trong một năm học')")
         cursor.execute("INSERT INTO settings (key, value, description) VALUES ('base_salary', '2340000', 'Lương cơ sở (VNĐ/tháng) — NĐ 73/2024/NĐ-CP')")
+    except: pass
+    
+    try:
+        cursor.execute("INSERT INTO settings (key, value, description) VALUES ('nckh_to_gc_ratio', '3.0', 'Tỷ lệ quy đổi NCKH sang Giảng dạy (số giờ NCKH cần để bù 1 giờ GC)')")
+        cursor.execute("INSERT INTO settings (key, value, description) VALUES ('gc_to_nckh_ratio', '3.0', 'Tỷ lệ quy đổi Giảng dạy sang NCKH (số giờ NCKH nhận được từ 1 giờ GC bù)')")
+        cursor.execute("INSERT INTO settings (key, value, description) VALUES ('min_direct_teaching_ratio', '0.50', 'Tỷ lệ giảng dạy trực tiếp tối thiểu để được bù (Điều 3.6)')")
+        cursor.execute("INSERT INTO settings (key, value, description) VALUES ('min_nckh_ratio', '0.25', 'Tỷ lệ hoàn thành NCKH tối thiểu để được quy đổi GC bù (Điều 12.2)')")
     except: pass
         
     try:
@@ -489,14 +510,48 @@ def seed_initial_data():
         try: cursor.execute("INSERT INTO titles (name, base_teaching_hours_natural, base_teaching_hours_social, base_nckh_hours) VALUES (?, ?, ?, ?)", t)
         except: pass
 
-    # Seed Departments
-    departments = [
+    # Seed Departments — Legacy generic categories (backward compat with existing calcs/tests)
+    legacy_departments = [
         ('Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học', 1, '1111'),
         ('Nhà giáo giảng dạy thực hành', 1, '2222'),
         ('Chính trị, Pháp luật, Nghiệp vụ', 1, '3333'),
-        ('Công tác tại phòng, trung tâm', 0, '4444')
+        ('Công tác tại phòng, trung tâm', 0, '4444'),
     ]
-    for name, is_teaching, code in departments:
+    # Official departments of Trường Đại học An ninh nhân dân
+    official_departments = [
+        ('Ban Giám hiệu',                                          0, 'BGH'),
+        # 12 Khoa (teaching)
+        ('Khoa Lý luận chính trị và Khoa học xã hội nhân văn',     1, 'K1'),
+        ('Khoa Luật',                                               1, 'K2'),
+        ('Khoa Nghiệp vụ cơ bản',                                  1, 'K3'),
+        ('Khoa Quản lý nhà nước về an ninh, trật tự',              1, 'K4'),
+        ('Khoa Phản gián',                                          1, 'K5'),
+        ('Khoa An ninh xã hội',                                     1, 'K6'),
+        ('Khoa An ninh điều tra',                                   1, 'K7'),
+        ('Khoa An ninh chính trị nội bộ',                           1, 'K8'),
+        ('Khoa An ninh kinh tế',                                    1, 'K9'),
+        ('Khoa Ngoại ngữ - Tin học',                                1, 'K10'),
+        ('Khoa LLCT & KHXHNV',                                      1, 'K11'),
+        ('Khoa Quân sự, võ thuật, thể dục thể thao',               1, 'K12'),
+        # 5 Phòng (administrative)
+        ('Phòng Hành chính tổng hợp',                               0, 'P1'),
+        ('Phòng Chính trị',                                         0, 'P2'),
+        ('Phòng Quản lý đào tạo và bồi dưỡng nâng cao',           0, 'P3'),
+        ('Phòng Khảo thí và Đảm bảo chất lượng đào tạo',          0, 'P4'),
+        ('Phòng Quản lý nghiên cứu khoa học',                      0, 'P5'),
+        # Dummy-coded units
+        ('Phòng Hậu cần',                                          0, 'P6'),
+        ('Phòng Tổ chức cán bộ',                                   0, 'P7'),
+        ('Trung tâm Ngoại ngữ - Tin học',                          0, 'T1'),
+        ('Trung tâm Thông tin Khoa học và Thư viện',               0, 'T2'),
+        ('Trung tâm Ứng dụng Công nghệ thông tin',                0, 'T3'),
+        ('Đoàn Thanh niên Cộng sản Hồ Chí Minh',                  0, 'Q1'),
+        ('Hội Phụ nữ',                                             0, 'Q2'),
+        ('Công đoàn',                                               0, 'Q3'),
+        ('Hội Cựu chiến binh',                                     0, 'Q4'),
+    ]
+    all_departments = legacy_departments + official_departments
+    for name, is_teaching, code in all_departments:
         try:
             cursor.execute("INSERT INTO departments (name, is_teaching_dept, dept_code) VALUES (?, ?, ?)", (name, is_teaching, code))
         except Exception:
@@ -582,6 +637,21 @@ def seed_academic_holidays():
     (timeframe_id, name, start_date, end_date) VALUES (?, ?, ?, ?)
     """
     pass
+
+def get_setting_value(key, default_value=None):
+    """Lấy giá trị cấu hình từ bảng settings theo key, trả về default_value nếu không tồn tại."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+    except Exception as e:
+        print(f"Error reading setting {key}: {e}")
+    finally:
+        conn.close()
+    return default_value
 
 def get_base_salary(cursor=None):
     """Get base salary from settings, default 2,340,000 VND."""

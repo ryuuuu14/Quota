@@ -16,5 +16,8 @@
       "type": "local",
       "command": ["F:\\Python\\python.exe", ".opencode\\persistproc_stdio.py"]
     }
+  },
+  "compaction": {
+    "auto": false
   }
 }

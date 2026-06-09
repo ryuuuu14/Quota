@@ -120,7 +120,7 @@ def diff_activities(df: pd.DataFrame, conn, timeframe_name: str) -> pd.DataFrame
     cursor = conn.cursor()
     cursor.execute("""
         SELECT a.id, a.teacher_id, act.name as activity_type_name, a.log_date, a.quantity
-        FROM activities a
+        FROM activity_logs a
         JOIN activity_types act ON a.activity_type_id = act.id
         JOIN timeframes tf ON a.timeframe_id = tf.id
         WHERE tf.name = ?

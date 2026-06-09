@@ -1,98 +1,188 @@
-import difflib
+import functools
+import logging
+import os
+from pathlib import Path
+from typing import List, Dict, Optional, Union, Literal
 
-SYNONYMS = {
-    "Mã GV": ["msgv", "ma gv", "ma_giang_vien", "magv", "mã giảng viên", "mã cán bộ", "macb", "ma cb", "mã gv (khóa)"],
-    "Họ tên": ["ho ten", "ho_ten", "fullname", "name", "họ tên", "tên", "tên nhà giáo", "nhà giáo", "họ và tên", "họ tên (khóa)"],
-    "Tên loại hoạt động": ["hoat dong", "loai hoat dong", "tên hoạt động", "hoạt động", "loại hoạt động"],
-    "Ngày thực hiện": ["ngay", "ngay thực hiện", "ngày thực hiện", "ngày", "date", "log date", "ngay_thuc_hien"],
-    "Số lượng": ["so luong", "qty", "quantity", "số lượng", "số giờ", "hours", "so_luong"],
-    "Cấp lớp": ["cap lop", "cấp lớp", "trình độ", "hệ đào tạo", "bậc đào tạo", "cấp/lớp"],
-    "Loại lớp": ["loai lop", "loại hình", "hình thức", "loại lớp", "class_type"],
-    "Số học viên": ["si so", "sĩ số", "số sv", "sv", "học viên", "số học viên", "so_hoc_vien", "student count", "sỉ số"],
-    "Cấp đề tài": ["cap de tai", "cấp đề tài", "cấp", "cấp nckh", "nckh level", "cấp đề tài/bài báo"],
-    "Tác giả chính": ["main author", "is main", "tác giả chính", "tg chính", "vai trò"],
-    "Giảng dạy tiếng nước ngoài": ["foreign language", "tiếng nước ngoài", "dạy tiếng anh", "dạy bằng tiếng nước ngoài"],
-    "Ghi chú": ["note", "ghi chu", "ghi chú", "description", "mô tả"],
-    # For Schedule
-    "Mã GV (Khóa)": ["msgv", "ma gv", "ma_giang_vien", "magv", "mã giảng viên", "mã gv", "mã gv (khóa)"],
-    "Họ tên (Khóa)": ["ho ten", "ho_ten", "fullname", "name", "họ tên", "họ và tên", "họ tên (khóa)"],
-    "Chức danh (Khóa)": ["chuc danh", "chức danh", "chức danh (khóa)"],
-    "Đơn vị (Khóa)": ["don vi", "đơn vị", "đơn vị (khóa)"],
-    "Tên môn học": ["mon hoc", "tên môn học", "môn học", "subject", "tên môn"],
-    "Loại": ["loai", "loại", "loại môn", "loại hình"],
-    "Nhóm": ["nhom", "nhóm", "group", "class group"],
-    "Sỉ số": ["si so", "sĩ số", "số sv", "sv", "học viên", "sĩ số lớp"],
-    "Tiết quy đổi": ["tiet quy doi", "tiết quy đổi", "tiết quy đổi", "giờ quy đổi", "gc quy đổi"],
-    "Hệ số tín chỉ": ["he so tin chi", "hệ số tín chỉ", "tín chỉ", "credits"],
-    # For Overrides
-    "Tổng GC thực hiện": ["tong gc", "tổng gc thực hiện", "tổng giờ chuẩn", "tổng gc đã thực hiện", "tong_gc_da_thuc_hien", "tổng gc"],
-    "NCKH thực hiện": ["nckh", "nckh thực hiện", "nckh đã thực hiện", "giờ nckh", "nckh_da_thuc_hien", "nckh"],
-    "Số giờ miễn giảm": ["mien giam", "số giờ miễn giảm", "giờ miễn giảm", "miễn giảm", "so_gio_duoc_mien_giam", "miễn giảm gc"],
-    "Định mức GC": ["dinh muc", "định mức gc", "định mức", "dinh_muc_gc_phai_thuc_hien", "định mức giảng dạy"]
-}
+from .models import MatchResult
+from .synonym_registry import SynonymRegistry, LoadResult
+from .matchers import CompositeMatcher
 
-def normalize_string(s: str) -> str:
-    if not s:
-        return ""
-    # Lowercase, strip whitespace, remove punctuation and common symbols
-    s = str(s).lower().strip()
-    # Normalize unicode to decompose accents if possible (optional simple normalization)
-    import unicodedata
-    s = u"".join([c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)])
-    return s.replace("_", " ").replace("-", " ")
+logger = logging.getLogger(__name__)
 
-def fuzzy_match_columns(excel_headers: list, expected_columns: list) -> dict:
-    """
-    Maps each expected column to the best matching Excel header.
-    Returns: dict of {expected_column: excel_header_or_None}
-    """
-    mappings = {}
-    normalized_excel_headers = {normalize_string(h): h for h in excel_headers if h}
-
-    for expected in expected_columns:
-        norm_expected = normalize_string(expected)
-        
-        # 1. Direct exact or normalized match
-        if norm_expected in normalized_excel_headers:
-            mappings[expected] = normalized_excel_headers[norm_expected]
-            continue
-
-        # 2. Check synonyms
-        syns = SYNONYMS.get(expected, [])
-        found_syn = False
-        for syn in syns:
-            norm_syn = normalize_string(syn)
-            if norm_syn in normalized_excel_headers:
-                mappings[expected] = normalized_excel_headers[norm_syn]
-                found_syn = True
-                break
-        
-        if found_syn:
-            continue
-
-        # 3. Fallback to difflib get_close_matches on normalized strings
-        matches = difflib.get_close_matches(norm_expected, list(normalized_excel_headers.keys()), n=1, cutoff=0.5)
-        if matches:
-            mappings[expected] = normalized_excel_headers[matches[0]]
-            continue
-            
-        # 4. Fallback search inside synonym lists with close matches
-        for syn in syns:
-            norm_syn = normalize_string(syn)
-            matches = difflib.get_close_matches(norm_syn, list(normalized_excel_headers.keys()), n=1, cutoff=0.6)
-            if matches:
-                mappings[expected] = normalized_excel_headers[matches[0]]
-                found_syn = True
-                break
-        
-        if not found_syn:
-            mappings[expected] = None
-
-    return mappings
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_CONFIG_PATH = str(_PROJECT_ROOT / "config" / "synonyms.yaml")
+_MATCHER_CONFIG_PATH = str(_PROJECT_ROOT / "config" / "matcher_config.yaml")
+_registry_cache: Optional[SynonymRegistry] = None
 
 
-def suggest_mappings(excel_headers: list, expected_columns: list) -> dict:
-    """
-    Alias for fuzzy_match_columns used by the UI page.
-    """
-    return fuzzy_match_columns(excel_headers, expected_columns)
+def _get_registry() -> Optional[SynonymRegistry]:
+    global _registry_cache
+    if _registry_cache is None:
+        result = SynonymRegistry.load(_CONFIG_PATH)
+        if result.success:
+            _registry_cache = result.registry
+        else:
+            logger.error(f"Failed to load synonym registry: {result.error}")
+            return None
+    return _registry_cache
+
+
+def _clear_registry_cache():
+    global _registry_cache
+    _registry_cache = None
+
+
+def reload_synonyms() -> LoadResult:
+    _clear_registry_cache()
+    return SynonymRegistry.load(_CONFIG_PATH)
+
+
+def match_columns_v2(
+    excel_headers: List[str],
+    expected_columns: List[str],
+    required_columns: Optional[List[str]] = None,
+    template_mapping: Optional[Dict[str, str]] = None,
+    template_mode: Literal["override", "fill_gaps", "merge_confidence", "separate"] = "merge_confidence",
+    api_version: int = 2
+) -> MatchResult:
+    registry = _get_registry()
+    if registry is None:
+        return MatchResult(
+            mappings=[],
+            unmatched_excel_headers=[],
+            duplicate_warnings=[],
+            missing_required=[],
+            synonym_config_hash="",
+            api_version=api_version,
+            error="Synonym registry not loaded"
+        )
+
+    matcher = CompositeMatcher(registry, registry.matcher_config.model_dump())
+    return matcher.match_all(
+        excel_headers=excel_headers,
+        expected_columns=expected_columns,
+        required_columns=required_columns,
+        template_mapping=template_mapping,
+        template_mode=template_mode
+    )
+
+
+def match_columns_v1(
+    excel_headers: List[str],
+    expected_columns: List[str]
+) -> Dict[str, Optional[str]]:
+    result = match_columns_v2(excel_headers, expected_columns)
+    return result.to_legacy_dict()
+
+
+def suggest_mappings(excel_headers: List[str], expected_columns: List[str]) -> Dict[str, Optional[str]]:
+    return match_columns_v1(excel_headers, expected_columns)
+
+
+def fuzzy_match_columns(excel_headers: List[str], expected_columns: List[str]) -> Dict[str, Optional[str]]:
+    return match_columns_v1(excel_headers, expected_columns)
+
+
+@functools.lru_cache(maxsize=32)
+def _cached_match_v2(
+    headers_tuple: tuple,
+    expected_tuple: tuple,
+    required_tuple: tuple,
+    template_tuple: tuple,
+    template_mode: str,
+    api_version: int
+) -> MatchResult:
+    return match_columns_v2(
+        excel_headers=list(headers_tuple),
+        expected_columns=list(expected_tuple),
+        required_columns=list(required_tuple) if required_tuple else None,
+        template_mapping=dict(template_tuple) if template_tuple else None,
+        template_mode=template_mode,
+        api_version=api_version
+    )
+
+
+def match_columns(
+    excel_headers: List[str],
+    expected_columns: List[str],
+    required_columns: Optional[List[str]] = None,
+    template_mapping: Optional[Dict[str, str]] = None,
+    template_mode: Literal["override", "fill_gaps", "merge_confidence", "separate"] = "merge_confidence",
+    return_format: Literal["legacy", "structured"] = "legacy",
+    api_version: int = 2
+) -> Union[Dict[str, Optional[str]], MatchResult]:
+    if return_format == "legacy":
+        return match_columns_v1(excel_headers, expected_columns)
+
+    headers_tuple = tuple(excel_headers)
+    expected_tuple = tuple(expected_columns)
+    required_tuple = tuple(required_columns) if required_columns else ()
+    template_tuple = tuple(template_mapping.items()) if template_mapping else ()
+
+    return _cached_match_v2(
+        headers_tuple,
+        expected_tuple,
+        required_tuple,
+        template_tuple,
+        template_mode,
+        api_version
+    )
+
+
+def audit_synonyms(db_connection=None) -> Dict:
+    registry = _get_registry()
+    if registry is None:
+        return {"error": "Registry not loaded", "drift": True}
+
+    from database import get_connection
+    if db_connection is None:
+        conn = get_connection()
+    else:
+        conn = db_connection
+
+    try:
+        import pandas as pd
+        df_activities = pd.read_sql_query("SELECT * FROM activity_types", conn)
+        df_timeframes = pd.read_sql_query("SELECT * FROM timeframes", conn)
+
+        required_activity_cols = [
+            "Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng",
+            "Cấp lớp", "Loại lớp", "Số học viên", "Cấp đề tài",
+            "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"
+        ]
+        required_aggregate_cols = [
+            "Mã GV", "Tổng GC thực hiện", "NCKH thực hiện",
+            "Số giờ miễn giảm", "Định mức GC", "Ghi chú"
+        ]
+
+        all_expected = set(required_activity_cols + required_aggregate_cols)
+        synonym_keys = set(registry.expected_columns)
+
+        missing_in_synonyms = all_expected - synonym_keys
+        extra_in_synonyms = synonym_keys - all_expected
+
+        return {
+            "drift": len(missing_in_synonyms) > 0 or len(extra_in_synonyms) > 0,
+            "missing_in_synonyms": sorted(missing_in_synonyms),
+            "extra_in_synonyms": sorted(extra_in_synonyms),
+            "synonym_config_hash": registry.config_hash,
+            "total_synonym_groups": len(synonym_keys)
+        }
+    finally:
+        if db_connection is None:
+            conn.close()
+
+
+if __name__ == "__main__":
+    import sys
+    import json
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+    if len(sys.argv) > 1 and sys.argv[1] == "audit":
+        result = audit_synonyms()
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        sys.exit(1 if result.get("drift") else 0)

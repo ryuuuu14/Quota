@@ -12,9 +12,16 @@ def is_port_open(host, port):
         except:
             return False
 
+has_playwright = False
+try:
+    import pytest_playwright
+    has_playwright = True
+except ImportError:
+    pass
+
 pytestmark = pytest.mark.skipif(
-    not is_port_open("localhost", 8501),
-    reason="Streamlit server is not running on localhost:8501"
+    not has_playwright or not is_port_open("localhost", 8501),
+    reason="pytest-playwright is not installed or Streamlit server is not running on localhost:8501"
 )
 
 def login_as_admin(page: Page):

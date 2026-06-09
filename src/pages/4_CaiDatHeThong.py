@@ -25,9 +25,9 @@ conn = get_connection()
 
 # Tab setup
 tabs = st.tabs([
-    "Năm học", "Đơn vị", "Chức danh", "Chức vụ", "Miễn giảm", "Hoạt động"
+    "Năm học", "Đơn vị", "Chức danh", "Chức vụ", "Miễn giảm", "Hoạt động", "Thông số quy đổi"
 ])
-tab1, tab2, tab3, tab4, tab5, tab6 = tabs
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = tabs
 
 def request_reduction_rule_change(action, rule_id, name, rule_type, teaching_pct, nckh_pct):
     import json
@@ -258,6 +258,7 @@ if tab2:
                 badge_html = f'<span class="md-chip md-chip-{"green" if row["is_teaching_dept"] else "primary"}">{type_str}</span>'
                 col1, col2 = st.columns([8, 2])
                 with col1:
+                    code_prefix = f"[{row['dept_code']}] " if 'dept_code' in row and row['dept_code'] else ""
                     st.markdown(f"""
     <div style="
         background-color: var(--md-surface-container-lowest);
@@ -271,7 +272,7 @@ if tab2:
         justify-content: space-between;
     ">
         <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="color: var(--md-on-surface); font-weight: 600;">{row['name']}</span>
+            <span style="color: var(--md-on-surface); font-weight: 600;">{code_prefix}{row['name']}</span>
             {badge_html}
         </div>
     </div>
@@ -283,18 +284,22 @@ if tab2:
             with st.expander("Thêm Đơn vị mới"):
                 with st.form("add_dept_form"):
                     dept_name = st.text_input("Tên Đơn vị")
+                    dept_code = st.text_input("Mã Đơn vị (ví dụ: K10, P3, BGH)")
                     is_teaching = st.checkbox("Là đơn vị có giảng dạy (Khoa, Bộ môn)", value=True)
         
                     if st.form_submit_button("Thêm"):
-                        try:
-                            cursor = conn.cursor()
-                            cursor.execute("INSERT INTO departments (name, is_teaching_dept) VALUES (?, ?)",
-                                           (dept_name, int(is_teaching)))
-                            conn.commit()
-                            st.success("Thêm thành công!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Lỗi: {e}")
+                        if not dept_name.strip():
+                            st.error("Tên Đơn vị không được để trống.")
+                        else:
+                            try:
+                                cursor = conn.cursor()
+                                cursor.execute("INSERT INTO departments (name, is_teaching_dept, dept_code) VALUES (?, ?, ?)",
+                                               (dept_name.strip(), int(is_teaching), dept_code.strip() or None))
+                                conn.commit()
+                                st.success("Thêm thành công!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Lỗi: {e}")
 
 with tab3:
     st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">badge</span> Định mức Cơ bản theo Chức danh</h3>', unsafe_allow_html=True)
@@ -505,6 +510,7 @@ if tab6:
         st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">list_alt</span> Danh mục Loại Hoạt động</h3>', unsafe_allow_html=True)
     
         df_acts = pd.read_sql_query("SELECT * FROM activity_types", conn)
+
         if df_acts.empty:
             render_empty_state("Chưa có loại hoạt động nào.")
         else:
@@ -554,5 +560,68 @@ if tab6:
                             st.rerun()
                         except Exception as e:
                             st.error(f"Lỗi: {e}")
+
+        # ── Tab 8: Thông số quy đổi ──
+if tab7:
+    with tab7:
+        st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">settings_applications</span> Tham số quy đổi & Cấu hình</h3>', unsafe_allow_html=True)
+        st.markdown("""
+        <p style="color: var(--md-on-surface-variant); font-size: 14px;">
+        Các thông số toàn cục dùng cho các công thức tính định mức, quy đổi giờ chuẩn, bù trừ nghĩa vụ và tính lương giảng dạy vượt giờ.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        # Load all settings
+        settings_dict = {}
+        df_settings = pd.read_sql_query("SELECT key, value, description FROM settings", conn)
+        for _, r in df_settings.iterrows():
+            settings_dict[r['key']] = (r['value'], r['description'])
+            
+        # Helper to get current setting value safely
+        def get_sett(k, default):
+            return settings_dict.get(k, (default, ""))[0]
+            
+        with st.form("update_global_settings"):
+            st.subheader("Thông số thời gian & định mức chuẩn")
+            col1, col2 = st.columns(2)
+            total_yearly_hours = col1.number_input("Tổng giờ hành chính hàng năm (tính định mức quy đổi chức vụ/thai sản)", value=int(get_sett('total_yearly_hours', '1760')), step=10, disabled=read_only)
+            standard_academic_weeks = col2.number_input("Số tuần tiêu chuẩn trong một năm học", value=int(get_sett('standard_academic_weeks', '44')), step=1, disabled=read_only)
+            
+            col3, col4 = st.columns(2)
+            admin_to_teaching_ratio = col3.number_input("Tỷ lệ quy đổi hành chính (x giờ hành chính = 1 giờ chuẩn)", value=float(get_sett('admin_to_teaching_ratio', '3.0')), step=0.5, disabled=read_only)
+            base_salary = col4.number_input("Lương cơ sở (VNĐ/tháng) — NĐ 73/2024", value=int(get_sett('base_salary', '2340000')), step=10000, disabled=read_only)
+            
+            st.subheader("Quy tắc bù trừ & quy đổi nghĩa vụ (Điều 12)")
+            col5, col6 = st.columns(2)
+            nckh_to_gc_ratio = col5.number_input("Tỷ lệ quy đổi NCKH sang Giảng dạy (x giờ NCKH = 1 giờ giảng dạy)", value=float(get_sett('nckh_to_gc_ratio', '3.0')), step=0.5, disabled=read_only)
+            gc_to_nckh_ratio = col6.number_input("Tỷ lệ quy đổi Giảng dạy sang NCKH (1 giờ giảng dạy = x giờ NCKH)", value=float(get_sett('gc_to_nckh_ratio', '3.0')), step=0.5, disabled=read_only)
+            
+            col7, col8 = st.columns(2)
+            min_direct_teaching_ratio = col7.number_input("Tỷ lệ giảng trực tiếp tối thiểu để quy đổi (%)", value=float(get_sett('min_direct_teaching_ratio', '0.50')) * 100.0, step=5.0, disabled=read_only) / 100.0
+            min_nckh_ratio = col8.number_input("Tỷ lệ hoàn thành NCKH tối thiểu để được bù (%)", value=float(get_sett('min_nckh_ratio', '0.25')) * 100.0, step=5.0, disabled=read_only) / 100.0
+            
+            if not read_only:
+                if st.form_submit_button("Lưu cấu hình", type="primary"):
+                    try:
+                        cursor = conn.cursor()
+                        updates = [
+                            ('total_yearly_hours', str(total_yearly_hours)),
+                            ('standard_academic_weeks', str(standard_academic_weeks)),
+                            ('admin_to_teaching_ratio', str(admin_to_teaching_ratio)),
+                            ('base_salary', str(base_salary)),
+                            ('nckh_to_gc_ratio', str(nckh_to_gc_ratio)),
+                            ('gc_to_nckh_ratio', str(gc_to_nckh_ratio)),
+                            ('min_direct_teaching_ratio', f"{min_direct_teaching_ratio:.2f}"),
+                            ('min_nckh_ratio', f"{min_nckh_ratio:.2f}")
+                        ]
+                        for k, v in updates:
+                            cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (v, k))
+                        conn.commit()
+                        st.success("Cập nhật thông số hệ thống thành công!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi: {e}")
+            else:
+                st.form_submit_button("Lưu cấu hình", disabled=True)
 
 conn.close()
