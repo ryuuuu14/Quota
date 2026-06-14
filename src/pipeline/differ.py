@@ -1,7 +1,133 @@
 import pandas as pd
 import json
+from deepdiff import DeepDiff
 from database import get_connection
 from pipeline.validator import safe_float, parse_bool
+
+VALID_DOMAINS = {"teachers", "activities", "schedule", "aggregate_totals", "reduction_rules"}
+
+def _serialize_for_deepdiff(val):
+    """Convert NaN/NaT/None to None for clean deepdiff comparison."""
+    import math
+    if isinstance(val, float) and (math.isnan(val) or val != val):
+        return None
+    if val is None or (isinstance(val, pd.Series) and val.empty):
+        return None
+    if isinstance(val, pd.Timestamp):
+        return val.isoformat()
+    try:
+        if pd.isna(val):
+            return None
+    except Exception:
+        pass
+    return val
+
+def _rows_to_comparable(df, key_cols):
+    """Convert a DataFrame to a dict of dicts keyed by natural key for deepdiff."""
+    result = {}
+    for idx, row in df.iterrows():
+        key = tuple(str(_serialize_for_deepdiff(row.get(k, ""))).strip().lower() for k in key_cols)
+        record = {col: _serialize_for_deepdiff(row[col]) for col in df.columns}
+        result[key] = record
+    return result
+
+def enhanced_diff(staging_df, prod_df, key_cols, domain):
+    """
+    Produce a structured diff_json dict using DeepDiff.
+
+    Parameters
+    ----------
+    staging_df : pd.DataFrame
+        Incoming data (from staging table or parsed Excel).
+    prod_df : pd.DataFrame
+        Current production records as a DataFrame.
+    key_cols : list of str
+        Column names forming the natural key.
+    domain : str
+        Must be in VALID_DOMAINS.
+
+    Returns
+    -------
+    dict with keys:
+        - diff_version (int): schema version for cache invalidation
+        - domain (str)
+        - stats (dict): counts of NEW, UPDATE, DELETE, SKIP
+        - diffs (dict): keyed by row identifier, each containing diff details
+    """
+    if domain not in VALID_DOMAINS:
+        raise ValueError(f"Invalid domain '{domain}'. Must be one of {VALID_DOMAINS}")
+
+    staging_map = _rows_to_comparable(staging_df, key_cols)
+    prod_map = _rows_to_comparable(prod_df, key_cols)
+
+    staging_keys = set(staging_map.keys())
+    prod_keys = set(prod_map.keys())
+
+    diff_result = {
+        "diff_version": 2,
+        "domain": domain,
+        "stats": {"NEW": 0, "UPDATE": 0, "DELETE": 0, "SKIP": 0},
+        "diffs": {}
+    }
+
+    # NEW rows — in staging but not in prod
+    for key in staging_keys - prod_keys:
+        row_id = "|".join(str(k) for k in key)
+        diff_result["diffs"][row_id] = {
+            "marker": "NEW",
+            "new_values": staging_map[key]
+        }
+        diff_result["stats"]["NEW"] += 1
+
+    # DELETED rows — in prod but not in staging
+    for key in prod_keys - staging_keys:
+        row_id = "|".join(str(k) for k in key)
+        diff_result["diffs"][row_id] = {
+            "marker": "DELETE",
+            "old_values": prod_map[key]
+        }
+        diff_result["stats"]["DELETE"] += 1
+
+    # UPDATED rows — in both, compute cell-level diffs
+    for key in staging_keys & prod_keys:
+        staging_row = staging_map[key]
+        prod_row = prod_map[key]
+
+        dd = DeepDiff(prod_row, staging_row, verbose_level=2, exclude_types={pd.Timestamp})
+
+        if not dd:
+            diff_result["stats"]["SKIP"] += 1
+            continue
+
+        row_id = "|".join(str(k) for k in key)
+        changes = {}
+        # values_changed: field-level old → new
+        if "values_changed" in dd:
+            for change_path, change_info in dd["values_changed"].items():
+                field = change_path.replace("root['", "").replace("']", "")
+                changes[field] = {
+                    "old": _serialize_for_deepdiff(change_info.get("old_value")),
+                    "new": _serialize_for_deepdiff(change_info.get("new_value"))
+                }
+        # type_changes: field-level type changes
+        if "type_changes" in dd:
+            for change_path, change_info in dd["type_changes"].items():
+                field = change_path.replace("root['", "").replace("']", "")
+                changes[field] = {
+                    "old": _serialize_for_deepdiff(change_info.get("old_value")),
+                    "new": _serialize_for_deepdiff(change_info.get("new_value")),
+                    "old_type": str(change_info.get("old_type", type(None)).__name__),
+                    "new_type": str(change_info.get("new_type", type(None)).__name__)
+                }
+
+        diff_result["diffs"][row_id] = {
+            "marker": "UPDATE",
+            "changes": changes,
+            "new_values": staging_row
+        }
+        diff_result["stats"]["UPDATE"] += 1
+
+    return diff_result
 
 def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
     """

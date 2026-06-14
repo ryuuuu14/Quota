@@ -855,23 +855,38 @@ with tab3:
             st.success(f"✓ Đơn vị thực hiện: **{dept_name}**")
 
         if dept_name:
-            # --- TOP: instructions, template download, file upload ---
-            col_top_left, col_top_right = st.columns([0.4, 0.6])
-
             selected_sheet = None
             header_row = 0
             file_bytes = None
             uploaded_teachers = None
 
-            with col_top_left:
+            # ── Stepper ──
+            stepper_steps = ["Tải lên", "Ghép cột", "Kiểm tra", "Gửi"]
+            if "import_step_teachers" not in st.session_state:
+                st.session_state.import_step_teachers = 1
+
+            step_html = '<div style="display:flex;gap:4px;margin:16px 0;padding:8px 0;border-top:1px solid var(--md-outline-variant);border-bottom:1px solid var(--md-outline-variant);">'
+            for i, label in enumerate(stepper_steps):
+                sn = i + 1
+                is_active = sn == st.session_state.import_step_teachers
+                is_done = sn < st.session_state.import_step_teachers
+                bg = "var(--md-primary)" if is_active else "var(--md-primary-container)" if is_done else "var(--md-surface-dim)"
+                c = "#fff" if is_active else "var(--md-primary)" if is_done else "var(--md-on-surface-variant)"
+                check = "✓ " if is_done else ""
+                step_html += f'<div style="flex:1;text-align:center;padding:6px 4px;border-radius:var(--radius-md);background:{bg};border:1px solid var(--md-outline-variant);">'
+                step_html += f'<span style="font-size:12px;font-weight:600;color:{c};">{check}{label}</span></div>'
+            step_html += '</div>'
+            st.markdown(step_html, unsafe_allow_html=True)
+
+            # ── Step 1: Tải lên ──
+            if st.session_state.import_step_teachers == 1:
+                from pipeline.templates import generate_teachers_template
                 st.markdown("#### Hướng dẫn nhập dữ liệu:")
                 st.markdown("""
                 1. Tải file mẫu Excel được cấu hình riêng cho đơn vị của bạn.
                 2. Điền đầy đủ thông tin cán bộ theo mẫu.
                 3. Tải lên file đã điền để kiểm tra và gửi yêu cầu phê duyệt cho Quản trị viên.
                 """)
-
-                from pipeline.templates import generate_teachers_template
                 try:
                     template_bytes = generate_teachers_template(dept_name)
                     st.download_button(
@@ -885,16 +900,21 @@ with tab3:
                 except Exception as e:
                     st.error(f"Lỗi tạo file mẫu: {e}")
 
-            with col_top_right:
-                st.markdown("##### Tải lên file Excel dữ liệu:")
-                uploaded_teachers = st.file_uploader(
-                    "Chọn file Excel đã điền:",
-                    type=["xlsx"],
-                    label_visibility="collapsed",
-                    key="uploaded_teachers_excel"
-                )
+                if st.button("Tiếp theo →", key="step1_next_teachers"):
+                    st.session_state.import_step_teachers = 2
+                    st.rerun()
 
-            # --- Sheet/header selection (only after upload) ---
+            st.info("💡 **Mẹo:** Bạn có thể tải lên bất kỳ bảng Excel nào. Hệ thống hỗ trợ tính năng tự động nhận diện tiêu đề cột thông minh.")
+            st.markdown("---")
+            st.markdown("##### Tải lên file Excel dữ liệu:")
+            uploaded_teachers = st.file_uploader(
+                "Chọn file Excel đã điền:",
+                type=["xlsx", "xls"],
+                label_visibility="collapsed",
+                key="uploaded_teachers_excel"
+            )
+
+            # ── Content (upload → mapping → validation → submit) ──
             if uploaded_teachers is not None:
                 if uploaded_teachers.size > 5 * 1024 * 1024:
                     st.error("❌ File tải lên vượt quá giới hạn dung lượng cho phép (5MB). Vui lòng thử lại với file nhỏ hơn.")
@@ -908,11 +928,33 @@ with tab3:
 
                     try:
                         sheet_names = get_excel_sheet_names(file_bytes)
+
+                        # Auto-detect header row
+                        def _auto_detect_header_row(file_bytes, sheet_name):
+                            import pandas as pd, io
+                            df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, header=None, nrows=30)
+                            known = {"mã gv", "họ tên", "họ và tên", "đơn vị", "chức vụ", "chức danh",
+                                     "tổ bộ môn", "loại hợp đồng", "giới tính", "ngày sinh",
+                                     "cấp bậc", "học hàm", "số cmnd", "cccd", "email",
+                                     "thời gian bổ nhiệm", "ngày bổ nhiệm", "thời gian đi học",
+                                     "thời gian đi thực tế", "thời gian nghỉ có phép"}
+                            best_row, best_score = 0, 0
+                            for idx in range(min(21, len(df))):
+                                cells = [str(c).strip().lower() for c in df.iloc[idx] if pd.notna(c)]
+                                score = sum(1 for c in cells if any(k in c for k in known))
+                                if score > best_score:
+                                    best_score, best_row = score, idx
+                            return best_row
+
+                        selected_sheet = sheet_names[0]
+                        header_row = _auto_detect_header_row(file_bytes, selected_sheet)
+
                         col_sh, col_hd = st.columns(2)
                         with col_sh:
                             selected_sheet = st.selectbox(
                                 "Chọn Sheet cần đọc:",
                                 options=sheet_names,
+                                index=0,
                                 key="import_selected_sheet_sel"
                             )
                         with col_hd:
@@ -920,7 +962,7 @@ with tab3:
                                 "Dòng chứa tiêu đề (0-indexed):",
                                 min_value=0,
                                 max_value=20,
-                                value=0,
+                                value=header_row,
                                 step=1,
                                 key="import_header_row_val"
                             )
@@ -940,7 +982,6 @@ with tab3:
                             ]
                             all_target_cols = required_cols + optional_cols
 
-                            # Mapping templates management
                             saved_templates = load_mapping_templates()
                             template_options = ["(Chọn cấu hình đã lưu)"] + list(saved_templates.keys())
 
@@ -1082,6 +1123,12 @@ with tab3:
                                     if st.button("Xác nhận", type="primary", use_container_width=True, key="sp_confirm"):
                                         st.session_state["mapping_confirmed"] = True
 
+                                if st.session_state.import_step_teachers == 2:
+                                    st.markdown("---")
+                                    if st.button("Tiếp theo →", key="step2_next_teachers"):
+                                        st.session_state.import_step_teachers = 3
+                                        st.rerun()
+
                             with col_right:
                                 st.caption("XEM TRƯỚC DỮ LIỆU")
                                 try:
@@ -1149,69 +1196,71 @@ with tab3:
 
                                             cols_m = st.columns(3)
                                             cols_m[0].metric("Thêm mới", c_new)
-                                            cols_m[1].metric("Cập nhật", c_upd)
+                                            cols_m[1].metric("Cập nhật / Thay đổi", c_upd)
                                             cols_m[2].metric("Trùng khớp (Bỏ qua)", c_skip)
 
-                                            st.markdown("##### Xem trước danh sách dữ liệu:")
-                                            preview_cols = ["Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng", "Chức danh", "Chức vụ", "Đơn vị", "diff_marker", "diff_detail"]
-                                            st.dataframe(df_diff[[c for c in preview_cols if c in df_diff.columns]], use_container_width=True)
+                                            if st.session_state.import_step_teachers == 3:
+                                                if st.button("Tiếp theo →", key="step3_next_teachers"):
+                                                    st.session_state.import_step_teachers = 4
+                                                    st.rerun()
 
                                             # Commit to staging database as a pending batch
-                                            if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_teachers_batch", use_container_width=True):
-                                                conn_write = get_connection()
-                                                try:
-                                                    cur = conn_write.cursor()
-                                                    cur.execute("""
-                                                        INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
-                                                        VALUES ('teachers', ?, 'pending', ?, ?, ?)
-                                                    """, (dept_name, f"Code {dept_auth_code}", uploaded_teachers.name, len(df_diff)))
-                                                    batch_id = cur.lastrowid
-
-                                                    def normalize_date(val):
-                                                        if pd.isna(val) or val is None or str(val).strip() == "":
-                                                            return None
-                                                        try:
-                                                            return pd.to_datetime(val).strftime("%Y-%m-%d")
-                                                        except Exception:
-                                                            return str(val).strip()
-
-                                                    from pipeline.validator import parse_bool
-                                                    for idx, row in df_diff.iterrows():
-                                                        is_fem = parse_bool(row.get("Nữ"))
-
-                                                        if not is_admin and str(row.get("Đơn vị", "")).strip().lower() != dept_name.strip().lower():
-                                                            continue
-
-                                                        role_sdate = normalize_date(row.get("Ngày bổ nhiệm chức vụ"))
-                                                        title_sdate = normalize_date(row.get("Ngày bổ nhiệm chức danh"))
-
+                                            if st.session_state.import_step_teachers == 4:
+                                                if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_teachers_batch", use_container_width=True):
+                                                    conn_write = get_connection()
+                                                    try:
+                                                        cur = conn_write.cursor()
                                                         cur.execute("""
-                                                            INSERT INTO staging_teachers (
-                                                                batch_id, row_num, diff_marker, diff_detail, validation_errors,
-                                                                teacher_name, subject_group, is_female, employment_type,
-                                                                guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id,
-                                                                role_start_date, title_start_date,
-                                                                study_leave, field_trip, permitted_leave
-                                                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                                        """, (
-                                                            batch_id, idx + header_row + 2, row["diff_marker"], row["diff_detail"], "",
-                                                            row["Họ tên"], row.get("Tổ bộ môn", None), is_fem, row.get("Loại hợp đồng", None),
-                                                            row.get("Học hàm học vị") if not pd.isna(row.get("Học hàm học vị")) else None,
-                                                            None, None,
-                                                            row["Chức danh"] if not pd.isna(row["Chức danh"]) else None,
-                                                            row["Đơn vị"],
-                                                            row.get("Chức vụ", None) if not pd.isna(row.get("Chức vụ")) else None,
-                                                            int(float(str(row["Mã GV"]).strip())) if pd.notna(row.get("Mã GV")) and str(row.get("Mã GV")).strip() and str(row.get("Mã GV")).strip() != "None" else None,
-                                                            role_sdate, title_sdate,
-                                                            row.get("Thời gian đi học"), row.get("Thời gian đi thực tế"), row.get("Thời gian nghỉ có phép")
-                                                        ))
-                                                    conn_write.commit()
-                                                    st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
-                                                    st.balloons()
-                                                except Exception as ex:
-                                                    st.error(f"Lỗi khi gửi yêu cầu: {ex}")
-                                                finally:
-                                                    conn_write.close()
+                                                            INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                                                            VALUES ('teachers', ?, 'pending', ?, ?, ?)
+                                                        """, (dept_name, f"Code {dept_auth_code}", uploaded_teachers.name, len(df_diff)))
+                                                        batch_id = cur.lastrowid
+
+                                                        def normalize_date(val):
+                                                            if pd.isna(val) or val is None or str(val).strip() == "":
+                                                                return None
+                                                            try:
+                                                                return pd.to_datetime(val).strftime("%Y-%m-%d")
+                                                            except Exception:
+                                                                return str(val).strip()
+
+                                                        from pipeline.validator import parse_bool
+                                                        for idx, row in df_diff.iterrows():
+                                                            is_fem = parse_bool(row.get("Nữ"))
+
+                                                            if not is_admin and str(row.get("Đơn vị", "")).strip().lower() != dept_name.strip().lower():
+                                                                continue
+
+                                                            role_sdate = normalize_date(row.get("Ngày bổ nhiệm chức vụ"))
+                                                            title_sdate = normalize_date(row.get("Ngày bổ nhiệm chức danh"))
+
+                                                            cur.execute("""
+                                                                INSERT INTO staging_teachers (
+                                                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                    teacher_name, subject_group, is_female, employment_type,
+                                                                    guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id,
+                                                                    role_start_date, title_start_date,
+                                                                    study_leave, field_trip, permitted_leave
+                                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                            """, (
+                                                                batch_id, idx + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                row["Họ tên"], row.get("Tổ bộ môn", None), is_fem, row.get("Loại hợp đồng", None),
+                                                                row.get("Học hàm học vị") if not pd.isna(row.get("Học hàm học vị")) else None,
+                                                                None, None,
+                                                                row["Chức danh"] if not pd.isna(row["Chức danh"]) else None,
+                                                                row["Đơn vị"],
+                                                                row.get("Chức vụ", None) if not pd.isna(row.get("Chức vụ")) else None,
+                                                                int(float(str(row["Mã GV"]).strip())) if pd.notna(row.get("Mã GV")) and str(row.get("Mã GV")).strip() and str(row.get("Mã GV")).strip() != "None" else None,
+                                                                role_sdate, title_sdate,
+                                                                row.get("Thời gian đi học"), row.get("Thời gian đi thực tế"), row.get("Thời gian nghỉ có phép")
+                                                            ))
+                                                        conn_write.commit()
+                                                        st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
+                                                        st.balloons()
+                                                    except Exception as ex:
+                                                        st.error(f"Lỗi khi gửi yêu cầu: {ex}")
+                                                    finally:
+                                                        conn_write.close()
                                 except Exception as e_parse:
                                     st.error(f"Không thể đọc file: {e_parse}")
 

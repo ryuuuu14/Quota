@@ -229,6 +229,12 @@ synonyms:
   - loại hợp đồng
   - hợp đồng
   - employment type
+  - loai gv
+  - loại gv
+  - loại nhân sự
+  - loai nhan su
+  - phân loại
+  - phan loai
 - expected: Ngày bổ nhiệm chức vụ
   synonyms:
   - ngay bo nhiem chuc vu
@@ -257,6 +263,12 @@ synonyms:
   - tổ môn
   - bộ môn
   - subject group
+  - nhóm môn
+  - nhom mon
+  - khối môn
+  - khoi mon
+  - chuyên ngành
+  - chuyen nganh
 - expected: Đơn vị
   synonyms:
   - don vi

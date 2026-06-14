@@ -366,7 +366,10 @@ _PREMIUM_CSS = """
     }
     .stTextInput input:focus, .stSelectbox div[data-baseweb="select"] > div:focus, .stDateInput input:focus, .stNumberInput input:focus {
         border-color: var(--md-primary) !important;
-        box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.2) !important;
+    }
+    .stSelectbox input:focus {
+        outline: none !important;
+        box-shadow: none !important;
     }
     
     /* Labels */
@@ -679,6 +682,16 @@ def inject_premium_css():
 
 
 
+@st.cache_data(ttl=30)
+def _get_pending_batch_count():
+    try:
+        from database import get_connection
+        _c = get_connection().cursor()
+        _c.execute("SELECT COUNT(*) FROM import_batches WHERE status = 'pending'")
+        return _c.fetchone()[0]
+    except Exception:
+        return 0
+
 @st.cache_data(ttl=60)
 def _get_sidebar_system_stats():
     _db_ok = False
@@ -709,6 +722,7 @@ def _get_sidebar_system_stats():
 def render_sidebar(active_page="home"):
     # Build system status data (cached)
     _db_ok, _tf_name, _teacher_count, _guest_count, _has_excel = _get_sidebar_system_stats()
+    _pending_batches = _get_pending_batch_count()
 
     _dot_color = "#22c55e" if _db_ok else "#ef4444"
     _dot_label = "Đã kết nối" if _db_ok else "Mất kết nối"
@@ -785,7 +799,14 @@ def render_sidebar(active_page="home"):
             st.page_link("pages/4_CaiDatHeThong.py", label="Cài đặt Hệ thống", icon=":material/settings:")
         if role == "admin":
             st.page_link("pages/6_Payroll.py", label="Quản lý Lương TT11", icon=":material/payments:")
-            st.page_link("pages/7_PheDuyet.py", label="Phê duyệt Dữ liệu", icon=":material/fact_check:")
+            if _pending_batches:
+                _pc1, _pc2 = st.columns([1, 0.12])
+                with _pc1:
+                    st.page_link("pages/7_PheDuyet.py", label="Phê duyệt Dữ liệu", icon=":material/fact_check:", use_container_width=True)
+                with _pc2:
+                    st.markdown(f"<div style='background:#ef4444;color:white;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px;'>{_pending_batches}</div>", unsafe_allow_html=True)
+            else:
+                st.page_link("pages/7_PheDuyet.py", label="Phê duyệt Dữ liệu", icon=":material/fact_check:")
             
         login_label = "Thông tin tài khoản" if user else "Đăng nhập"
         st.page_link("pages/8_DangNhap.py", label=login_label, icon=":material/lock:")
@@ -894,3 +915,159 @@ def render_success_preview(df):
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+
+def render_diff_viewer(
+    staging_df,
+    diff_json_str: str,
+    domain: str,
+    batch_id: int,
+    view_mode: str = "inline",
+    key_prefix: str = "diff"
+):
+    """
+    Render a diff comparison view using AgGrid with cell-level highlighting,
+    with a fallback to st.dataframe.
+
+    Parameters
+    ----------
+    staging_df : pd.DataFrame
+        Staging rows for this batch.
+    diff_json_str : str
+        JSON string from import_batches.diff_json.
+    domain : str
+        One of VALID_DOMAINS.
+    batch_id : int
+        For unique AgGrid key generation.
+    view_mode : str
+        "inline" or "side_by_side".
+    key_prefix : str
+        For session state isolation.
+    """
+    try:
+        from pipeline.diff_formatter import format_diff_json
+    except ImportError:
+        _render_fallback_diff(staging_df, domain)
+        return
+
+    formatted_df = format_diff_json(diff_json_str, domain, staging_df)
+    if formatted_df.empty:
+        st.info("Không có dữ liệu để hiển thị.")
+        return
+
+    # Build summary chips
+    markers = formatted_df["_diff_marker"].value_counts()
+    st.markdown(f"""
+    <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+        <span class="md-chip md-chip-green">🆕 Mới: {markers.get('NEW', 0)}</span>
+        <span class="md-chip md-chip-amber">🟡 Cập nhật: {markers.get('UPDATE', 0)}</span>
+        <span class="md-chip md-chip-red">🔴 Xóa: {markers.get('DELETE', 0)}</span>
+        <span class="md-chip">⚪ Bỏ qua: {markers.get('SKIP', 0)}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Display columns (exclude internal ones)
+    display_cols = [c for c in formatted_df.columns
+                    if not c.startswith("_")]
+    try:
+        _render_aggrid_diff(formatted_df, display_cols, batch_id, view_mode, key_prefix)
+    except Exception:
+        _render_fallback_diff(staging_df, domain)
+
+
+def _render_aggrid_diff(formatted_df, display_cols, batch_id, view_mode, key_prefix):
+    """Render diff using streamlit-aggrid with cell-level styles."""
+    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
+
+    display_df = formatted_df[display_cols].copy()
+
+    # Build column definitions with cell style renderers
+    gb = GridOptionsBuilder.from_dataframe(display_df)
+
+    # Cell style JS — colors cells based on _cell_styles metadata
+    cell_style_js = JsCode("""
+    function(params) {
+        if (!params.data || !params.data._cell_styles) return {};
+        const styles = JSON.parse(params.data._cell_styles || '{}');
+        const col = params.colDef ? params.colDef.field : '';
+        if (!col) return {};
+        const cellClass = styles[col];
+        if (cellClass === 'added') {
+            return {'backgroundColor': '#d1fae5', 'color': '#065f46'};
+        } else if (cellClass === 'removed') {
+            return {'backgroundColor': '#ffe4e6', 'color': '#9f1239'};
+        } else if (cellClass === 'changed') {
+            return {'backgroundColor': '#fef3c7', 'color': '#92400e'};
+        }
+        return {};
+    }
+    """)
+
+    for col in display_df.columns:
+        gb.configure_column(
+            col,
+            cellStyle=cell_style_js,
+            wrapText=False,
+            autoHeight=False
+        )
+
+    # Add diff marker column with status chip
+    if "_diff_marker_display" in formatted_df.columns:
+        gb.configure_column(
+            "_diff_marker_display",
+            headerName="Trạng thái",
+            width=140,
+            pinned="left"
+        )
+
+    gb.configure_grid_options(
+        domLayout="normal",
+        rowHeight=32,
+        headerHeight=38,
+        suppressColumnVirtualisation=False,
+        enableCellTextSelection=True,
+        ensureDomOrder=True,
+    )
+
+    gb.configure_selection(
+        selection_mode="multiple",
+        use_checkbox=False
+    )
+
+    grid_options = gb.build()
+
+    ag_grid_key = f"{key_prefix}_aggrid_{batch_id}_{view_mode}"
+
+    grid_response = AgGrid(
+        display_df,
+        gridOptions=grid_options,
+        height=min(600, 40 * len(display_df) + 80),
+        key=ag_grid_key,
+        update_mode=GridUpdateMode.NO_UPDATE,
+        allow_unsafe_jscode=True,
+        reload_data=False,
+        fit_columns_on_grid_load=True,
+        theme="streamlit",
+    )
+
+
+def _render_fallback_diff(staging_df, domain):
+    """Fallback renderer using native st.dataframe when AgGrid is unavailable."""
+    config_map = {
+        "teachers": {"cols": ["row_num", "teacher_name", "department", "title", "diff_marker", "diff_detail"],
+                     "rename": {"row_num": "Dòng", "teacher_name": "Họ tên", "department": "Đơn vị",
+                                "title": "Chức danh", "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}},
+        "activities": {"cols": ["row_num", "teacher_name", "activity_type_name", "diff_marker", "diff_detail"],
+                       "rename": {"row_num": "Dòng", "teacher_name": "Mã GV", "activity_type_name": "Hoạt động",
+                                  "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}},
+        "schedule": {"cols": ["row_num", "teacher_name", "subject_name", "diff_marker", "diff_detail"],
+                     "rename": {"row_num": "Dòng", "teacher_name": "Họ tên", "subject_name": "Môn",
+                                "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}},
+        "aggregate_totals": {"cols": ["row_num", "teacher_name", "diff_marker", "diff_detail"],
+                             "rename": {"row_num": "Dòng", "teacher_name": "Mã GV",
+                                        "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}}
+    }
+    config = config_map.get(domain, config_map["teachers"])
+    available = [c for c in config["cols"] if c in staging_df.columns]
+    display = staging_df[available].rename(columns=config["rename"])
+    st.dataframe(display, use_container_width=True, hide_index=True)

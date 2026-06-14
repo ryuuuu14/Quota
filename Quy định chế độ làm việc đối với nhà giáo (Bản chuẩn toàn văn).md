@@ -337,7 +337,7 @@ h) Một cải tiến được quy đổi một lần tại thời điểm đư�
 i) Một số báo cáo khoa học được đăng toàn văn trong kỷ yếu tọa đàm khoa học cấp trường, kỷ yếu hội thảo, tọa đàm khoa học cấp khoa có phản biện (Hoặc không có phản biện nhưng có hội đồng biên tập) được tính: 40 giờ hành chính/01 bài viết tọa đàm cấp trường; 14 giờ hành chính/01 bài viết hội thảo, tọa đàm cấp khoa.  
 k) Một bài viết được đăng tải toàn văn trên trang điện tử của nhà trường (Có thẩm định, biên tập) được tính: 40 giờ hành chính/01 bài viết khoa học; 24 giờ hành chính/01 bài viết thông tin; 12 giờ hành chính/01 bản tin. Ban biên tập trang điện tử của nhà trường được tính: 3,0 hành chính/01 bài viết thông tin; 6,0 giờ hành chính/01 bài viết khoa học (Chia đều cho các thành viên).  
 l) Tham gia phản biện, thẩm định, biên tập bài báo khoa học  
-\- Tham gia phản biện bài báo khoa học được tính: 40 giờ hành chính/01 bài báo tạp chí khoa học ISI/Scopus; 16 giờ hành chính/01 bài báo tạp chính có mã số ISSN trong nước; 24 giờ hành chính/01 bài báo tạp chí có mã số ISSN quốc tế.  
+\- Tham gia phản biện bài báo khoa học được tính: 40 giờ hành chính/01 bài báo tạp chí khoa học ISI/Scopus; 16 giờ hành chính/01 bài báo tạp chí có mã số ISSN trong nước; 24 giờ hành chính/01 bài báo tạp chí có mã số ISSN quốc tế.  
 \- Thẩm định, phản biện học thuật 01 bài báo tạp chí có chỉ số khoa học được tính 10 giờ hành chính.  
 \- Biên tập tạp chí khoa học được tính 30 giờ hành chính/01 số tạp chí được phát hành, chia đều cho số người thực hiện biên tập.  
 m) Biên tập giáo trình, sách, tài liệu dạy học được tính 20 giờ hành chính/01 loại tài liệu, chia đều cho số người thực hiện biên tập.  

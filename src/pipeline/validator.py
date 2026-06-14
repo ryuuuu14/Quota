@@ -94,21 +94,12 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
         if is_empty_cell(name):
             errors.append((idx, row_num, "Họ tên không được để trống."))
             
-        # Subject group (optional)
-        if "Tổ bộ môn" in df.columns:
-            grp = row["Tổ bộ môn"]
-            if is_empty_cell(grp):
-                errors.append((idx, row_num, "Tổ bộ môn không được để trống."))
-            
-        # Employment type (optional)
-        if "Loại hợp đồng" in df.columns:
-            emp_raw = row["Loại hợp đồng"]
-            if is_empty_cell(emp_raw):
-                errors.append((idx, row_num, "Loại hợp đồng không được để trống (Cho phép: TEACHER, STAFF, hoặc GUEST)."))
-            else:
-                emp = str(emp_raw).strip().upper()
-                if emp not in ("TEACHER", "STAFF", "GUEST"):
-                    errors.append((idx, row_num, f"Loại hợp đồng '{emp_raw}' không hợp lệ. Phải là: TEACHER, STAFF, hoặc GUEST."))
+        # TODO: Tổ bộ môn — currently unresolved, should be auto-derived from department.
+        # See 2_QuanLyCanBo.py import flow for the department→subject_group mapping fix.
+        # Skipping validation — values pass through without error.
+        
+        # TODO: Loại hợp đồng — currently unresolved, teaching title vs employment type
+        # needs a design decision. Skipping validation for now.
             
         # Police rank (optional)
         if "Cấp bậc quân hàm" in df.columns:

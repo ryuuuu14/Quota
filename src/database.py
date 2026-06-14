@@ -20,6 +20,7 @@ def get_connection():
         os.makedirs(_db_dir, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode=WAL;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -351,6 +352,13 @@ def init_db():
         decided_by TEXT
     )
     ''')
+
+    # Migrations for import_batches
+    for col in ("diff_version", "remarks"):
+        try:
+            cursor.execute(f"ALTER TABLE import_batches ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
 
     # Staging Tables
     cursor.execute('''

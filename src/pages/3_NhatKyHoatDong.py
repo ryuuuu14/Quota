@@ -613,12 +613,8 @@ else:
                                             # Diff
                                             if import_method == "activities":
                                                 df_diff = diff_activities(df_parsed, get_connection(), selected_tf_name)
-                                                display_preview_cols = ["Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng",
-                                                                        "Cấp lớp", "Loại lớp", "Số học viên", "Cấp đề tài",
-                                                                        "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú", "diff_marker"]
                                             else:
                                                 df_diff = diff_aggregate_totals(df_parsed, get_connection(), selected_tf_name)
-                                                display_preview_cols = ["Mã GV", "Tổng GC thực hiện", "NCKH thực hiện", "Số giờ miễn giảm", "Định mức GC", "diff_marker"]
 
                                             # Diff counts
                                             counts = df_diff["diff_marker"].value_counts().to_dict()
@@ -630,9 +626,6 @@ else:
                                             cols_m[0].metric("Thêm mới", c_new)
                                             cols_m[1].metric("Cập nhật / Thay đổi", c_upd)
                                             cols_m[2].metric("Trùng khớp (Bỏ qua)", c_skip)
-
-                                            st.markdown("##### Xem trước danh sách dữ liệu:")
-                                            st.dataframe(df_diff[display_preview_cols], use_container_width=True, hide_index=True)
 
                                             # Submit batch
                                             if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_batch_approve"):
