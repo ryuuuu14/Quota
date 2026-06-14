@@ -223,6 +223,25 @@ if selected_tf_id:
         if is_head_dept:
             df_display = df_display[df_display['dept_name'] == dept_name]
             st.markdown(f'<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Bộ môn: {dept_name}</h3>', unsafe_allow_html=True)
+            
+            # Fetch unread notifications
+            try:
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT * FROM notifications WHERE target_dept = ? AND target_role = 'head' AND is_read = 0 ORDER BY created_at DESC", (dept_name,))
+                    unread_notifications = cur.fetchall()
+                    if unread_notifications:
+                        st.info(f"**🔔 Bạn có {len(unread_notifications)} thông báo mới về kết quả phê duyệt dữ liệu.**")
+                        for notif in unread_notifications:
+                            col_text, col_btn = st.columns([8, 2])
+                            col_text.markdown(f"**{notif['title']}**: {notif['message']}")
+                            if col_btn.button("Xong", key=f"read_notif_{notif['id']}"):
+                                cur.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif['id'],))
+                                conn.commit()
+                                st.rerun()
+            except Exception as e:
+                pass # Fail silently if notifications table isn't ready
+
         else:
             st.markdown('<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Toàn trường</h3>', unsafe_allow_html=True)
 

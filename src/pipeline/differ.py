@@ -58,16 +58,15 @@ def enhanced_diff(staging_df, prod_df, key_cols, domain):
     if domain not in VALID_DOMAINS:
         raise ValueError(f"Invalid domain '{domain}'. Must be one of {VALID_DOMAINS}")
 
-    # Safety guard: skip DeepDiff for large payloads (>3000 matched rows)
-    # to prevent OOM from verbose_level=2 expansion
-    matched_count = len(set(staging_map.keys()) & set(prod_map.keys()))
-    _skip_deepdiff = matched_count > 3000
-
     staging_map = _rows_to_comparable(staging_df, key_cols)
     prod_map = _rows_to_comparable(prod_df, key_cols)
 
     staging_keys = set(staging_map.keys())
     prod_keys = set(prod_map.keys())
+
+    # Safety guard: skip DeepDiff for large payloads (>3000 matched rows)
+    # to prevent OOM from verbose_level=2 expansion
+    _skip_deepdiff = len(staging_keys & prod_keys) > 3000
 
     diff_result = {
         "diff_version": 2,

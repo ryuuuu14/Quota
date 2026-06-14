@@ -334,6 +334,20 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    # Notifications Table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_dept TEXT,
+        target_role TEXT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT 0,
+        batch_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
     # Import Batches Registry
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS import_batches (
@@ -482,9 +496,17 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_activity_logs_tf ON activity_logs(timeframe_id)",
         "CREATE INDEX IF NOT EXISTS idx_activity_logs_teacher_tf ON activity_logs(teacher_id, timeframe_id)",
         "CREATE INDEX IF NOT EXISTS idx_teacher_role_history_teacher_tf ON teacher_role_history(teacher_id)",
+        # Composite index for correlated subqueries: WHERE teacher_id=? AND record_type=? ORDER BY start_date DESC LIMIT 1
+        "CREATE INDEX IF NOT EXISTS idx_teacher_role_history_lookup ON teacher_role_history(teacher_id, record_type, start_date DESC)",
         "CREATE INDEX IF NOT EXISTS idx_manual_conversions_teacher_tf ON manual_conversions(teacher_id, timeframe_id)",
         "CREATE INDEX IF NOT EXISTS idx_session_totals_tf ON session_teacher_totals(timeframe_id)",
         "CREATE INDEX IF NOT EXISTS idx_calculated_totals_tf ON teacher_calculated_totals(timeframe_id)",
+        # Composite for is_override queries: WHERE timeframe_id=? AND is_override=1
+        "CREATE INDEX IF NOT EXISTS idx_calculated_totals_override ON teacher_calculated_totals(timeframe_id, is_override)",
+        # For pending batch count and filtered listing: WHERE status=?
+        "CREATE INDEX IF NOT EXISTS idx_import_batches_status ON import_batches(status, created_at DESC)",
+        # For bulk_teaching_assignments by timeframe (used in diff_schedule)
+        "CREATE INDEX IF NOT EXISTS idx_bulk_assignments_tf ON bulk_teaching_assignments(timeframe_id)",
     ]:
         cursor.execute(idx_sql)
 

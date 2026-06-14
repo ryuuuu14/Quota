@@ -142,11 +142,12 @@ _PREMIUM_CSS = """
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
 <style>
     :root {
-        --md-primary: #FFC107; /* Gold — brand accent */
-        --md-primary-container: rgba(255, 193, 7, 0.15);
+        --md-primary: #FFC107; /* Gold — decorative accent (chips, badges) */
+        --md-primary-container: rgba(255, 193, 7, 0.15); /* Gold tint */
         --md-on-primary: #1A1A1A;
         --md-primary-fixed: rgba(255, 193, 7, 0.10);
         --md-primary-fixed-dim: rgba(255, 193, 7, 0.20);
+        --md-emerald-container: rgba(0, 103, 71, 0.12); /* Emerald tint for cards */
         --md-surface: #FDF8F3; /* Warm cream — content area */
         --md-surface-dim: #F5F0EB;
         --md-surface-container-lowest: #FFFFFF;
@@ -157,18 +158,18 @@ _PREMIUM_CSS = """
         --md-on-surface-variant: #5C5248; /* Warm gray */
         --md-outline: #D4C9BC;
         --md-outline-variant: #E8DED0;
-        --md-secondary: #4A5D23; /* Military Green */
-        --md-secondary-container: rgba(74, 93, 35, 0.15);
+        --md-secondary: #006747; /* Deep Emerald */
+        --md-secondary-container: rgba(0, 103, 71, 0.15);
         --md-tertiary: #C9A84C; /* Gold */
         --md-tertiary-container: rgba(201, 168, 76, 0.15);
         --md-error: #DC2626;
         --md-error-container: rgba(220, 38, 38, 0.10);
-        --md-green: #4A5D23;
-        --md-green-bg: rgba(74, 93, 35, 0.12);
+        --md-green: #006747;
+        --md-green-bg: rgba(0, 103, 71, 0.12);
         --md-red: #DC2626;
         --md-red-bg: rgba(220, 38, 38, 0.10);
-        --md-amber: #FFC107;
-        --md-amber-bg: rgba(255, 193, 7, 0.12);
+        --md-amber: #f59e0b;
+        --md-amber-bg: rgba(245, 158, 11, 0.12);
         --md-burgundy: #800020;
         --radius-sm: 8px;
         --radius-md: 12px;
@@ -188,16 +189,16 @@ _PREMIUM_CSS = """
 
     /* Focus indicators for keyboard nav */
     *:focus-visible {
-        outline: 2px solid var(--md-primary) !important;
+        outline: 2px solid var(--md-secondary) !important;
         outline-offset: 2px !important;
         border-radius: var(--radius-sm) !important;
     }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-        outline: 2px solid var(--md-primary) !important;
+        outline: 2px solid var(--md-secondary) !important;
         outline-offset: 2px !important;
     }
     .stButton > button:focus-visible {
-        outline: 2px solid var(--md-primary) !important;
+        outline: 2px solid var(--md-secondary) !important;
         outline-offset: 2px !important;
     }
 
@@ -228,7 +229,7 @@ _PREMIUM_CSS = """
         font-weight: 800 !important;
         letter-spacing: -0.02em !important;
         line-height: 1.2 !important;
-        color: var(--md-primary) !important;
+        color: var(--md-secondary) !important;
     }
     h2 { font-size: 22px !important; font-weight: 700 !important; line-height: 1.3 !important; }
     h3 { font-size: 18px !important; font-weight: 600 !important; line-height: 1.4 !important; }
@@ -257,12 +258,22 @@ _PREMIUM_CSS = """
         border-color: var(--md-primary) !important;
         color: var(--md-primary) !important;
     }
+    .stTabs button[data-baseweb="tab"]:active {
+        color: var(--md-secondary) !important;
+        background-color: var(--md-secondary-container) !important;
+        opacity: 1 !important;
+    }
     .stTabs button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: var(--md-primary-container) !important;
-        color: var(--md-primary) !important;
-        border-color: var(--md-primary-container) !important;
+        background-color: var(--md-secondary-container) !important;
+        color: var(--md-secondary) !important;
+        border-color: var(--md-secondary-container) !important;
         box-shadow: var(--shadow-card) !important;
         font-weight: 700 !important;
+    }
+    .stTabs button[data-baseweb="tab"][aria-selected="true"]:active {
+        background-color: var(--md-secondary-container) !important;
+        color: var(--md-secondary) !important;
+        opacity: 1 !important;
     }
 
     section[data-testid="stSidebar"] {
@@ -271,6 +282,20 @@ _PREMIUM_CSS = """
     }
     section[data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
+    }
+    /* Sidebar scrollbar */
+    section[data-testid="stSidebar"] ::-webkit-scrollbar {
+        width: 4px !important;
+    }
+    section[data-testid="stSidebar"] ::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+    section[data-testid="stSidebar"] ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.20) !important;
+        border-radius: 2px !important;
+    }
+    section[data-testid="stSidebar"] ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.35) !important;
     }
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] p,
@@ -281,21 +306,27 @@ _PREMIUM_CSS = """
     section[data-testid="stSidebar"] [data-testid="stPageLink"] > a {
         color: rgba(255, 255, 255, 0.70) !important;
         background-color: transparent !important;
+        border-left: 4px solid transparent !important;
+        padding-left: 12px !important;
+        transition: all 0.2s ease !important;
     }
     section[data-testid="stSidebar"] [data-testid="stPageLink"] > a:hover {
-        background-color: rgba(255, 255, 255, 0.08) !important;
+        background-color: rgba(255, 255, 255, 0.15) !important;
         color: #FFC107 !important;
     }
-    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a[aria-current="page"] {
-        background-color: rgba(255, 193, 7, 0.15) !important;
-        color: #FFC107 !important;
-        border-left: 4px solid #FFC107 !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a[aria-current="page"] p {
-        color: #FFC107 !important;
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a:active {
+        background-color: rgba(255, 255, 255, 0.25) !important;
+        color: #FFFFFF !important;
     }
     section[data-testid="stSidebar"] [data-testid="stPageLink"] span {
-        color: inherit !important;
+        color: rgba(255, 255, 255, 0.70) !important;
+        vertical-align: middle !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a:hover span {
+        color: #FFC107 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a:active span {
+        color: #FFFFFF !important;
     }
     /* Premium Button */
     .stButton > button {
@@ -311,9 +342,9 @@ _PREMIUM_CSS = """
     }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
-        border-color: var(--md-primary) !important;
+        border-color: var(--md-secondary) !important;
         box-shadow: var(--shadow-elevated) !important;
-        color: var(--md-primary) !important;
+        color: var(--md-secondary) !important;
     }
     .stButton > button[kind="primary"],
     .stButton > button[data-testid="baseButton-primary"] {
@@ -326,6 +357,38 @@ _PREMIUM_CSS = """
         background: #E5A800 !important;
         color: var(--md-on-primary) !important;
         box-shadow: var(--shadow-elevated) !important;
+    }
+    .stButton > button:active {
+        transform: scale(0.97) !important;
+        background-color: var(--md-secondary) !important;
+        color: #ffffff !important;
+        border-color: var(--md-secondary) !important;
+        box-shadow: none !important;
+        opacity: 1 !important;
+    }
+    .stButton > button[kind="primary"]:active,
+    .stButton > button[data-testid="baseButton-primary"]:active {
+        transform: scale(0.97) !important;
+        background: #C8A400 !important;
+        color: #ffffff !important;
+        opacity: 1 !important;
+    }
+    .stButton > button:disabled,
+    .stButton > button[kind="primary"]:disabled,
+    .stButton > button[data-testid="baseButton-primary"]:disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+        background: var(--md-surface-dim) !important;
+        color: var(--md-on-surface-variant) !important;
+        border-color: var(--md-outline-variant) !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+    .stButton > button[kind="primary"]:disabled,
+    .stButton > button[data-testid="baseButton-primary"]:disabled {
+        background: #C8A400 !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+        border: none !important;
     }
 
     /* Data tables: monospace for numbers */
@@ -372,21 +435,30 @@ _PREMIUM_CSS = """
         background-color: #FFFFFF !important;
     }
     .stTextArea textarea:focus {
-        border-color: var(--md-primary) !important;
+        border-color: var(--md-secondary) !important;
     }
 
     /* Sidebar logout button */
     section[data-testid="stSidebar"] .stButton > button {
-        background: rgba(255, 255, 255, 0.10) !important;
-        color: #FFFFFF !important;
-        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #FFC107 !important;
+        border: 1px solid rgba(255, 193, 7, 0.50) !important;
         box-shadow: none !important;
     }
     section[data-testid="stSidebar"] .stButton > button:hover {
-        background: rgba(255, 255, 255, 0.18) !important;
+        background: #006747 !important;
         color: #FFFFFF !important;
+        border-color: #006747 !important;
         transform: none !important;
         box-shadow: none !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button:active {
+        transform: scale(0.97) !important;
+        background: #005C35 !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button:disabled {
+        opacity: 0.4 !important;
+        cursor: not-allowed !important;
     }
     /* Remove Streamlit's slide/underline indicator on sidebar button */
     section[data-testid="stSidebar"] .stButton > button::after,
@@ -396,7 +468,7 @@ _PREMIUM_CSS = """
         background: none !important;
     }
     section[data-testid="stSidebar"] .stButton > button p {
-        color: #ffffff !important;
+        color: inherit !important;
     }
 
     /* Inputs & Selectboxes */
@@ -409,7 +481,7 @@ _PREMIUM_CSS = """
         transition: border-color 0.2s, box-shadow 0.2s !important;
     }
     .stTextInput input:focus, .stSelectbox div[data-baseweb="select"] > div:focus, .stDateInput input:focus, .stNumberInput input:focus {
-        border-color: var(--md-primary) !important;
+        border-color: var(--md-secondary) !important;
     }
     .stSelectbox input:focus {
         outline: none !important;
@@ -437,7 +509,7 @@ _PREMIUM_CSS = """
     }
     .md-card:hover {
         transform: translateY(-2px) !important;
-        border-color: rgba(255, 193, 7, 0.3) !important;
+        border-color: rgba(0, 103, 71, 0.3) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
 
@@ -489,6 +561,16 @@ _PREMIUM_CSS = """
         background-color: var(--md-red) !important;
         color: #ffffff !important;
     }
+    .stButton button[aria-label*="Xóa"]:active,
+    .stButton button[aria-label*="Xoá"]:active {
+        transform: scale(0.97) !important;
+    }
+    .stButton button[aria-label*="Xóa"]:disabled,
+    .stButton button[aria-label*="Xoá"]:disabled {
+        opacity: 0.45 !important;
+        cursor: not-allowed !important;
+        transform: none !important;
+    }
 
     .md-status-bar {
         background: #ffffff !important;
@@ -505,6 +587,17 @@ _PREMIUM_CSS = """
         text-transform: uppercase !important;
         letter-spacing: 0.05em !important;
         color: var(--md-on-surface-variant) !important;
+    }
+    .md-emerald-divider {
+        height: 2px !important;
+        background: var(--md-green) !important;
+        border: none !important;
+        margin: 24px auto !important;
+        opacity: 0.25 !important;
+        max-width: 120px !important;
+    }
+    .md-card-emerald {
+        border-left: 3px solid var(--md-green) !important;
     }
 
     /* Page Navigation styling */
@@ -534,15 +627,8 @@ _PREMIUM_CSS = """
     }
     [data-testid="stPageLink"] > a:hover {
         background-color: var(--md-surface-container) !important;
-        color: var(--md-primary) !important;
+        color: var(--md-secondary) !important;
         transform: translateX(3px) !important;
-    }
-    [data-testid="stPageLink"] > a[aria-current="page"] {
-        background-color: var(--md-primary-container) !important;
-        color: var(--md-primary) !important;
-        font-weight: 700 !important;
-        border-left: 4px solid var(--md-primary) !important;
-        border-radius: 0 8px 8px 0 !important;
     }
     [data-testid="stPageLink"] p {
         color: inherit !important;
@@ -567,7 +653,7 @@ _PREMIUM_CSS = """
         transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
     }
     div[data-testid="stExpander"]:hover {
-        border-color: rgba(255, 193, 7, 0.25) !important;
+        border-color: rgba(0, 103, 71, 0.25) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
     /* Expander header row */
@@ -676,9 +762,9 @@ _PREMIUM_CSS = """
         color: var(--md-on-surface);
     }
     div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) {
-        background: var(--md-primary) !important;
+        background: var(--md-secondary) !important;
         color: white !important;
-        box-shadow: 0 2px 8px rgba(255, 193, 7, 0.30);
+        box-shadow: 0 2px 8px rgba(0, 103, 71, 0.30);
     }
     div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child {
         display: none !important;
@@ -726,7 +812,7 @@ def inject_premium_css():
 
 
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=5)
 def _get_pending_batch_count():
     try:
         from database import get_connection
@@ -773,16 +859,48 @@ def render_sidebar(active_page="home"):
     _source_icon = "download" if _has_excel else "edit_note"
     _source_label = "Excel" if _has_excel else "Nhập lẻ"
 
+    # Map active_page to href fragment for CSS targeting
+    _page_hrefs = {
+        "home": "app",
+        "dashboard": "Dashboard",
+        "canbo": "QuanLyCanBo",
+        "nhatky": "NhatKyHoatDong",
+        "caidat": "CaiDatHeThong",
+        "design": "DesignSystem",
+        "payroll": "Payroll",
+        "pheduyet": "PheDuyet",
+    }
+    
+    active_slug = _page_hrefs.get(active_page, "")
+    if active_page == "home":
+        active_selector = 'section[data-testid="stSidebar"] [data-testid="stPageLink"] a[href="/"]'
+    else:
+        active_selector = f'section[data-testid="stSidebar"] [data-testid="stPageLink"] a[href*="{active_slug}"]' if active_slug else ''
+
     # Render HTML sidebar
     with st.sidebar:
         # Inject CSS (inside sidebar so it persists across page navigation)
-        st.markdown("""
+        st.markdown(f"""
 <style>
-    [data-testid="stSidebarNav"] {
+    [data-testid="stSidebarNav"] {{
         display: none !important;
-    }
+    }}
+    {active_selector and f'''
+    {active_selector} {{
+        background-color: #007855 !important;
+        color: #FFFFFF !important;
+        border-left: 4px solid #FFC107 !important;
+        box-shadow: 0 4px 12px rgba(0, 79, 56, 0.3) !important;
+    }}
+    {active_selector} p,
+    {active_selector} span {{
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+    }}
+    ''' or ''}
 </style>
 """, unsafe_allow_html=True)
+
         inject_premium_css()
 
         from auth import get_current_user
@@ -795,17 +913,19 @@ def render_sidebar(active_page="home"):
             }
             role_label = role_labels.get(user["role"], "Người dùng")
             identity_html = (
-                f'<div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.06); border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.12);">'
-                f'  <div style="font-size: 11px; color: rgba(255,255,255,0.60); font-weight: 500;">Tài khoản hoạt động:</div>'
-                f'  <div style="font-weight: 700; color: #FFC107; font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
-                f'  <div style="font-size: 10px; color: rgba(255,255,255,0.50); margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
+                f'<div style="margin-top: 16px; padding: 14px 16px; background: linear-gradient(135deg, #007855, #005C41); border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 92, 65, 0.2); border: 1px solid rgba(255,255,255,0.1);">'
+                f'  <div style="font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Tài khoản hoạt động</div>'
+                f'  <div style="font-weight: 700; color: #FFFFFF; font-size: 16px; letter-spacing: 0.01em;">{user["username"]}</div>'
+                f'  <div style="font-size: 12px; color: #FFC107; margin-top: 4px; font-weight: 600; display: flex; align-items: center; gap: 4px;">'
+                f'    <span class="material-symbols-outlined" style="font-size: 14px;">verified_user</span> {role_label}'
+                f'  </div>'
                 f'</div>'
             )
         else:
             identity_html = (
-                '<div style="margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,0.05); border-radius: var(--radius-md); border: 1px solid rgba(239,68,68,0.15);">'
-                '  <div style="font-size: 11px; color: #f87171; font-weight: 600; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">'
-                '    <span class="material-symbols-outlined" style="font-size: 14px;">lock</span> Chế độ Khách (Đọc)'
+                '<div style="margin-top: 16px; padding: 14px 16px; background: linear-gradient(135deg, #fef2f2, #fee2e2); border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);">'
+                '  <div style="font-size: 13px; color: #b91c1c; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;">'
+                '    <span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Chế độ Khách (Đọc)'
                 '  </div>'
                 '</div>'
             )
@@ -815,10 +935,10 @@ def render_sidebar(active_page="home"):
     <div style="display: flex; align-items: center; gap: 12px;">
         <div style="
             width: 40px; height: 40px;
-            background: linear-gradient(135deg, rgba(255,193,7,0.20), #FFC107);
+            background: linear-gradient(135deg, #008857, #006747);
             border-radius: var(--radius-md);
             display: flex; align-items: center; justify-content: center;
-            color: #1A1A1A;
+            color: #FFFFFF;
             font-size: 20px;
         ">
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
@@ -828,6 +948,7 @@ def render_sidebar(active_page="home"):
             <div style="font-size: 11px; color: rgba(255,255,255,0.55); letter-spacing: 0.03em;">Hệ thống định mức</div>
         </div>
     </div>
+    <div style="height: 1px; width: 100%; background: linear-gradient(90deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%); margin-top: 20px;"></div>
     {identity_html}
 </div>
 """, unsafe_allow_html=True)
@@ -905,8 +1026,8 @@ def render_step_header(step_num, title, description=None):
     <div style="margin-top: 24px; margin-bottom: 16px;">
         <div style="display: flex; align-items: center; gap: 8px;">
             <span style="
-                background-color: var(--md-primary); 
-                color: var(--md-on-primary); 
+                background-color: var(--md-secondary); 
+                color: #FFFFFF; 
                 font-weight: 700; 
                 width: 24px; 
                 height: 24px; 

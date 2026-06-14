@@ -62,9 +62,9 @@ st.markdown('''
     color: var(--md-on-surface);
 }
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
-    background-color: var(--md-primary-container);
-    color: var(--md-primary) !important;
-    border: 1px solid var(--md-primary-container);
+    background-color: var(--md-emerald-container);
+    color: var(--md-secondary) !important;
+    border: 1px solid rgba(0, 103, 71, 0.25);
 }
 .sp-card {
     background: var(--md-surface-container);
@@ -90,30 +90,117 @@ def _render_teacher_profile_card(
     highlighted=True,
 ):
     initial = name.split()[-1][0].upper()
-    border = "2px solid var(--md-primary)" if highlighted else "1px solid var(--md-outline-variant)"
-    background = "var(--md-primary-container)" if highlighted else "linear-gradient(135deg, var(--md-surface-container), var(--md-surface-container-low))"
     from components import render_chip
-    return f"""<div style="background: {background}; border-radius: var(--radius-md); padding: 24px; border: {border}; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 16px;">
-<div style="display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
-<div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--md-primary-container), var(--md-primary)); color: var(--md-on-primary); display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; flex-shrink: 0;">
+
+    if highlighted:
+        # ── Solid deep emerald textured card ────────────────────────────────
+        # Clean Code mapping: role-based badge themes
+        badge_themes = {
+            "primary": ("rgba(179, 229, 252, 0.15)", "#81D4FA", "rgba(179, 229, 252, 0.3)"),
+            "amber":   ("rgba(255, 224, 130, 0.15)", "#FFE082", "rgba(255, 224, 130, 0.3)"),
+            "green":   ("rgba(165, 214, 167, 0.15)", "#A5D6A7", "rgba(165, 214, 167, 0.3)")
+        }
+        badge_bg, badge_text, badge_border = badge_themes.get(chip_variant, badge_themes["primary"])
+
+        # Pure CSS diagonal stripe texture — no SVG, no quoting issues
+        return f"""<div style="
+            position: relative;
+            background-color: #005C41;
+            background-image:
+                repeating-linear-gradient(
+                    135deg,
+                    rgba(255,255,255,0.028) 0px,
+                    rgba(255,255,255,0.028) 1px,
+                    transparent 1px,
+                    transparent 14px
+                );
+            border-radius: var(--radius-md);
+            padding: 22px 24px 20px 24px;
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 6px 24px rgba(0,61,43,0.40), inset 0 1px 0 rgba(255,255,255,0.08);
+            margin-bottom: 16px;
+            overflow: hidden;
+        ">
+<div style="display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;">
+<div style="
+    width: 50px; height: 50px; border-radius: 50%;
+    background: rgba(255,255,255,0.13);
+    border: 2px solid rgba(255,255,255,0.25);
+    color: #FFFFFF;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 22px; font-weight: 800; flex-shrink: 0;
+    letter-spacing: -0.5px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.20);
+">
 {initial}
 </div>
 <div style="flex: 1; min-width: 160px; word-break: break-word;">
-<h3 style="margin: 0 0 2px 0; font-size: 1.25rem; font-weight: 700; color: var(--md-primary); letter-spacing: 0.3px; word-break: break-word;">{name}</h3>
-<div style="font-size: 0.85rem; color: var(--md-on-surface-variant);">{subject_group}<br>Mã: GV-{teacher_id}</div>
+<div style="margin: 0 0 3px 0; font-size: 1.6rem; font-weight: 700; color: #FFE082; letter-spacing: 0.2px; word-break: break-word; line-height: 1.3;">{name}</div>
+<div style="font-size: 1.1rem; color: #FFFFFF; letter-spacing: 0.3px; line-height: 1.45;">{subject_group}<br><span style="color: rgba(255, 255, 255, 0.75); font-size: 1.05rem;">GV-{teacher_id}</span></div>
+</div>
+<div style="flex-shrink: 0;">
+<span style="
+    display: inline-block;
+    background: {badge_bg};
+    color: {badge_text};
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid {badge_border};
+    letter-spacing: 0.4px;
+">{employment_label}</span>
+</div>
+</div>
+<div style="border-top: 1px solid rgba(255,255,255,0.10); margin: 14px 0 12px 0;"></div>
+<div style="font-size: 0.875rem; line-height: 1.75; display: flex; flex-direction: column; gap: 2px;">
+<div><span style="color: rgba(255, 193, 7, 0.8); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;">Đơn vị</span><br><span style="color: #FFFFFF; font-weight: 500;">{department}</span></div>
+<div style="margin-top: 6px;"><span style="color: rgba(255, 193, 7, 0.8); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;">Chức danh</span><br><span style="color: #FFFFFF; font-weight: 500;">{title}</span></div>
+</div>
+<div style="
+    margin-top: 14px; padding: 8px 12px;
+    background: rgba(0,0,0,0.18);
+    border-radius: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 6px;
+">
+<span style="font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.90); overflow-wrap: break-word; word-break: break-word;">{salary_info}</span>
+</div>
+{salary_warning}
+</div>"""
+
+
+    else:
+        # ── Non-highlighted: light surface card ─────────────────────────────
+        return f"""<div style="
+            background: linear-gradient(135deg, var(--md-surface-container), var(--md-surface-container-low));
+            border-radius: var(--radius-md);
+            padding: 22px 24px 20px 24px;
+            border: 1px solid var(--md-outline-variant);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            margin-bottom: 16px;
+        ">
+<div style="display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;">
+<div style="width: 50px; height: 50px; border-radius: 50%; background: var(--md-secondary-container); color: var(--md-secondary); display: flex; justify-content: center; align-items: center; font-size: 22px; font-weight: 800; flex-shrink: 0;">
+{initial}
+</div>
+<div style="flex: 1; min-width: 160px; word-break: break-word;">
+<h3 style="margin: 0 0 3px 0; font-size: 1.15rem; font-weight: 700; color: var(--md-on-surface); word-break: break-word;">{name}</h3>
+<div style="font-size: 0.8rem; color: var(--md-on-surface-variant);">{subject_group} &nbsp;·&nbsp; GV-{teacher_id}</div>
 </div>
 <div style="flex-shrink: 0;">{render_chip(employment_label, chip_variant)}</div>
 </div>
 <div style="border-top: 1px solid var(--md-outline-variant); margin: 14px 0 12px 0;"></div>
-<div style="font-size: 0.9rem; line-height: 1.7;">
-<div><strong style="color: var(--md-primary);">🏛️ Đơn vị:</strong> {department}</div>
-<div><strong style="color: var(--md-primary);">💼 Chức danh:</strong> {title}</div>
+<div style="font-size: 0.875rem; line-height: 1.75; display: flex; flex-direction: column; gap: 2px;">
+<div><span style="color: var(--md-on-surface-variant); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;">Đơn vị</span><br><span style="color: var(--md-on-surface); font-weight: 500;">{department}</span></div>
+<div style="margin-top: 6px;"><span style="color: var(--md-on-surface-variant); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;">Chức danh</span><br><span style="color: var(--md-on-surface); font-weight: 500;">{title}</span></div>
 </div>
-<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--md-outline-variant);">
-<span style="font-weight: 500; overflow-wrap: break-word; word-break: break-word;">{salary_info}</span>
+<div style="margin-top: 14px; padding: 8px 12px; background: var(--md-surface-container-high); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+<span style="font-size: 0.85rem; font-weight: 600; color: var(--md-on-surface); overflow-wrap: break-word; word-break: break-word;">{salary_info}</span>
 </div>
 {salary_warning}
 </div>"""
+
 
 
 tab1, tab2, tab3 = st.tabs([
@@ -185,7 +272,7 @@ with tab1:
             c_role = curr_roles[0] if curr_roles else None
             emp_type_labels = {"TEACHER": "Giảng viên cơ hữu", "GUEST": "Giảng viên thỉnh giảng", "STAFF": "Cán bộ quản lý"}
             emp_label = emp_type_labels.get(t_data['employment_type'], 'Chưa rõ')
-            emp_type_variant = {"TEACHER": "primary", "GUEST": "amber", "STAFF": "green"}
+            emp_type_variant = {"TEACHER": "amber", "GUEST": "primary", "STAFF": "green"}
             chip_variant = emp_type_variant.get(t_data['employment_type'], "primary")
 
             salary_info = ""
@@ -608,7 +695,7 @@ with tab1:
                     _seen_types.add(_type)
                     _prefix_map[idx] = _is_first
                 combined = combined.sort_values("Từ ngày", ascending=True)
-                tl_colors = {"Chức danh": "#FFC107", "Đơn vị": "#4A5D23", "Chức vụ": "#C9A84C",
+                tl_colors = {"Chức danh": "#006747", "Đơn vị": "#006747", "Chức vụ": "#C9A84C",
                             "Cấp bậc hàm": "#800020", "Sự kiện": "#8A7F75"}
                 tl_html = '<div style="position:relative;padding-left:24px;">'
                 tl_html += '<div style="position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--md-outline-variant);"></div>'

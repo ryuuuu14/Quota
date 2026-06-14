@@ -63,14 +63,15 @@ render_sidebar("home")
 # ── Welcome page ──
 st.markdown("""
 <div style="
-background: linear-gradient(135deg, rgba(128, 0, 32, 0.08), rgba(255, 193, 7, 0.04));
+background: linear-gradient(135deg, rgba(128, 0, 32, 0.08), rgba(0, 103, 71, 0.04));
 padding: 32px;
 border-radius: var(--radius-lg);
 margin-bottom: 32px;
 border: 1px solid rgba(255, 255, 255, 0.08);
+border-top: 3px solid var(--md-green);
 box-shadow: var(--shadow-card);
 ">
-<h2 style="margin: 0 0 12px 0; color: #ffffff; font-weight: 800;">Hệ thống Quản lý Chế độ Làm việc Nhà giáo T04</h2>
+<h2 style="margin: 0 0 12px 0; color: var(--md-on-surface); font-weight: 800;">Hệ thống Quản lý Chế độ Làm việc Nhà giáo T04</h2>
 <p style="margin: 0; color: var(--md-on-surface-variant); font-size: 16px; line-height: 1.6;">
 Hỗ trợ tự động hóa việc tính toán định mức giờ dạy chuẩn và giờ nghiên cứu khoa học theo Quy định T04. Hệ thống tự động phân bổ định mức theo số ngày làm việc thực tế, tự động áp dụng các quy tắc miễn giảm và hỗ trợ quy đổi bù trừ giữa giờ dạy và giờ nghiên cứu khoa học.
 </p>

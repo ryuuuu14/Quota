@@ -7,7 +7,7 @@ inject_premium_css()
 st.markdown("""
 <h1 style="margin-bottom:4px;">Design System</h1>
 <p style="color:var(--md-on-surface-variant);margin-bottom:32px;">
-Theme "Huyết Mạch" — Burgundy + Gold + Military Green
+Theme "Huyết Mạch" — Burgundy + Gold + Deep Emerald
 </p>
 """, unsafe_allow_html=True)
 
@@ -23,12 +23,12 @@ palette = [
     ("--md-surface-dim", "#F5F0EB", "Dimmed surface"),
     ("--md-on-surface", "#1A1A1A", "Primary text on cream"),
     ("--md-on-surface-variant", "#5C5248", "Secondary text"),
-    ("--md-secondary", "#4A5D23", "Military Green"),
+    ("--md-secondary", "#006747", "Deep Emerald"),
     ("--md-tertiary", "#C9A84C", "Gold (tertiary)"),
     ("--md-error", "#DC2626", "Error / destructive"),
-    ("--md-green", "#4A5D23", "Success green"),
+    ("--md-green", "#006747", "Deep Emerald"),
     ("--md-red", "#DC2626", "Alert red"),
-    ("--md-amber", "#FFC107", "Warning amber"),
+    ("--md-amber", "#f59e0b", "Warning amber"),
     ("--md-outline", "#D4C9BC", "Borders"),
     ("--md-outline-variant", "#E8DED0", "Subtle borders"),
 ]
@@ -36,7 +36,7 @@ palette = [
 cols = st.columns(4)
 for i, (token, hex_val, desc) in enumerate(palette):
     with cols[i % 4]:
-        is_dark = hex_val in ("#1A1A1A", "#800020", "#4A5D23", "#5C5248", "#DC2626")
+        is_dark = hex_val in ("#1A1A1A", "#800020", "#006747", "#5C5248", "#DC2626")
         text_color = "#FFFFFF" if is_dark else "#1A1A1A"
         st.markdown(f"""
         <div style="background:{hex_val};border-radius:12px;padding:24px 16px;margin-bottom:12px;
@@ -126,7 +126,7 @@ wcag_pairs = [
     ("#1A1A1A on #FDF8F3", "Text on cream", "10.5:1", "✅ AAA"),
     ("#FFFFFF on #800020", "Text on burgundy", "8.0:1", "✅ AAA"),
     ("#1A1A1A on #FFC107", "Text on gold", "10.0:1+", "✅ AAA"),
-    ("#4A5D23 on #FDF8F3", "Green on cream", "5.8:1", "✅ AA"),
+    ("#006747 on #FDF8F3", "Emerald on cream", "6.3:1", "✅ AA"),
     ("#FFC107 on #800020", "Gold dot on burgundy", "5.5:1", "✅ AA"),
     ("#DC2626 on #FDF8F3", "Error on cream", "6.5:1", "✅ AA"),
 ]

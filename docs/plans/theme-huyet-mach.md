@@ -16,7 +16,7 @@
 | `--md-on-primary` | `#1A1A1A` | Text on gold |
 | `--md-tertiary` | `#C9A84C` | Gold (tertiary) |
 | Burgundy chrome | `#800020` | Sidebar, header, nav, timeline rank |
-| `--md-secondary` | `#4A5D23` | Military Green — success, confirm, timeline dept |
+| `--md-secondary` | `#006747` | Deep Emerald — success, confirm, timeline dept |
 | `--md-on-surface` | `#1A1A1A` | Primary text on cream |
 | `--md-on-surface-variant` | `#5C5248` | Secondary text |
 | `--md-outline` | `#D4C9BC` | Borders |
@@ -46,9 +46,9 @@
 | Input | `bg: white, border: 1px solid #D4C9BC` |
 | Sidebar | `bg: #800020, text: white, nav hover: gold` |
 | Chip Primary | `bg: #FFC107, text: #1A1A1A` |
-| Chip Green | `bg: #4A5D23, text: white` |
+| Chip Green | `bg: #006747, text: white` |
 | Timeline Title | `#FFC107` — academic title |
-| Timeline Dept | `#4A5D23` — department/unit |
+| Timeline Dept | `#006747` — department/unit |
 | Timeline Position | `#C9A84C` — leadership role |
 | Timeline Rank | `#800020` — military rank |
 | Timeline Event | `#8A7F75` — neutral event |
@@ -60,7 +60,7 @@
 | `#FFC107` on `#FFFFFF` | 1.5:1 | ⚠️ decorative only |
 | `#FFFFFF` on `#800020` | 8.0:1 | ✅ AAA |
 | `#1A1A1A` on `#FFC107` | 10.0:1+ | ✅ AAA |
-| `#4A5D23` on `#FDF8F3` | 5.8:1 | ✅ AA |
+| `#006747` on `#FDF8F3` | 6.3:1 | ✅ AA |
 
 ## Decision Log
 | Decision | Alternative | Rationale |

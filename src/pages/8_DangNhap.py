@@ -72,13 +72,12 @@ section.main {
     max-width: 280px;
 }
 .brand-divider {
-    width: 40px;
-    height: 3px;
-    background: #FFC107;
-    margin: 0 auto 28px auto;
-    border-radius: 2px;
+    width: 48px;
+    height: 4px;
+    background: linear-gradient(90deg, #007855, #005C41);
+    border-radius: 4px;
+    margin: 0 auto 32px auto;
 }
-
 .form-title {
     font-family: 'Be Vietnam Pro', sans-serif;
     font-weight: 600;
@@ -87,7 +86,6 @@ section.main {
     text-align: center;
     margin: 0 0 24px 0;
 }
-
 div[data-testid="stTextInput"] {
     margin-bottom: 6px;
 }
@@ -110,8 +108,8 @@ div[data-testid="stTextInput"] input {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 div[data-testid="stTextInput"] input:focus {
-    border-color: #FFC107 !important;
-    box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.12) !important;
+    border-color: #006747 !important;
+    box-shadow: 0 0 0 3px rgba(0, 103, 71, 0.12) !important;
 }
 div[data-testid="stTextInput"] input:hover {
     border-color: #B8AD9E !important;
@@ -121,25 +119,34 @@ div[data-testid="stTextInput"] input::placeholder {
     font-weight: 400 !important;
 }
 
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"],
+div[data-testid="stFormSubmitButton"] > button,
 button[kind="primary"],
 button[data-testid="baseButton-primary"] {
     height: 46px !important;
     border-radius: 10px !important;
     border: none !important;
-    background: #FFC107 !important;
-    color: #1A1A1A !important;
+    background: #006747 !important;
+    color: #FFFFFF !important;
     font-family: 'Be Vietnam Pro', sans-serif !important;
     font-weight: 600 !important;
     font-size: 15px !important;
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
     cursor: pointer !important;
 }
+.stButton > button[kind="primary"]:hover,
+.stButton > button[data-testid="baseButton-primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button:hover,
 button[kind="primary"]:hover,
 button[data-testid="baseButton-primary"]:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 8px 24px rgba(255, 193, 7, 0.25) !important;
-    background: #D4A800 !important;
+    box-shadow: 0 8px 24px rgba(0, 103, 71, 0.25) !important;
+    background: #005C35 !important;
 }
+.stButton > button[kind="primary"]:active,
+.stButton > button[data-testid="baseButton-primary"]:active,
+div[data-testid="stFormSubmitButton"] > button:active,
 button[kind="primary"]:active,
 button[data-testid="baseButton-primary"]:active {
     transform: scale(0.98) !important;
@@ -181,10 +188,10 @@ button[data-testid="baseButton-primary"]:active {
 }
 .meta-status::before {
     content: '';
-    width: 5px;
-    height: 5px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: #4A5D23;
+    background: #006747;
     animation: pulse-dot 2s ease-in-out infinite;
 }
 @keyframes pulse-dot {
@@ -207,15 +214,17 @@ user = get_current_user()
 
 if user:
     st.markdown("""
-    <div class="brand-logo">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FFC107" stroke-width="1.2" fill="none"/>
-            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,193,7,0.15)"/>
-        </svg>
+    <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
+        <div class="brand-logo">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#006747" stroke-width="1.2" fill="none"/>
+                <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(0,103,71,0.15)"/>
+            </svg>
+        </div>
+        <h1 class="brand-wordmark">Hệ thống<br>Định mức T04</h1>
+        <p class="brand-tagline">Quản lý chế độ làm việc nhà giáo</p>
+        <div class="brand-divider"></div>
     </div>
-    <h1 class="brand-wordmark">H\u1ec7 th\u1ed1ng<br>\u0110\u1ecbnh m\u1ee9c T04</h1>
-    <p class="brand-tagline">Qu\u1ea3n l\u00fd ch\u1ebf \u0111\u1ed9 l\u00e0m vi\u1ec7c nh\u00e0 gi\u00e1o</p>
-    <div class="brand-divider"></div>
     """, unsafe_allow_html=True)
 
     role_labels = {
@@ -227,9 +236,9 @@ if user:
     st.markdown(f"""
     <div style="text-align:center">
         <svg width="64" height="64" viewBox="0 0 64 64" style="margin-bottom:12px">
-            <circle cx="32" cy="32" r="32" fill="rgba(255,193,7,0.08)"/>
-            <circle cx="32" cy="24" r="11" fill="rgba(255,193,7,0.5)"/>
-            <path d="M12 54c0-11 9-20 20-20s20 9 20 20" fill="rgba(255,193,7,0.5)"/>
+            <circle cx="32" cy="32" r="32" fill="rgba(0,103,71,0.08)"/>
+            <circle cx="32" cy="24" r="11" fill="rgba(0,103,71,0.5)"/>
+            <path d="M12 54c0-11 9-20 20-20s20 9 20 20" fill="rgba(0,103,71,0.5)"/>
         </svg>
         <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:18px;color:#1A1A1A;margin:0 0 4px 0">{user["username"]}</p>
         <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:13px;color:#FFC107;margin:0 0 2px 0">{role_label}</p>
@@ -243,16 +252,18 @@ if user:
 
 else:
     st.markdown("""
-    <div class="brand-logo">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FFC107" stroke-width="1.2" fill="none"/>
-            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,193,7,0.15)"/>
-        </svg>
+    <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
+        <div class="brand-logo">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#006747" stroke-width="1.2" fill="none"/>
+                <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(0,103,71,0.15)"/>
+            </svg>
+        </div>
+        <h1 class="brand-wordmark">Hệ thống<br>Định mức T04</h1>
+        <p class="brand-tagline">Quản lý chế độ làm việc nhà giáo theo Quy định T04</p>
+        <div class="brand-divider"></div>
+        <p class="form-title">Đăng nhập</p>
     </div>
-    <h1 class="brand-wordmark">H\u1ec7 th\u1ed1ng<br>\u0110\u1ecbnh m\u1ee9c T04</h1>
-    <p class="brand-tagline">Qu\u1ea3n l\u00fd ch\u1ebf \u0111\u1ed9 l\u00e0m vi\u1ec7c nh\u00e0 gi\u00e1o theo Quy \u0111\u1ecbnh T04</p>
-    <div class="brand-divider"></div>
-    <p class="form-title">\u0110\u0103ng nh\u1eadp</p>
     """, unsafe_allow_html=True)
 
     with st.form("login_form", clear_on_submit=False):

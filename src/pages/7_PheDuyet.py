@@ -198,6 +198,11 @@ def show_batch_detail(batch_id: int):
                         WHERE id = ?
                     """, (now_str, decided_by, batch_id))
 
+                    cursor.execute("""
+                        INSERT INTO notifications (target_dept, target_role, title, message, batch_id)
+                        VALUES (?, 'head', '✅ Yêu cầu phê duyệt thành công', ?, ?)
+                    """, (dept_name, f"Lô dữ liệu #{batch_id} đã được phê duyệt.", batch_id))
+
                 st.success("✅ Đã phê duyệt và cập nhật dữ liệu thành công!")
                 st.rerun()
             except Exception as e:
@@ -218,6 +223,11 @@ def show_batch_detail(batch_id: int):
                             SET status = 'rejected', rejection_reason = ?, decided_at = ?, decided_by = ?
                             WHERE id = ?
                         """, (rejection_reason, now_str, decided_by, batch_id))
+
+                        cursor.execute("""
+                            INSERT INTO notifications (target_dept, target_role, title, message, batch_id)
+                            VALUES (?, 'head', '❌ Yêu cầu bị từ chối', ?, ?)
+                        """, (dept_name, f"Lô dữ liệu #{batch_id} bị từ chối. Lý do: {rejection_reason}", batch_id))
 
                     st.success("❌ Đã từ chối lô dữ liệu và phản hồi lại Đơn vị.")
                     st.rerun()
@@ -507,6 +517,11 @@ def show_batch_detail(batch_id: int):
                         WHERE id = ?
                     """, (now_str, decided_by, batch_id))
 
+                    cursor.execute("""
+                        INSERT INTO notifications (target_dept, target_role, title, message, batch_id)
+                        VALUES (?, 'head', '✅ Yêu cầu phê duyệt thành công', ?, ?)
+                    """, (dept_name, f"Lô dữ liệu #{batch_id} đã được phê duyệt.", batch_id))
+
                     cursor.execute(f"DELETE FROM {staging_table} WHERE batch_id = ?", (batch_id,))
 
                     st.success("✅ Đã phê duyệt và cập nhật dữ liệu thành công!")
@@ -532,6 +547,11 @@ def show_batch_detail(batch_id: int):
                                 SET status = 'rejected', rejection_reason = ?, decided_at = ?, decided_by = ?
                                 WHERE id = ?
                             """, (rejection_reason, now_str, decided_by, batch_id))
+
+                            cursor.execute("""
+                                INSERT INTO notifications (target_dept, target_role, title, message, batch_id)
+                                VALUES (?, 'head', '❌ Yêu cầu bị từ chối', ?, ?)
+                            """, (dept_name, f"Lô dữ liệu #{batch_id} bị từ chối. Lý do: {rejection_reason}", batch_id))
 
                             cursor.execute(f"DELETE FROM {staging_table} WHERE batch_id = ?", (batch_id,))
 
@@ -581,7 +601,7 @@ with col2:
             created_at DESC
     """, conn)
 
-    status_filter = st.selectbox("Lọc theo trạng thái:", ["Tất cả", "Pending", "Approved", "Rejected"])
+    status_filter = st.selectbox("Lọc theo trạng thái:", ["Tất cả", "Pending", "Approved", "Rejected"], index=1)
     if status_filter != "Tất cả":
         batches_df = batches_df[batches_df['status'] == status_filter.lower()]
     
