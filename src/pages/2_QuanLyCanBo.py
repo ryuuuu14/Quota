@@ -608,8 +608,8 @@ with tab1:
                     _seen_types.add(_type)
                     _prefix_map[idx] = _is_first
                 combined = combined.sort_values("Từ ngày", ascending=True)
-                tl_colors = {"Chức danh": "#2563eb", "Đơn vị": "#16a34a", "Chức vụ": "#d97706",
-                            "Cấp bậc hàm": "#7c3aed", "Sự kiện": "#6b7280"}
+                tl_colors = {"Chức danh": "#FFC107", "Đơn vị": "#4A5D23", "Chức vụ": "#C9A84C",
+                            "Cấp bậc hàm": "#800020", "Sự kiện": "#8A7F75"}
                 tl_html = '<div style="position:relative;padding-left:24px;">'
                 tl_html += '<div style="position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--md-outline-variant);"></div>'
                 for _, row in combined.iterrows():

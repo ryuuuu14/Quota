@@ -87,7 +87,7 @@ def render_warning_state(message):
     padding: 16px 20px;
     border-radius: var(--radius-md);
     border-left: 4px solid var(--md-amber);
-    color: #78350f;
+    color: var(--md-on-surface);
     margin: 20px 0;
     font-size: 0.95rem;
     line-height: 1.5;
@@ -142,11 +142,11 @@ _PREMIUM_CSS = """
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
 <style>
     :root {
-        --md-primary: #FF8C00; /* Amber — brand accent */
-        --md-primary-container: rgba(255, 140, 0, 0.12);
+        --md-primary: #FFC107; /* Gold — brand accent */
+        --md-primary-container: rgba(255, 193, 7, 0.15);
         --md-on-primary: #1A1A1A;
-        --md-primary-fixed: rgba(255, 140, 0, 0.10);
-        --md-primary-fixed-dim: rgba(255, 140, 0, 0.20);
+        --md-primary-fixed: rgba(255, 193, 7, 0.10);
+        --md-primary-fixed-dim: rgba(255, 193, 7, 0.20);
         --md-surface: #FDF8F3; /* Warm cream — content area */
         --md-surface-dim: #F5F0EB;
         --md-surface-container-lowest: #FFFFFF;
@@ -167,8 +167,8 @@ _PREMIUM_CSS = """
         --md-green-bg: rgba(74, 93, 35, 0.12);
         --md-red: #DC2626;
         --md-red-bg: rgba(220, 38, 38, 0.10);
-        --md-amber: #FF8C00;
-        --md-amber-bg: rgba(255, 140, 0, 0.12);
+        --md-amber: #FFC107;
+        --md-amber-bg: rgba(255, 193, 7, 0.12);
         --md-burgundy: #800020;
         --radius-sm: 8px;
         --radius-md: 12px;
@@ -284,15 +284,15 @@ _PREMIUM_CSS = """
     }
     section[data-testid="stSidebar"] [data-testid="stPageLink"] > a:hover {
         background-color: rgba(255, 255, 255, 0.08) !important;
-        color: #FF8C00 !important;
+        color: #FFC107 !important;
     }
     section[data-testid="stSidebar"] [data-testid="stPageLink"] > a[aria-current="page"] {
-        background-color: rgba(255, 140, 0, 0.15) !important;
-        color: #FF8C00 !important;
-        border-left: 4px solid #FF8C00 !important;
+        background-color: rgba(255, 193, 7, 0.15) !important;
+        color: #FFC107 !important;
+        border-left: 4px solid #FFC107 !important;
     }
     section[data-testid="stSidebar"] [data-testid="stPageLink"] > a[aria-current="page"] p {
-        color: #FF8C00 !important;
+        color: #FFC107 !important;
     }
     section[data-testid="stSidebar"] [data-testid="stPageLink"] span {
         color: inherit !important;
@@ -323,17 +323,56 @@ _PREMIUM_CSS = """
     }
     .stButton > button[kind="primary"]:hover,
     .stButton > button[data-testid="baseButton-primary"]:hover {
-        background: #E67E00 !important;
+        background: #E5A800 !important;
         color: var(--md-on-primary) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
 
     /* Data tables: monospace for numbers */
-    .stDataFrame td, .stDataFrame th {
-        font-size: 13px !important;
+    .stDataFrame {
+        border: 1px solid var(--md-outline-variant) !important;
+        border-radius: var(--radius-md) !important;
+        overflow: hidden !important;
+    }
+    .stDataFrame th {
+        background-color: var(--md-surface-dim) !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        color: var(--md-on-surface-variant) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
+        padding: 10px 12px !important;
     }
     .stDataFrame td {
+        font-size: 13px !important;
         font-variant-numeric: tabular-nums !important;
+        padding: 8px 12px !important;
+    }
+    .stDataFrame tr:nth-child(even) td {
+        background-color: var(--md-surface-container-lowest) !important;
+    }
+
+    /* MultiSelect */
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        border-radius: var(--radius-md) !important;
+        border: 1px solid var(--md-outline-variant) !important;
+    }
+
+    /* Slider */
+    .stSlider div[data-baseweb="slider"] div[role="slider"] {
+        background-color: var(--md-primary) !important;
+    }
+
+    /* TextArea */
+    .stTextArea textarea {
+        font-family: var(--font-family) !important;
+        border-radius: var(--radius-md) !important;
+        border: 1px solid var(--md-outline-variant) !important;
+        background-color: #FFFFFF !important;
+    }
+    .stTextArea textarea:focus {
+        border-color: var(--md-primary) !important;
     }
 
     /* Sidebar logout button */
@@ -398,7 +437,7 @@ _PREMIUM_CSS = """
     }
     .md-card:hover {
         transform: translateY(-2px) !important;
-        border-color: rgba(255, 140, 0, 0.3) !important;
+        border-color: rgba(255, 193, 7, 0.3) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
 
@@ -528,7 +567,7 @@ _PREMIUM_CSS = """
         transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
     }
     div[data-testid="stExpander"]:hover {
-        border-color: rgba(255, 140, 0, 0.25) !important;
+        border-color: rgba(255, 193, 7, 0.25) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
     /* Expander header row */
@@ -639,7 +678,7 @@ _PREMIUM_CSS = """
     div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) {
         background: var(--md-primary) !important;
         color: white !important;
-        box-shadow: 0 2px 8px rgba(255, 140, 0, 0.30);
+        box-shadow: 0 2px 8px rgba(255, 193, 7, 0.30);
     }
     div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child {
         display: none !important;
@@ -758,7 +797,7 @@ def render_sidebar(active_page="home"):
             identity_html = (
                 f'<div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.06); border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.12);">'
                 f'  <div style="font-size: 11px; color: rgba(255,255,255,0.60); font-weight: 500;">Tài khoản hoạt động:</div>'
-                f'  <div style="font-weight: 700; color: #FF8C00; font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
+                f'  <div style="font-weight: 700; color: #FFC107; font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
                 f'  <div style="font-size: 10px; color: rgba(255,255,255,0.50); margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
                 f'</div>'
             )
@@ -776,7 +815,7 @@ def render_sidebar(active_page="home"):
     <div style="display: flex; align-items: center; gap: 12px;">
         <div style="
             width: 40px; height: 40px;
-            background: linear-gradient(135deg, rgba(255,140,0,0.20), #FF8C00);
+            background: linear-gradient(135deg, rgba(255,193,7,0.20), #FFC107);
             border-radius: var(--radius-md);
             display: flex; align-items: center; justify-content: center;
             color: #1A1A1A;
@@ -822,6 +861,8 @@ def render_sidebar(active_page="home"):
                 logout()
                 st.switch_page("pages/8_DangNhap.py")
 
+        st.markdown('<div style="margin-top:24px;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;"></div>', unsafe_allow_html=True)
+        st.page_link("pages/5_DesignSystem.py", label="Design System", icon=":material/palette:")
 
         # System status bar
         st.markdown(f"""
@@ -885,16 +926,16 @@ def render_error_report(errors):
     errors_html = "".join([f'<li style="margin-bottom: 6px;">{err}</li>' for err in errors])
     st.markdown(f"""
     <div style="
-        background-color: #fdf2f2;
-        border: 1px solid #f5c2c2;
+        background-color: var(--md-error-container);
+        border: 1px solid var(--md-error);
         border-radius: var(--radius-md);
         padding: 16px 20px;
-        color: #9b1c1c;
+        color: var(--md-error);
         margin: 16px 0;
         font-size: 0.95rem;
     ">
         <div style="font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <span class="material-symbols-outlined" style="font-size: 20px; color: #df1b1b;">error</span>
+            <span class="material-symbols-outlined" style="font-size: 20px; color: var(--md-error);">error</span>
             Phát hiện lỗi dữ liệu ({len(errors)} lỗi):
         </div>
         <ul style="margin: 0; padding-left: 20px;">
@@ -906,16 +947,16 @@ def render_error_report(errors):
 def render_success_preview(df):
     st.markdown(f"""
     <div style="
-        background-color: #f0fdf4;
-        border: 1px solid #bbf7d0;
+        background-color: var(--md-green-bg);
+        border: 1px solid var(--md-green);
         border-radius: var(--radius-md);
         padding: 16px 20px;
-        color: #166534;
+        color: var(--md-green);
         margin: 16px 0;
         font-size: 0.95rem;
     ">
         <div style="font-weight: 700; display: flex; align-items: center; gap: 8px;">
-            <span class="material-symbols-outlined" style="font-size: 20px; color: #15803d;">check_circle</span>
+            <span class="material-symbols-outlined" style="font-size: 20px; color: var(--md-green);">check_circle</span>
             File hợp lệ! Sẵn sàng nhập {len(df)} cán bộ.
         </div>
     </div>

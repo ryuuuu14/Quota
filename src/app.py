@@ -63,7 +63,7 @@ render_sidebar("home")
 # ── Welcome page ──
 st.markdown("""
 <div style="
-background: linear-gradient(135deg, rgba(128, 0, 32, 0.08), rgba(255, 140, 0, 0.04));
+background: linear-gradient(135deg, rgba(128, 0, 32, 0.08), rgba(255, 193, 7, 0.04));
 padding: 32px;
 border-radius: var(--radius-lg);
 margin-bottom: 32px;

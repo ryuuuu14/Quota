@@ -1,3 +1,4 @@
+import unicodedata
 import pandas as pd
 import json
 from deepdiff import DeepDiff
@@ -57,6 +58,11 @@ def enhanced_diff(staging_df, prod_df, key_cols, domain):
     if domain not in VALID_DOMAINS:
         raise ValueError(f"Invalid domain '{domain}'. Must be one of {VALID_DOMAINS}")
 
+    # Safety guard: skip DeepDiff for large payloads (>3000 matched rows)
+    # to prevent OOM from verbose_level=2 expansion
+    matched_count = len(set(staging_map.keys()) & set(prod_map.keys()))
+    _skip_deepdiff = matched_count > 3000
+
     staging_map = _rows_to_comparable(staging_df, key_cols)
     prod_map = _rows_to_comparable(prod_df, key_cols)
 
@@ -92,6 +98,20 @@ def enhanced_diff(staging_df, prod_df, key_cols, domain):
     for key in staging_keys & prod_keys:
         staging_row = staging_map[key]
         prod_row = prod_map[key]
+
+        if _skip_deepdiff:
+            changed_fields = [k for k in staging_row if _serialize_for_deepdiff(staging_row[k]) != _serialize_for_deepdiff(prod_row.get(k))]
+            if not changed_fields:
+                diff_result["stats"]["SKIP"] += 1
+                continue
+            row_id = "|".join(str(k) for k in key)
+            diff_result["diffs"][row_id] = {
+                "marker": "UPDATE",
+                "changes": {f: {"old": _serialize_for_deepdiff(prod_row.get(f)), "new": _serialize_for_deepdiff(staging_row[f])} for f in changed_fields},
+                "new_values": staging_row
+            }
+            diff_result["stats"]["UPDATE"] += 1
+            continue
 
         dd = DeepDiff(prod_row, staging_row, verbose_level=2, exclude_types={pd.Timestamp})
 
@@ -160,12 +180,18 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
     # Map by ID
     prod_map_id = {r["id"]: r for r in prod_rows}
     # Map by name + department for natural key lookup (fallback)
+    # Use list-per-key to detect collisions (duplicate name+dept)
     prod_map = {}
     for r in prod_rows:
-        dept_clean = str(r["dept"] or "").strip().lower()
-        name_clean = str(r["name"] or "").strip().lower()
+        dept_clean = unicodedata.normalize('NFC', str(r["dept"] or "")).strip().lower()
+        name_clean = unicodedata.normalize('NFC', str(r["name"] or "")).strip().lower()
         key = (name_clean, dept_clean)
-        prod_map[key] = r
+        if key not in prod_map:
+            prod_map[key] = []
+        prod_map[key].append(r)
+        if len(prod_map[key]) > 1:
+            import warnings
+            warnings.warn(f"Phát hiện trùng tên+đơn vị: '{name_clean}' / '{dept_clean}'")
 
     df["diff_marker"] = "NEW"
     df["diff_detail"] = ""
@@ -175,21 +201,22 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
     rank_map = {r["rank_name"].strip().lower(): r["id"] for r in cursor.fetchall()}
 
     for idx, row in df.iterrows():
-        name = str(row["Họ tên"]).strip()
-        dept = str(row["Đơn vị"]).strip()
+        name = unicodedata.normalize('NFC', str(row["Họ tên"]).strip())
+        dept = unicodedata.normalize('NFC', str(row["Đơn vị"]).strip())
         
         prod = None
+        t_id = None
         try:
             t_id = int(float(str(row.get("Mã GV", ""))))
-            if t_id in prod_map_id:
-                prod = prod_map_id[t_id]
         except Exception:
             pass
+        if t_id is not None and t_id in prod_map_id:
+            prod = prod_map_id[t_id]
             
         if not prod:
             key = (name.lower(), dept.lower())
             if key in prod_map:
-                prod = prod_map[key]
+                prod = prod_map[key][0]
         
         if prod:
             changes = []

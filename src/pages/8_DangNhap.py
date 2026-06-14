@@ -74,7 +74,7 @@ section.main {
 .brand-divider {
     width: 40px;
     height: 3px;
-    background: #FF8C00;
+    background: #FFC107;
     margin: 0 auto 28px auto;
     border-radius: 2px;
 }
@@ -110,8 +110,8 @@ div[data-testid="stTextInput"] input {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 div[data-testid="stTextInput"] input:focus {
-    border-color: #FF8C00 !important;
-    box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.12) !important;
+    border-color: #FFC107 !important;
+    box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.12) !important;
 }
 div[data-testid="stTextInput"] input:hover {
     border-color: #B8AD9E !important;
@@ -126,7 +126,7 @@ button[data-testid="baseButton-primary"] {
     height: 46px !important;
     border-radius: 10px !important;
     border: none !important;
-    background: #FF8C00 !important;
+    background: #FFC107 !important;
     color: #1A1A1A !important;
     font-family: 'Be Vietnam Pro', sans-serif !important;
     font-weight: 600 !important;
@@ -137,8 +137,8 @@ button[data-testid="baseButton-primary"] {
 button[kind="primary"]:hover,
 button[data-testid="baseButton-primary"]:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 8px 24px rgba(255, 140, 0, 0.25) !important;
-    background: #E67E00 !important;
+    box-shadow: 0 8px 24px rgba(255, 193, 7, 0.25) !important;
+    background: #D4A800 !important;
 }
 button[kind="primary"]:active,
 button[data-testid="baseButton-primary"]:active {
@@ -209,8 +209,8 @@ if user:
     st.markdown("""
     <div class="brand-logo">
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FF8C00" stroke-width="1.2" fill="none"/>
-            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,140,0,0.15)"/>
+            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FFC107" stroke-width="1.2" fill="none"/>
+            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,193,7,0.15)"/>
         </svg>
     </div>
     <h1 class="brand-wordmark">H\u1ec7 th\u1ed1ng<br>\u0110\u1ecbnh m\u1ee9c T04</h1>
@@ -227,12 +227,12 @@ if user:
     st.markdown(f"""
     <div style="text-align:center">
         <svg width="64" height="64" viewBox="0 0 64 64" style="margin-bottom:12px">
-            <circle cx="32" cy="32" r="32" fill="rgba(255,140,0,0.08)"/>
-            <circle cx="32" cy="24" r="11" fill="rgba(255,140,0,0.5)"/>
-            <path d="M12 54c0-11 9-20 20-20s20 9 20 20" fill="rgba(255,140,0,0.5)"/>
+            <circle cx="32" cy="32" r="32" fill="rgba(255,193,7,0.08)"/>
+            <circle cx="32" cy="24" r="11" fill="rgba(255,193,7,0.5)"/>
+            <path d="M12 54c0-11 9-20 20-20s20 9 20 20" fill="rgba(255,193,7,0.5)"/>
         </svg>
         <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:18px;color:#1A1A1A;margin:0 0 4px 0">{user["username"]}</p>
-        <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:13px;color:#FF8C00;margin:0 0 2px 0">{role_label}</p>
+        <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:13px;color:#FFC107;margin:0 0 2px 0">{role_label}</p>
         {f'<p style="font-family:\'Be Vietnam Pro\',sans-serif;font-size:12px;color:#5C5248;margin:0 0 24px 0">{user["department_name"]}</p>' if user.get("department_name") else '<div style="height:18px"></div>'}
     </div>
     """, unsafe_allow_html=True)
@@ -245,8 +245,8 @@ else:
     st.markdown("""
     <div class="brand-logo">
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FF8C00" stroke-width="1.2" fill="none"/>
-            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,140,0,0.15)"/>
+            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FFC107" stroke-width="1.2" fill="none"/>
+            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,193,7,0.15)"/>
         </svg>
     </div>
     <h1 class="brand-wordmark">H\u1ec7 th\u1ed1ng<br>\u0110\u1ecbnh m\u1ee9c T04</h1>
