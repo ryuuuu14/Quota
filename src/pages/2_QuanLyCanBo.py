@@ -62,9 +62,9 @@ st.markdown('''
     color: var(--md-on-surface);
 }
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
-    background-color: #1e293b;
-    color: #f8fafc !important;
-    border: 1px solid #0f172a;
+    background-color: var(--md-primary-container);
+    color: var(--md-primary) !important;
+    border: 1px solid var(--md-primary-container);
 }
 .sp-card {
     background: var(--md-surface-container);

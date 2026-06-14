@@ -142,58 +142,43 @@ _PREMIUM_CSS = """
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
 <style>
     :root {
-        --md-primary: #1e3a8a; /* Midnight Blue */
-        --md-primary-container: #dbeafe;
-        --md-on-primary: #ffffff;
-        --md-primary-fixed: #dbeafe;
-        --md-primary-fixed-dim: #93c5fd;
-        --md-surface: #f8fafc; /* Slate 50 */
-        --md-surface-dim: #f1f5f9; /* Slate 100 */
-        --md-surface-container-lowest: #ffffff;
-        --md-surface-container-low: #f8fafc;
-        --md-surface-container: #f1f5f9;
-        --md-surface-container-high: #e2e8f0;
-        --md-on-surface: #0f172a; /* Slate 900 */
-        --md-on-surface-variant: #475569; /* Slate 600 */
-        --md-outline: #64748b;
-        --md-outline-variant: #e2e8f0;
-        --md-secondary: #0f766e; /* Military Teal Green */
-        --md-secondary-container: #ccfbf1;
-        --md-tertiary: #b45309;
-        --md-tertiary-container: #fef3c7;
-        --md-error: #b91c1c;
-        --md-error-container: #fee2e2;
-        --md-green: #047857;
-        --md-green-bg: #d1fae5;
-        --md-red: #be123c;
-        --md-red-bg: #ffe4e6;
-        --md-amber: #b45309;
-        --md-amber-bg: #fef3c7;
-        --md-green: #047857;
-        --md-green-bg: #d1fae5;
-        --md-red: #be123c;
-        --md-red-bg: #ffe4e6;
-        --md-amber: #b45309;
-        --md-amber-bg: #fef3c7;
+        --md-primary: #FF8C00; /* Amber — brand accent */
+        --md-primary-container: rgba(255, 140, 0, 0.12);
+        --md-on-primary: #1A1A1A;
+        --md-primary-fixed: rgba(255, 140, 0, 0.10);
+        --md-primary-fixed-dim: rgba(255, 140, 0, 0.20);
+        --md-surface: #FDF8F3; /* Warm cream — content area */
+        --md-surface-dim: #F5F0EB;
+        --md-surface-container-lowest: #FFFFFF;
+        --md-surface-container-low: #F5F0EB;
+        --md-surface-container: #EFE8DD;
+        --md-surface-container-high: #E8DED0;
+        --md-on-surface: #1A1A1A; /* Near-black on cream */
+        --md-on-surface-variant: #5C5248; /* Warm gray */
+        --md-outline: #D4C9BC;
+        --md-outline-variant: #E8DED0;
+        --md-secondary: #4A5D23; /* Military Green */
+        --md-secondary-container: rgba(74, 93, 35, 0.15);
+        --md-tertiary: #C9A84C; /* Gold */
+        --md-tertiary-container: rgba(201, 168, 76, 0.15);
+        --md-error: #DC2626;
+        --md-error-container: rgba(220, 38, 38, 0.10);
+        --md-green: #4A5D23;
+        --md-green-bg: rgba(74, 93, 35, 0.12);
+        --md-red: #DC2626;
+        --md-red-bg: rgba(220, 38, 38, 0.10);
+        --md-amber: #FF8C00;
+        --md-amber-bg: rgba(255, 140, 0, 0.12);
+        --md-burgundy: #800020;
         --radius-sm: 8px;
         --radius-md: 12px;
         --radius-lg: 18px;
         --radius-xl: 24px;
         --radius-full: 9999px;
-        --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
-        --shadow-elevated: 0 12px 24px rgba(0, 0, 0, 0.08);
+        --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.08);
+        --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.12);
         --font-family: 'Be Vietnam Pro', sans-serif;
         --font-mono: 'JetBrains Mono', monospace;
-        --sp-4: 4px;
-        --sp-8: 8px;
-        --sp-12: 12px;
-        --sp-16: 16px;
-        --sp-20: 20px;
-        --sp-24: 24px;
-        --sp-32: 32px;
-        --sp-40: 40px;
-        --brand-primary: #1e3a8a;
-        --brand-secondary: #0f766e;
     }
 
     /* Mượt mà hiệu ứng cuộn trang */
@@ -275,23 +260,43 @@ _PREMIUM_CSS = """
     .stTabs button[data-baseweb="tab"][aria-selected="true"] {
         background-color: var(--md-primary-container) !important;
         color: var(--md-primary) !important;
-        border-color: rgba(30, 58, 138, 0.35) !important;
+        border-color: var(--md-primary-container) !important;
         box-shadow: var(--shadow-card) !important;
         font-weight: 700 !important;
     }
 
     section[data-testid="stSidebar"] {
-        background-color: #f8fafc !important; /* Light slate */
-        border-right: 1px solid var(--md-outline-variant) !important;
+        background-color: #800020 !important; /* Burgundy chrome */
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
     section[data-testid="stSidebar"] > div:first-child {
         padding-top: 0 !important;
     }
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] .md-section-label,
     section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
-        font-size: 14px !important;
-        color: var(--md-on-surface-variant) !important;
+        color: rgba(255, 255, 255, 0.85) !important;
     }
-
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a {
+        color: rgba(255, 255, 255, 0.70) !important;
+        background-color: transparent !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a:hover {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        color: #FF8C00 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a[aria-current="page"] {
+        background-color: rgba(255, 140, 0, 0.15) !important;
+        color: #FF8C00 !important;
+        border-left: 4px solid #FF8C00 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] > a[aria-current="page"] p {
+        color: #FF8C00 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] span {
+        color: inherit !important;
+    }
     /* Premium Button */
     .stButton > button {
         font-family: var(--font-family) !important;
@@ -312,14 +317,14 @@ _PREMIUM_CSS = """
     }
     .stButton > button[kind="primary"],
     .stButton > button[data-testid="baseButton-primary"] {
-        background: #1e3a8a !important;
-        color: #ffffff !important;
+        background: var(--md-primary) !important;
+        color: var(--md-on-primary) !important;
         border: none !important;
     }
     .stButton > button[kind="primary"]:hover,
     .stButton > button[data-testid="baseButton-primary"]:hover {
-        background: #1e40af !important;
-        color: #ffffff !important;
+        background: #E67E00 !important;
+        color: var(--md-on-primary) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
 
@@ -331,16 +336,16 @@ _PREMIUM_CSS = """
         font-variant-numeric: tabular-nums !important;
     }
 
-    /* Sidebar logout button — fix text color and kill the Streamlit slide underline */
+    /* Sidebar logout button */
     section[data-testid="stSidebar"] .stButton > button {
-        background: #1e3a8a !important;
-        color: #ffffff !important;
-        border: none !important;
+        background: rgba(255, 255, 255, 0.10) !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
         box-shadow: none !important;
     }
     section[data-testid="stSidebar"] .stButton > button:hover {
-        background: #1e40af !important;
-        color: #ffffff !important;
+        background: rgba(255, 255, 255, 0.18) !important;
+        color: #FFFFFF !important;
         transform: none !important;
         box-shadow: none !important;
     }
@@ -393,7 +398,7 @@ _PREMIUM_CSS = """
     }
     .md-card:hover {
         transform: translateY(-2px) !important;
-        border-color: rgba(30, 58, 138, 0.3) !important;
+        border-color: rgba(255, 140, 0, 0.3) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
 
@@ -406,29 +411,29 @@ _PREMIUM_CSS = """
         font-weight: 600 !important;
     }
     .md-chip-primary {
-        background-color: #2563eb !important;
-        color: #ffffff !important;
+        background-color: var(--md-primary) !important;
+        color: var(--md-on-primary) !important;
         border: none !important;
     }
     .md-chip-green {
-        background-color: #059669 !important;
+        background-color: var(--md-green) !important;
         color: #ffffff !important;
         border: none !important;
     }
     .md-chip-red {
-        background-color: #dc2626 !important;
+        background-color: var(--md-error) !important;
         color: #ffffff !important;
         border: none !important;
     }
     .md-chip-amber {
-        background-color: #d97706 !important;
-        color: #ffffff !important;
+        background-color: var(--md-amber) !important;
+        color: var(--md-on-primary) !important;
         border: none !important;
     }
     .md-chip-tertiary {
         background-color: var(--md-tertiary-container) !important;
         color: var(--md-tertiary) !important;
-        border: 1px solid rgba(180, 83, 9, 0.2) !important;
+        border: 1px solid rgba(201, 168, 76, 0.3) !important;
     }
     
     /* Destruction Button Styling */
@@ -438,7 +443,7 @@ _PREMIUM_CSS = """
     .stButton button[aria-label*="xoá"] {
         background-color: var(--md-red-bg) !important;
         color: var(--md-red) !important;
-        border: 1px solid rgba(190, 18, 60, 0.4) !important;
+        border: 1px solid rgba(220, 38, 38, 0.4) !important;
     }
     .stButton button[aria-label*="Xóa"]:hover,
     .stButton button[aria-label*="Xoá"]:hover {
@@ -523,7 +528,7 @@ _PREMIUM_CSS = """
         transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
     }
     div[data-testid="stExpander"]:hover {
-        border-color: rgba(30, 58, 138, 0.25) !important;
+        border-color: rgba(255, 140, 0, 0.25) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
     /* Expander header row */
@@ -634,7 +639,7 @@ _PREMIUM_CSS = """
     div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) {
         background: var(--md-primary) !important;
         color: white !important;
-        box-shadow: 0 2px 8px rgba(30, 58, 138, 0.25);
+        box-shadow: 0 2px 8px rgba(255, 140, 0, 0.30);
     }
     div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child {
         display: none !important;
@@ -751,10 +756,10 @@ def render_sidebar(active_page="home"):
             }
             role_label = role_labels.get(user["role"], "Người dùng")
             identity_html = (
-                f'<div style="margin-top: 12px; padding: 10px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); border: 1px solid var(--md-outline-variant);">'
-                f'  <div style="font-size: 11px; color: var(--md-on-surface-variant); font-weight: 500;">Tài khoản hoạt động:</div>'
-                f'  <div style="font-weight: 700; color: var(--md-primary); font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
-                f'  <div style="font-size: 10px; color: var(--md-secondary); margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
+                f'<div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.06); border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.12);">'
+                f'  <div style="font-size: 11px; color: rgba(255,255,255,0.60); font-weight: 500;">Tài khoản hoạt động:</div>'
+                f'  <div style="font-weight: 700; color: #FF8C00; font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
+                f'  <div style="font-size: 10px; color: rgba(255,255,255,0.50); margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
                 f'</div>'
             )
         else:
@@ -767,21 +772,21 @@ def render_sidebar(active_page="home"):
             )
 
         st.markdown(f"""
-<div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid var(--md-outline-variant); margin-bottom: 16px;">
+<div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 16px;">
     <div style="display: flex; align-items: center; gap: 12px;">
         <div style="
             width: 40px; height: 40px;
-            background: linear-gradient(135deg, var(--md-primary-container), var(--md-primary));
+            background: linear-gradient(135deg, rgba(255,140,0,0.20), #FF8C00);
             border-radius: var(--radius-md);
             display: flex; align-items: center; justify-content: center;
-            color: var(--md-on-primary);
+            color: #1A1A1A;
             font-size: 20px;
         ">
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
         </div>
         <div>
-            <div style="font-weight: 700; font-size: 16px; color: var(--md-on-surface); line-height: 1.2;">Quản lý T04</div>
-            <div style="font-size: 11px; color: var(--md-on-surface-variant); letter-spacing: 0.03em;">Hệ thống định mức</div>
+            <div style="font-weight: 700; font-size: 16px; color: #FFFFFF; line-height: 1.2;">Quản lý T04</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.55); letter-spacing: 0.03em;">Hệ thống định mức</div>
         </div>
     </div>
     {identity_html}
@@ -823,29 +828,29 @@ def render_sidebar(active_page="home"):
 <div style="
     margin-top: 32px;
     padding: 12px 14px;
-    background-color: var(--md-surface-container-low);
-    border: 1px solid var(--md-outline-variant);
+    background-color: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: var(--radius-md);
     font-size: 11px;
-    color: var(--md-on-surface-variant);
+    color: rgba(255,255,255,0.60);
     line-height: 1.6;
 ">
-    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--md-outline-variant); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;">
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(255,255,255,0.50);">
         <span class="material-symbols-outlined" style="font-size: 14px;">monitor_heart</span>
         Trạng thái hệ thống
     </div>
     <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 8px;">
-        <span style="color: var(--md-on-surface-variant);">CSDL</span>
-        <div style="display: flex; align-items: center; gap: 4px;">
+        <span style="color: rgba(255,255,255,0.50);">CSDL</span>
+        <div style="display: flex; align-items: center; gap: 4px; color: rgba(255,255,255,0.70);">
             <span style="width: 6px; height: 6px; border-radius: 50%; background-color: {_dot_color}; display: inline-block;"></span>
             <span>{_dot_label}</span>
         </div>
-        <span style="color: var(--md-on-surface-variant);">Năm học</span>
-        <span style="font-weight: 500;">{_tf_name}</span>
-        <span style="color: var(--md-on-surface-variant);">CB-CV</span>
-        <span style="font-weight: 500;">{_teacher_count} cơ hữu + {_guest_count} khách mời</span>
-        <span style="color: var(--md-on-surface-variant);">Nguồn số liệu</span>
-        <div style="display: flex; align-items: center; gap: 4px;">
+        <span style="color: rgba(255,255,255,0.50);">Năm học</span>
+        <span style="font-weight: 500; color: rgba(255,255,255,0.80);">{_tf_name}</span>
+        <span style="color: rgba(255,255,255,0.50);">CB-CV</span>
+        <span style="font-weight: 500; color: rgba(255,255,255,0.80);">{_teacher_count} cơ hữu + {_guest_count} khách mời</span>
+        <span style="color: rgba(255,255,255,0.50);">Nguồn số liệu</span>
+        <div style="display: flex; align-items: center; gap: 4px; color: rgba(255,255,255,0.70);">
             <span class="material-symbols-outlined" style="font-size: 12px;">{_source_icon}</span>
             <span style="font-weight: 500;">{_source_label}</span>
         </div>
@@ -860,7 +865,7 @@ def render_step_header(step_num, title, description=None):
         <div style="display: flex; align-items: center; gap: 8px;">
             <span style="
                 background-color: var(--md-primary); 
-                color: #ffffff; 
+                color: var(--md-on-primary); 
                 font-weight: 700; 
                 width: 24px; 
                 height: 24px; 

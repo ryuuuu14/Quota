@@ -6,9 +6,6 @@ st.set_page_config(page_title="Đăng nhập", layout="wide", initial_sidebar_st
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@200..900&display=swap');
-
-/* ── Reset ── */
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 #MainMenu { display: none !important; }
@@ -18,15 +15,14 @@ footer { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
 
-/* ── Full viewport center ── */
 [data-testid="stAppViewContainer"] {
     min-height: 100dvh !important;
-    background: #f0ede8 !important;
+    background: #800020 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
 }
-.stApp { background: #f0ede8 !important; }
+.stApp { background: #800020 !important; }
 section.main {
     display: flex !important;
     align-items: center !important;
@@ -35,15 +31,14 @@ section.main {
     width: 100% !important;
 }
 
-/* ── Centered card ── */
 .block-container {
     padding: 44px 40px !important;
     max-width: 400px !important;
     width: 100% !important;
-    background: #ffffff !important;
-    border: 1px solid rgba(0,0,0,0.04) !important;
-    border-radius: var(--radius-xl) !important;
-    box-shadow: 0 20px 60px -20px rgba(0,0,0,0.08) !important;
+    background: #FDF8F3 !important;
+    border: 1px solid rgba(255, 255, 255, 0.10) !important;
+    border-radius: 24px !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.30) !important;
     animation: card-in 0.5s cubic-bezier(0.16,1,0.3,1) both;
 }
 @keyframes card-in {
@@ -51,94 +46,90 @@ section.main {
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ── Brand ── */
 .brand-logo {
     display: flex;
     justify-content: center;
     margin-bottom: 20px;
 }
 .brand-wordmark {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', sans-serif;
     font-weight: 800;
-    font-size: 28px;
-    line-height: 1.1;
+    font-size: 26px;
+    line-height: 1.2;
     letter-spacing: -0.03em;
-    color: #1c1917;
+    color: #1A1A1A;
     text-align: center;
-    margin: 0 0 8px 0;
+    margin: 0 0 4px 0;
 }
 .brand-tagline {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', sans-serif;
     font-weight: 400;
     font-size: 13px;
     line-height: 1.5;
-    color: #6b6560;
+    color: #5C5248;
     text-align: center;
     margin: 0 auto 24px auto;
     max-width: 280px;
 }
 .brand-divider {
-    width: 32px;
-    height: 2px;
-    background: #5b8c7a;
+    width: 40px;
+    height: 3px;
+    background: #FF8C00;
     margin: 0 auto 28px auto;
-    border-radius: 1px;
+    border-radius: 2px;
 }
 
-/* ── Form title ── */
 .form-title {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', sans-serif;
     font-weight: 600;
     font-size: 18px;
-    color: #1c1917;
+    color: #1A1A1A;
     text-align: center;
     margin: 0 0 24px 0;
 }
 
-/* ── TextInput ── */
 div[data-testid="stTextInput"] {
     margin-bottom: 6px;
 }
 div[data-testid="stTextInput"] label p {
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Be Vietnam Pro', sans-serif !important;
     font-weight: 500 !important;
     font-size: 13px !important;
-    color: #6b6560 !important;
+    color: #5C5248 !important;
 }
 div[data-testid="stTextInput"] input {
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Be Vietnam Pro', sans-serif !important;
     height: 46px !important;
     border-radius: 10px !important;
-    border: 1px solid #d4d0c8 !important;
-    background: #fcfcfb !important;
-    color: #1c1917 !important;
+    border: 1px solid #D4C9BC !important;
+    background: #FFFFFF !important;
+    color: #1A1A1A !important;
     padding: 0 16px !important;
     font-size: 15px !important;
     font-weight: 400 !important;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 div[data-testid="stTextInput"] input:focus {
-    border-color: #5b8c7a !important;
-    box-shadow: 0 0 0 3px rgba(91,140,122,0.12) !important;
+    border-color: #FF8C00 !important;
+    box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.12) !important;
 }
 div[data-testid="stTextInput"] input:hover {
-    border-color: #bbb6ae !important;
+    border-color: #B8AD9E !important;
 }
 div[data-testid="stTextInput"] input::placeholder {
-    color: #b5b0a8 !important;
+    color: #B8AD9E !important;
     font-weight: 400 !important;
 }
 
-/* ── Primary button ── */
 button[kind="primary"],
 button[data-testid="baseButton-primary"] {
     height: 46px !important;
     border-radius: 10px !important;
     border: none !important;
-    background: #5b8c7a !important;
-    color: #ffffff !important;
-    font-family: 'Outfit', sans-serif !important;
-    font-weight: 500 !important;
+    background: #FF8C00 !important;
+    color: #1A1A1A !important;
+    font-family: 'Be Vietnam Pro', sans-serif !important;
+    font-weight: 600 !important;
     font-size: 15px !important;
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
     cursor: pointer !important;
@@ -146,19 +137,18 @@ button[data-testid="baseButton-primary"] {
 button[kind="primary"]:hover,
 button[data-testid="baseButton-primary"]:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 8px 24px rgba(91,140,122,0.18) !important;
-    background: #4d7d6b !important;
+    box-shadow: 0 8px 24px rgba(255, 140, 0, 0.25) !important;
+    background: #E67E00 !important;
 }
 button[kind="primary"]:active,
 button[data-testid="baseButton-primary"]:active {
     transform: scale(0.98) !important;
 }
 
-/* ── Alerts ── */
 [data-testid="stAlertContainer"] {
     border-radius: 10px !important;
     border: none !important;
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Be Vietnam Pro', sans-serif !important;
     font-size: 13px !important;
     font-weight: 500 !important;
     padding: 10px 14px !important;
@@ -166,34 +156,35 @@ button[data-testid="baseButton-primary"]:active {
 }
 [data-testid="stAlertContainer"] svg { display: none; }
 
-/* ── Meta footer ── */
 .meta-footer {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    font-family: 'Outfit', sans-serif;
-    font-size: 12px;
-    color: #a8a29a;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 11px;
+    color: #B8AD9E;
     margin-top: 28px;
 }
 .meta-version {
     padding: 2px 8px;
-    border: 1px solid #e0dcd4;
+    border: 1px solid #D4C9BC;
     border-radius: 4px;
-    font-weight: 500;
+    font-weight: 600;
+    color: #5C5248;
 }
 .meta-status {
     display: flex;
     align-items: center;
     gap: 5px;
+    color: #5C5248;
 }
 .meta-status::before {
     content: '';
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: #5b8c7a;
+    background: #4A5D23;
     animation: pulse-dot 2s ease-in-out infinite;
 }
 @keyframes pulse-dot {
@@ -201,12 +192,10 @@ button[data-testid="baseButton-primary"]:active {
     50% { opacity: 0.35; }
 }
 
-/* ── Gap reset ── */
 div[data-testid="stVerticalBlock"] > div:first-child {
     gap: 0 !important;
 }
 
-/* ── Mobile ── */
 @media (max-width: 768px) {
     section.main { padding: 16px !important; }
     .block-container { padding: 32px 24px !important; border-radius: 16px !important; }
@@ -220,8 +209,8 @@ if user:
     st.markdown("""
     <div class="brand-logo">
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#5b8c7a" stroke-width="1.2" fill="none"/>
-            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(91,140,122,0.15)"/>
+            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FF8C00" stroke-width="1.2" fill="none"/>
+            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,140,0,0.15)"/>
         </svg>
     </div>
     <h1 class="brand-wordmark">H\u1ec7 th\u1ed1ng<br>\u0110\u1ecbnh m\u1ee9c T04</h1>
@@ -238,13 +227,13 @@ if user:
     st.markdown(f"""
     <div style="text-align:center">
         <svg width="64" height="64" viewBox="0 0 64 64" style="margin-bottom:12px">
-            <circle cx="32" cy="32" r="32" fill="rgba(91,140,122,0.08)"/>
-            <circle cx="32" cy="24" r="11" fill="rgba(91,140,122,0.5)"/>
-            <path d="M12 54c0-11 9-20 20-20s20 9 20 20" fill="rgba(91,140,122,0.5)"/>
+            <circle cx="32" cy="32" r="32" fill="rgba(255,140,0,0.08)"/>
+            <circle cx="32" cy="24" r="11" fill="rgba(255,140,0,0.5)"/>
+            <path d="M12 54c0-11 9-20 20-20s20 9 20 20" fill="rgba(255,140,0,0.5)"/>
         </svg>
-        <p style="font-family:'Outfit',sans-serif;font-weight:600;font-size:18px;color:#1c1917;margin:0 0 4px 0">{user["username"]}</p>
-        <p style="font-family:'Outfit',sans-serif;font-weight:500;font-size:13px;color:#5b8c7a;margin:0 0 2px 0">{role_label}</p>
-        {f'<p style="font-family:\'Outfit\',sans-serif;font-size:12px;color:#6b6560;margin:0 0 24px 0">{user["department_name"]}</p>' if user.get("department_name") else '<div style="height:18px"></div>'}
+        <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:18px;color:#1A1A1A;margin:0 0 4px 0">{user["username"]}</p>
+        <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:13px;color:#FF8C00;margin:0 0 2px 0">{role_label}</p>
+        {f'<p style="font-family:\'Be Vietnam Pro\',sans-serif;font-size:12px;color:#5C5248;margin:0 0 24px 0">{user["department_name"]}</p>' if user.get("department_name") else '<div style="height:18px"></div>'}
     </div>
     """, unsafe_allow_html=True)
 
@@ -256,8 +245,8 @@ else:
     st.markdown("""
     <div class="brand-logo">
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#5b8c7a" stroke-width="1.2" fill="none"/>
-            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(91,140,122,0.15)"/>
+            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FF8C00" stroke-width="1.2" fill="none"/>
+            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,140,0,0.15)"/>
         </svg>
     </div>
     <h1 class="brand-wordmark">H\u1ec7 th\u1ed1ng<br>\u0110\u1ecbnh m\u1ee9c T04</h1>
