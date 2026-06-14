@@ -138,46 +138,43 @@ def render_card(content, extra_class=""):
     return f'<div class="md-card {extra_class}">{content}</div>'
 
 
-def inject_premium_css():
-    """
-    Tiêm mã CSS thiết kế Pro-Max chứa các design tokens, glassmorphism,
-    hiệu ứng 3D hover và hỗ trợ hiển thị trên thiết bị di động (Chế độ Sáng - Light Mode).
-    """
-    st.markdown("""
-<link href="/app/static/fonts.css" rel="stylesheet">
+_PREMIUM_CSS = """
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet">
 <style>
     :root {
-        --md-primary: #0f4c81; /* Classic Premium Navy */
-        --md-primary-container: #e3f2fd;
+        --md-primary: #1e3a8a; /* Midnight Blue */
+        --md-primary-container: #dbeafe;
         --md-on-primary: #ffffff;
-        --md-on-primary-container: #0f4c81;
-        --md-primary-fixed: #e3f2fd;
-        --md-primary-fixed-dim: #90caf9;
-        --md-surface: #f8f9fa; /* Pure Light Slate Gray */
-        --md-surface-dim: #f1f3f5;
-        --md-surface-container-lowest: #ffffff; /* White background for cards */
-        --md-surface-container-low: #f8f9fa;
-        --md-surface-container: #e9ecef;
-        --md-surface-container-high: #dee2e6;
-        --md-surface-container-highest: #ced4da;
-        --md-on-surface: #1a1c1e; /* Dark Charcoal text */
-        --md-on-surface-variant: #495057;
-        --md-outline: #79747e;
-        --md-outline-variant: #e0e0e0; /* Soft borders */
-        --md-secondary: #5c6370;
-        --md-secondary-container: #f1f3f5;
-        --md-tertiary: #bb8009;
+        --md-primary-fixed: #dbeafe;
+        --md-primary-fixed-dim: #93c5fd;
+        --md-surface: #f8fafc; /* Slate 50 */
+        --md-surface-dim: #f1f5f9; /* Slate 100 */
+        --md-surface-container-lowest: #ffffff;
+        --md-surface-container-low: #f8fafc;
+        --md-surface-container: #f1f5f9;
+        --md-surface-container-high: #e2e8f0;
+        --md-on-surface: #0f172a; /* Slate 900 */
+        --md-on-surface-variant: #475569; /* Slate 600 */
+        --md-outline: #64748b;
+        --md-outline-variant: #e2e8f0;
+        --md-secondary: #0f766e; /* Military Teal Green */
+        --md-secondary-container: #ccfbf1;
+        --md-tertiary: #b45309;
         --md-tertiary-container: #fef3c7;
-        --md-error: #ba1a1a;
-        --md-error-container: #ffdad6;
-        --md-on-error: #ffffff;
-        --md-on-error-container: #410002;
-        --md-green: #1a8754;
-        --md-green-bg: #d1e7dd;
-        --md-red: #dc3545;
-        --md-red-bg: #f8d7da;
-        --md-amber: #b58105;
-        --md-amber-bg: #fff3cd;
+        --md-error: #b91c1c;
+        --md-error-container: #fee2e2;
+        --md-green: #047857;
+        --md-green-bg: #d1fae5;
+        --md-red: #be123c;
+        --md-red-bg: #ffe4e6;
+        --md-amber: #b45309;
+        --md-amber-bg: #fef3c7;
+        --md-green: #047857;
+        --md-green-bg: #d1fae5;
+        --md-red: #be123c;
+        --md-red-bg: #ffe4e6;
+        --md-amber: #b45309;
+        --md-amber-bg: #fef3c7;
         --radius-sm: 8px;
         --radius-md: 12px;
         --radius-lg: 18px;
@@ -185,12 +182,38 @@ def inject_premium_css():
         --radius-full: 9999px;
         --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
         --shadow-elevated: 0 12px 24px rgba(0, 0, 0, 0.08);
-        --font-family: 'Inter', sans-serif;
+        --font-family: 'Be Vietnam Pro', sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+        --sp-4: 4px;
+        --sp-8: 8px;
+        --sp-12: 12px;
+        --sp-16: 16px;
+        --sp-20: 20px;
+        --sp-24: 24px;
+        --sp-32: 32px;
+        --sp-40: 40px;
+        --brand-primary: #1e3a8a;
+        --brand-secondary: #0f766e;
     }
 
     /* Mượt mà hiệu ứng cuộn trang */
     html {
         scroll-behavior: smooth;
+    }
+
+    /* Focus indicators for keyboard nav */
+    *:focus-visible {
+        outline: 2px solid var(--md-primary) !important;
+        outline-offset: 2px !important;
+        border-radius: var(--radius-sm) !important;
+    }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+        outline: 2px solid var(--md-primary) !important;
+        outline-offset: 2px !important;
+    }
+    .stButton > button:focus-visible {
+        outline: 2px solid var(--md-primary) !important;
+        outline-offset: 2px !important;
     }
 
     html, body, #root, .stApp {
@@ -220,15 +243,45 @@ def inject_premium_css():
         font-weight: 800 !important;
         letter-spacing: -0.02em !important;
         line-height: 1.2 !important;
-        background: linear-gradient(135deg, #0f4c81 30%, #1a5f96 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: var(--md-primary) !important;
     }
     h2 { font-size: 22px !important; font-weight: 700 !important; line-height: 1.3 !important; }
     h3 { font-size: 18px !important; font-weight: 600 !important; line-height: 1.4 !important; }
 
+    /* Custom Glassmorphism Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px !important;
+        background-color: transparent !important;
+        padding: 0px !important;
+        border-radius: 0px !important;
+        border: none !important;
+        margin-bottom: 24px !important;
+    }
+    .stTabs button[data-baseweb="tab"] {
+        font-family: var(--font-family) !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        background-color: var(--md-surface-dim) !important;
+        border-radius: var(--radius-md) !important;
+        padding: 10px 24px !important;
+        border: 1px solid var(--md-outline-variant) !important;
+        color: var(--md-on-surface-variant) !important;
+        transition: all 0.2s ease !important;
+    }
+    .stTabs button[data-baseweb="tab"]:hover {
+        border-color: var(--md-primary) !important;
+        color: var(--md-primary) !important;
+    }
+    .stTabs button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: var(--md-primary-container) !important;
+        color: var(--md-primary) !important;
+        border-color: rgba(30, 58, 138, 0.35) !important;
+        box-shadow: var(--shadow-card) !important;
+        font-weight: 700 !important;
+    }
+
     section[data-testid="stSidebar"] {
-        background-color: #f1f3f5 !important;
+        background-color: #f8fafc !important; /* Light slate */
         border-right: 1px solid var(--md-outline-variant) !important;
     }
     section[data-testid="stSidebar"] > div:first-child {
@@ -245,7 +298,7 @@ def inject_premium_css():
         border-radius: var(--radius-md) !important;
         font-weight: 600 !important;
         font-size: 14px !important;
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        transition: all 0.2s ease !important;
         border: 1px solid var(--md-outline-variant) !important;
         background-color: #ffffff !important;
         color: var(--md-on-surface) !important;
@@ -259,13 +312,46 @@ def inject_premium_css():
     }
     .stButton > button[kind="primary"],
     .stButton > button[data-testid="baseButton-primary"] {
-        background: linear-gradient(135deg, var(--md-primary), #1a5f96) !important;
+        background: #1e3a8a !important;
         color: #ffffff !important;
         border: none !important;
     }
     .stButton > button[kind="primary"]:hover,
     .stButton > button[data-testid="baseButton-primary"]:hover {
-        background: linear-gradient(135deg, #1a5f96, #2a7fbe) !important;
+        background: #1e40af !important;
+        color: #ffffff !important;
+        box-shadow: var(--shadow-elevated) !important;
+    }
+
+    /* Data tables: monospace for numbers */
+    .stDataFrame td, .stDataFrame th {
+        font-size: 13px !important;
+    }
+    .stDataFrame td {
+        font-variant-numeric: tabular-nums !important;
+    }
+
+    /* Sidebar logout button — fix text color and kill the Streamlit slide underline */
+    section[data-testid="stSidebar"] .stButton > button {
+        background: #1e3a8a !important;
+        color: #ffffff !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: #1e40af !important;
+        color: #ffffff !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+    /* Remove Streamlit's slide/underline indicator on sidebar button */
+    section[data-testid="stSidebar"] .stButton > button::after,
+    section[data-testid="stSidebar"] .stButton > button::before {
+        display: none !important;
+        border: none !important;
+        background: none !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button p {
         color: #ffffff !important;
     }
 
@@ -280,7 +366,7 @@ def inject_premium_css():
     }
     .stTextInput input:focus, .stSelectbox div[data-baseweb="select"] > div:focus, .stDateInput input:focus, .stNumberInput input:focus {
         border-color: var(--md-primary) !important;
-        box-shadow: 0 0 0 2px rgba(15, 76, 129, 0.2) !important;
+        box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.2) !important;
     }
     
     /* Labels */
@@ -289,30 +375,6 @@ def inject_premium_css():
         font-size: 14px !important;
         font-weight: 600 !important;
         color: var(--md-on-surface) !important;
-    }
-
-    /* Custom Glassmorphism Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px !important;
-        background-color: var(--md-surface-dim) !important;
-        padding: 6px !important;
-        border-radius: var(--radius-md) !important;
-        border: 1px solid var(--md-outline-variant) !important;
-        margin-bottom: 20px !important;
-    }
-    .stTabs button[data-baseweb="tab"] {
-        font-family: var(--font-family) !important;
-        font-size: 14px !important;
-        border-radius: var(--radius-sm) !important;
-        padding: 8px 16px !important;
-        color: var(--md-on-surface-variant) !important;
-        transition: all 0.2s ease !important;
-    }
-    .stTabs button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #ffffff !important;
-        color: var(--md-primary) !important;
-        font-weight: 700 !important;
-        box-shadow: var(--shadow-card) !important;
     }
 
     /* Premium Light Mode Card */
@@ -324,11 +386,11 @@ def inject_premium_css():
         box-shadow: var(--shadow-card) !important;
         margin-bottom: 16px !important;
         animation: fadeInUp 0.4s ease-out forwards;
-        transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
     }
     .md-card:hover {
         transform: translateY(-2px) !important;
-        border-color: rgba(15, 76, 129, 0.3) !important;
+        border-color: rgba(30, 58, 138, 0.3) !important;
         box-shadow: var(--shadow-elevated) !important;
     }
 
@@ -341,24 +403,29 @@ def inject_premium_css():
         font-weight: 600 !important;
     }
     .md-chip-primary {
-        background-color: var(--md-primary-container) !important;
-        color: var(--md-primary) !important;
-        border: 1px solid rgba(15, 76, 129, 0.2) !important;
+        background-color: #2563eb !important;
+        color: #ffffff !important;
+        border: none !important;
     }
     .md-chip-green {
-        background-color: var(--md-green-bg) !important;
-        color: var(--md-green) !important;
-        border: 1px solid rgba(26, 135, 84, 0.2) !important;
+        background-color: #059669 !important;
+        color: #ffffff !important;
+        border: none !important;
     }
     .md-chip-red {
-        background-color: var(--md-red-bg) !important;
-        color: var(--md-red) !important;
-        border: 1px solid rgba(220, 53, 69, 0.2) !important;
+        background-color: #dc2626 !important;
+        color: #ffffff !important;
+        border: none !important;
     }
     .md-chip-amber {
-        background-color: var(--md-amber-bg) !important;
-        color: var(--md-amber) !important;
-        border: 1px solid rgba(181, 129, 5, 0.2) !important;
+        background-color: #d97706 !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+    .md-chip-tertiary {
+        background-color: var(--md-tertiary-container) !important;
+        color: var(--md-tertiary) !important;
+        border: 1px solid rgba(180, 83, 9, 0.2) !important;
     }
     
     /* Destruction Button Styling */
@@ -368,7 +435,7 @@ def inject_premium_css():
     .stButton button[aria-label*="xoá"] {
         background-color: var(--md-red-bg) !important;
         color: var(--md-red) !important;
-        border: 1px solid rgba(220, 53, 69, 0.4) !important;
+        border: 1px solid rgba(190, 18, 60, 0.4) !important;
     }
     .stButton button[aria-label*="Xóa"]:hover,
     .stButton button[aria-label*="Xoá"]:hover {
@@ -419,15 +486,16 @@ def inject_premium_css():
         color: var(--md-on-surface-variant) !important;
     }
     [data-testid="stPageLink"] > a:hover {
-        background-color: var(--md-surface-dim) !important;
+        background-color: var(--md-surface-container) !important;
         color: var(--md-primary) !important;
         transform: translateX(3px) !important;
     }
     [data-testid="stPageLink"] > a[aria-current="page"] {
         background-color: var(--md-primary-container) !important;
         color: var(--md-primary) !important;
-        font-weight: 600 !important;
-        box-shadow: var(--shadow-card) !important;
+        font-weight: 700 !important;
+        border-left: 4px solid var(--md-primary) !important;
+        border-radius: 0 8px 8px 0 !important;
     }
     [data-testid="stPageLink"] p {
         color: inherit !important;
@@ -438,6 +506,135 @@ def inject_premium_css():
     [data-testid="stPageLink"] span {
         color: inherit !important;
         font-size: 20px !important;
+    }
+
+    /* === CONTAINED EXPANDERS: prevent full-width sprawl === */
+    div[data-testid="stExpander"] {
+        max-width: 820px !important;
+        border: 1px solid var(--md-outline-variant) !important;
+        border-radius: var(--radius-lg) !important;
+        background: #ffffff !important;
+        box-shadow: var(--shadow-card) !important;
+        margin-bottom: 20px !important;
+        overflow: hidden !important;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+    }
+    div[data-testid="stExpander"]:hover {
+        border-color: rgba(30, 58, 138, 0.25) !important;
+        box-shadow: var(--shadow-elevated) !important;
+    }
+    /* Expander header row */
+    div[data-testid="stExpander"] > div:first-child {
+        padding: 14px 20px !important;
+        background: var(--md-surface-container) !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        border-bottom: 1px solid var(--md-outline-variant) !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease !important;
+        user-select: none !important;
+    }
+    div[data-testid="stExpander"] > div:first-child:hover {
+        background: var(--md-surface-container-high) !important;
+    }
+    /* Expander content area */
+    div[data-testid="stExpander"] > div:nth-child(2) {
+        padding: 20px 24px !important;
+    }
+    /* Nested expanders: reduce size but keep constraint */
+    div[data-testid="stExpander"] div[data-testid="stExpander"] {
+        max-width: 100% !important;
+        margin-bottom: 12px !important;
+        border-radius: var(--radius-md) !important;
+    }
+    div[data-testid="stExpander"] div[data-testid="stExpander"] > div:first-child {
+        padding: 10px 16px !important;
+        font-size: 13px !important;
+    }
+    div[data-testid="stExpander"] div[data-testid="stExpander"] > div:nth-child(2) {
+        padding: 16px !important;
+    }
+    /* Expander inside side-columns (columns) — let it fill */
+    div[data-testid="column"] div[data-testid="stExpander"] {
+        max-width: 100% !important;
+    }
+
+    /* === CONTENT AREA RESCALE: prevent edge-to-edge sprawl === */
+    .main .block-container {
+        max-width: 1320px !important;
+        padding-left: 28px !important;
+        padding-right: 28px !important;
+    }
+    /* Full-width data tables within the constrained container */
+    .stDataFrame {
+        max-width: 100% !important;
+    }
+    /* Big metric cards row — let it breathe */
+    div[data-testid="column"] {
+        padding: 0 6px !important;
+    }
+
+    /* === FORM ELEMENTS INSIDE EXPANDERS: better proportions === */
+    div[data-testid="stExpander"] .stTextInput,
+    div[data-testid="stExpander"] .stSelectbox,
+    div[data-testid="stExpander"] .stDateInput,
+    div[data-testid="stExpander"] .stNumberInput {
+        max-width: 480px !important;
+    }
+    div[data-testid="stExpander"] .row-widget.stRadio {
+        max-width: 640px !important;
+    }
+
+    /* === BETTER GLOBAL SPACING === */
+    hr {
+        margin: 20px 0 !important;
+        opacity: 0.5 !important;
+    }
+    .stForm {
+        max-width: 720px !important;
+    }
+
+    /* === PILL-BUTTON RADIO GROUPS (horizontal) === */
+    div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] {
+        display: flex;
+        flex-direction: row;
+        gap: 4px;
+        flex-wrap: wrap;
+        background: var(--md-surface-container-low);
+        padding: 4px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--md-outline-variant);
+        width: fit-content;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        padding: 5px 18px !important;
+        min-height: 34px;
+        border-radius: var(--radius-full) !important;
+        background: transparent !important;
+        border: none !important;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--md-on-surface-variant);
+        margin: 0 !important;
+        flex: 0 1 auto;
+        white-space: nowrap;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label:hover {
+        background: var(--md-surface-container-high) !important;
+        color: var(--md-on-surface);
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label:has(input:checked) {
+        background: var(--md-primary) !important;
+        color: white !important;
+        box-shadow: 0 2px 8px rgba(30, 58, 138, 0.25);
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"][aria-orientation="horizontal"] label > div:first-child {
+        display: none !important;
     }
 
     /* --- MOBILE RESPONSIVENESS OVERRIDES --- */
@@ -473,23 +670,17 @@ def inject_premium_css():
         }
     }
 </style>
-""", unsafe_allow_html=True)
+"""
+
+def inject_premium_css():
+    st.markdown(_PREMIUM_CSS, unsafe_allow_html=True)
 
 
-def render_sidebar(active_page="home"):
-    # 1. Hide default navigation
-    st.markdown("""
-<style>
-    [data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-    
-    # 2. Inject global fonts, Material symbols, design system, responsive styles
-    inject_premium_css()
 
-    # 3. Build system status data
+
+
+@st.cache_data(ttl=60)
+def _get_sidebar_system_stats():
     _db_ok = False
     _tf_name = "—"
     _teacher_count = 0
@@ -512,14 +703,30 @@ def render_sidebar(active_page="home"):
         _db_ok = True
     except Exception:
         _db_ok = False
+    return _db_ok, _tf_name, _teacher_count, _guest_count, _has_excel
+
+
+def render_sidebar(active_page="home"):
+    # Build system status data (cached)
+    _db_ok, _tf_name, _teacher_count, _guest_count, _has_excel = _get_sidebar_system_stats()
 
     _dot_color = "#22c55e" if _db_ok else "#ef4444"
     _dot_label = "Đã kết nối" if _db_ok else "Mất kết nối"
     _source_icon = "download" if _has_excel else "edit_note"
     _source_label = "Excel" if _has_excel else "Nhập lẻ"
 
-    # 4. Render HTML sidebar
+    # Render HTML sidebar
     with st.sidebar:
+        # Inject CSS (inside sidebar so it persists across page navigation)
+        st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+        inject_premium_css()
+
         from auth import get_current_user
         user = get_current_user()
         
@@ -530,15 +737,15 @@ def render_sidebar(active_page="home"):
             }
             role_label = role_labels.get(user["role"], "Người dùng")
             identity_html = (
-                f'<div style="margin-top: 12px; padding: 10px 12px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">'
+                f'<div style="margin-top: 12px; padding: 10px 12px; background: var(--md-surface-container); border-radius: var(--radius-md); border: 1px solid var(--md-outline-variant);">'
                 f'  <div style="font-size: 11px; color: var(--md-on-surface-variant); font-weight: 500;">Tài khoản hoạt động:</div>'
-                f'  <div style="font-weight: 700; color: #60a5fa; font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
-                f'  <div style="font-size: 10px; color: #10b981; margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
+                f'  <div style="font-weight: 700; color: var(--md-primary); font-size: 14px; margin-top: 2px;">{user["username"]}</div>'
+                f'  <div style="font-size: 10px; color: var(--md-secondary); margin-top: 1px; font-weight: 600; text-transform: uppercase;">{role_label}</div>'
                 f'</div>'
             )
         else:
             identity_html = (
-                '<div style="margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,0.05); border-radius: 12px; border: 1px solid rgba(239,68,68,0.15);">'
+                '<div style="margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,0.05); border-radius: var(--radius-md); border: 1px solid rgba(239,68,68,0.15);">'
                 '  <div style="font-size: 11px; color: #f87171; font-weight: 600; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">'
                 '    <span class="material-symbols-outlined" style="font-size: 14px;">lock</span> Chế độ Khách (Đọc)'
                 '  </div>'
@@ -559,7 +766,7 @@ def render_sidebar(active_page="home"):
             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
         </div>
         <div>
-            <div style="font-weight: 700; font-size: 16px; color: #ffffff; line-height: 1.2;">Quản lý T04</div>
+            <div style="font-weight: 700; font-size: 16px; color: var(--md-on-surface); line-height: 1.2;">Quản lý T04</div>
             <div style="font-size: 11px; color: var(--md-on-surface-variant); letter-spacing: 0.03em;">Hệ thống định mức</div>
         </div>
     </div>

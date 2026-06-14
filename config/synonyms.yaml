@@ -1,225 +1,286 @@
 synonyms:
-  - expected: "Mã GV"
-    synonyms:
-      - "msgv"
-      - "ma gv"
-      - "ma_giang_vien"
-      - "magv"
-      - "mã giảng viên"
-      - "mã cán bộ"
-      - "macb"
-      - "ma cb"
-      - "mã gv (khóa)"
-
-  - expected: "Họ tên"
-    synonyms:
-      - "ho ten"
-      - "ho_ten"
-      - "fullname"
-      - "name"
-      - "họ tên"
-      - "tên"
-      - "tên nhà giáo"
-      - "nhà giáo"
-      - "họ và tên"
-      - "họ tên (khóa)"
-
-  - expected: "Tên loại hoạt động"
-    synonyms:
-      - "hoat dong"
-      - "loai hoat dong"
-      - "tên hoạt động"
-      - "hoạt động"
-      - "loại hoạt động"
-
-  - expected: "Ngày thực hiện"
-    synonyms:
-      - "ngay"
-      - "ngay thực hiện"
-      - "ngày thực hiện"
-      - "ngày"
-      - "date"
-      - "log date"
-      - "ngay_thuc_hien"
-
-  - expected: "Số lượng"
-    synonyms:
-      - "so luong"
-      - "qty"
-      - "quantity"
-      - "số lượng"
-      - "số giờ"
-      - "hours"
-      - "so_luong"
-
-  - expected: "Cấp lớp"
-    synonyms:
-      - "cap lop"
-      - "cấp lớp"
-      - "trình độ"
-      - "hệ đào tạo"
-      - "bậc đào tạo"
-      - "cấp/lớp"
-
-  - expected: "Loại lớp"
-    synonyms:
-      - "loai lop"
-      - "loại hình"
-      - "hình thức"
-      - "loại lớp"
-      - "class_type"
-
-  - expected: "Số học viên"
-    synonyms:
-      - "si so"
-      - "sĩ số"
-      - "số sv"
-      - "sv"
-      - "học viên"
-      - "số học viên"
-      - "so_hoc_vien"
-      - "student count"
-      - "sỉ số"
-
-  - expected: "Cấp đề tài"
-    synonyms:
-      - "cap de tai"
-      - "cấp đề tài"
-      - "cấp"
-      - "cấp nckh"
-      - "nckh level"
-      - "cấp đề tài/bài báo"
-
-  - expected: "Tác giả chính"
-    synonyms:
-      - "main author"
-      - "is main"
-      - "tác giả chính"
-      - "tg chính"
-      - "vai trò"
-
-  - expected: "Giảng dạy tiếng nước ngoài"
-    synonyms:
-      - "foreign language"
-      - "tiếng nước ngoài"
-      - "dạy tiếng anh"
-      - "dạy bằng tiếng nước ngoài"
-
-  - expected: "Ghi chú"
-    synonyms:
-      - "note"
-      - "ghi chu"
-      - "ghi chú"
-      - "description"
-      - "mô tả"
-
-  - expected: "Mã GV (Khóa)"
-    synonyms:
-      - "msgv"
-      - "ma gv"
-      - "ma_giang_vien"
-      - "magv"
-      - "mã giảng viên"
-      - "mã gv"
-      - "mã gv (khóa)"
-
-  - expected: "Họ tên (Khóa)"
-    synonyms:
-      - "ho ten"
-      - "ho_ten"
-      - "fullname"
-      - "name"
-      - "họ tên"
-      - "họ và tên"
-      - "họ tên (khóa)"
-
-  - expected: "Chức danh (Khóa)"
-    synonyms:
-      - "chuc danh"
-      - "chức danh"
-      - "chức danh (khóa)"
-
-  - expected: "Đơn vị (Khóa)"
-    synonyms:
-      - "don vi"
-      - "đơn vị"
-      - "đơn vị (khóa)"
-
-  - expected: "Tên môn học"
-    synonyms:
-      - "mon hoc"
-      - "tên môn học"
-      - "môn học"
-      - "subject"
-      - "tên môn"
-
-  - expected: "Loại"
-    synonyms:
-      - "loai"
-      - "loại"
-      - "loại môn"
-      - "loại hình"
-
-  - expected: "Nhóm"
-    synonyms:
-      - "nhom"
-      - "nhóm"
-      - "group"
-      - "class group"
-
-  - expected: "Sỉ số"
-    synonyms:
-      - "si so"
-      - "sĩ số"
-      - "số sv"
-      - "sv"
-      - "học viên"
-      - "sĩ số lớp"
-
-  - expected: "Tiết quy đổi"
-    synonyms:
-      - "tiet quy doi"
-      - "tiết quy đổi"
-      - "giờ quy đổi"
-      - "gc quy đổi"
-
-  - expected: "Hệ số tín chỉ"
-    synonyms:
-      - "he so tin chi"
-      - "hệ số tín chỉ"
-      - "tín chỉ"
-      - "credits"
-
-  - expected: "Tổng GC thực hiện"
-    synonyms:
-      - "tong gc"
-      - "tổng gc thực hiện"
-      - "tổng giờ chuẩn"
-      - "tổng gc đã thực hiện"
-      - "tong_gc_da_thuc_hien"
-      - "tổng gc"
-
-  - expected: "NCKH thực hiện"
-    synonyms:
-      - "nckh"
-      - "nckh thực hiện"
-      - "nckh đã thực hiện"
-      - "giờ nckh"
-      - "nckh_da_thuc_hien"
-
-  - expected: "Số giờ miễn giảm"
-    synonyms:
-      - "mien giam"
-      - "số giờ miễn giảm"
-      - "giờ miễn giảm"
-      - "miễn giảm"
-      - "so_gio_duoc_mien_giam"
-      - "miễn giảm gc"
-
-  - expected: "Định mức GC"
-    synonyms:
-      - "dinh muc"
-      - "định mức gc"
-      - "định mức"
-      - "dinh_muc_gc_phai_thuc_hien"
-      - "định mức giảng dạy"
+- expected: Mã GV
+  synonyms:
+  - msgv
+  - ma gv
+  - ma_giang_vien
+  - magv
+  - mã giảng viên
+  - mã cán bộ
+  - macb
+  - ma cb
+  - mã gv (khóa)
+- expected: Họ tên
+  synonyms:
+  - ho ten
+  - ho_ten
+  - fullname
+  - name
+  - họ tên
+  - tên
+  - tên nhà giáo
+  - nhà giáo
+  - họ và tên
+  - họ tên (khóa)
+- expected: Tên loại hoạt động
+  synonyms:
+  - hoat dong
+  - loai hoat dong
+  - tên hoạt động
+  - hoạt động
+  - loại hoạt động
+- expected: Ngày thực hiện
+  synonyms:
+  - ngay
+  - ngay thực hiện
+  - ngày thực hiện
+  - ngày
+  - date
+  - log date
+  - ngay_thuc_hien
+- expected: Số lượng
+  synonyms:
+  - so luong
+  - qty
+  - quantity
+  - số lượng
+  - số giờ
+  - hours
+  - so_luong
+- expected: Cấp lớp
+  synonyms:
+  - cap lop
+  - cấp lớp
+  - trình độ
+  - hệ đào tạo
+  - bậc đào tạo
+  - cấp/lớp
+- expected: Loại lớp
+  synonyms:
+  - loai lop
+  - loại hình
+  - hình thức
+  - loại lớp
+  - class_type
+- expected: Số học viên
+  synonyms:
+  - si so
+  - sĩ số
+  - số sv
+  - sv
+  - học viên
+  - số học viên
+  - so_hoc_vien
+  - student count
+  - sỉ số
+- expected: Cấp đề tài
+  synonyms:
+  - cap de tai
+  - cấp đề tài
+  - cấp
+  - cấp nckh
+  - nckh level
+  - cấp đề tài/bài báo
+- expected: Tác giả chính
+  synonyms:
+  - main author
+  - is main
+  - tác giả chính
+  - tg chính
+  - vai trò
+- expected: Giảng dạy tiếng nước ngoài
+  synonyms:
+  - foreign language
+  - tiếng nước ngoài
+  - dạy tiếng anh
+  - dạy bằng tiếng nước ngoài
+- expected: Ghi chú
+  synonyms:
+  - note
+  - ghi chu
+  - ghi chú
+  - description
+  - mô tả
+- expected: Mã GV (Khóa)
+  synonyms:
+  - msgv
+  - ma gv
+  - ma_giang_vien
+  - magv
+  - mã giảng viên
+  - mã gv
+  - mã gv (khóa)
+- expected: Họ tên (Khóa)
+  synonyms:
+  - ho ten
+  - ho_ten
+  - fullname
+  - name
+  - họ tên
+  - họ và tên
+  - họ tên (khóa)
+- expected: Chức danh (Khóa)
+  synonyms:
+  - chuc danh
+  - chức danh
+  - chức danh (khóa)
+- expected: Đơn vị (Khóa)
+  synonyms:
+  - don vi
+  - đơn vị
+  - đơn vị (khóa)
+- expected: Tên môn học
+  synonyms:
+  - mon hoc
+  - tên môn học
+  - môn học
+  - subject
+  - tên môn
+- expected: Loại
+  synonyms:
+  - loai
+  - loại
+  - loại môn
+  - loại hình
+- expected: Nhóm
+  synonyms:
+  - nhom
+  - nhóm
+  - group
+  - class group
+- expected: Sỉ số
+  synonyms:
+  - si so
+  - sĩ số
+  - số sv
+  - sv
+  - học viên
+  - sĩ số lớp
+- expected: Tiết quy đổi
+  synonyms:
+  - tiet quy doi
+  - tiết quy đổi
+  - giờ quy đổi
+  - gc quy đổi
+- expected: Hệ số tín chỉ
+  synonyms:
+  - he so tin chi
+  - hệ số tín chỉ
+  - tín chỉ
+  - credits
+- expected: Tổng GC thực hiện
+  synonyms:
+  - tong gc
+  - tổng gc thực hiện
+  - tổng giờ chuẩn
+  - tổng gc đã thực hiện
+  - tong_gc_da_thuc_hien
+  - tổng gc
+- expected: NCKH thực hiện
+  synonyms:
+  - nckh
+  - nckh thực hiện
+  - nckh đã thực hiện
+  - giờ nckh
+  - nckh_da_thuc_hien
+- expected: Số giờ miễn giảm
+  synonyms:
+  - mien giam
+  - số giờ miễn giảm
+  - giờ miễn giảm
+  - miễn giảm
+  - so_gio_duoc_mien_giam
+  - miễn giảm gc
+- expected: Định mức GC
+  synonyms:
+  - dinh muc
+  - định mức gc
+  - định mức
+  - dinh_muc_gc_phai_thuc_hien
+  - định mức giảng dạy
+- expected: Chức danh
+  synonyms:
+  - chuc danh
+  - chức danh
+  - title
+- expected: Chức vụ
+  synonyms:
+  - chuc vu
+  - chức vụ
+  - chức vụ lãnh đạo
+  - role
+- expected: Cấp bậc quân hàm
+  synonyms:
+  - cap bac
+  - cấp bậc
+  - cấp bậc quân hàm
+  - quân hàm
+  - ngạch lương
+- expected: Học hàm học vị
+  synonyms:
+  - hoc ham
+  - học hàm
+  - học vị
+  - học hàm học vị
+  - trình độ
+- expected: Loại hợp đồng
+  synonyms:
+  - loai hop dong
+  - loại hợp đồng
+  - hợp đồng
+  - employment type
+- expected: Ngày bổ nhiệm chức vụ
+  synonyms:
+  - ngay bo nhiem chuc vu
+  - ngày bổ nhiệm chức vụ
+  - thời gian bổ nhiệm chức vụ
+  - thời gian bổ nhiệm chức vụ (từ ngày ….)
+  - bổ nhiệm chức vụ
+- expected: Ngày bổ nhiệm chức danh
+  synonyms:
+  - ngay bo nhiem chuc danh
+  - ngày bổ nhiệm chức danh
+  - thời gian bổ nhiệm chức danh
+  - thời gian bổ nhiệm chức danh (từ ngày … )
+  - bổ nhiệm chức danh
+- expected: Nữ
+  synonyms:
+  - nu
+  - nữ
+  - giới tính
+  - gender
+  - female
+- expected: Tổ bộ môn
+  synonyms:
+  - to bo mon
+  - tổ bộ môn
+  - tổ môn
+  - bộ môn
+  - subject group
+- expected: Đơn vị
+  synonyms:
+  - don vi
+  - đơn vị
+  - phòng ban
+  - khoa
+  - department
+  - đơn vị công tác
+- expected: Thời gian đi học
+  synonyms:
+  - thời gian đi học
+  - thời gian đi học (từ ngày….đến ngày….)
+  - thời gian đi học (từ ngày….đến ngày…)
+  - thoi gian di hoc
+  - đi học
+- expected: Thời gian đi thực tế
+  synonyms:
+  - thời gian đi thực tế
+  - thời gian đi thực tế(từ ngày….đến ngày….)
+  - thoi gian di thuc te
+  - đi thực tế
+- expected: Thời gian nghỉ có phép
+  synonyms:
+  - thời gian nghỉ có phép
+  - thời gian nghỉ có phép (từ ngày….đến ngày….)
+  - thoi gian nghi co phep
+  - nghỉ có phép

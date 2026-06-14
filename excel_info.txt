@@ -1,0 +1,5 @@
+Shape: (0, 10)
+Rows:
+Empty DataFrame
+Columns: [Mã GV, Họ tên, Đơn vị công tác, Chức vụ, Thời gian bổ nhiệm chức vụ (từ ngày ….), Chức danh, Thời gian bổ nhiệm chức danh (từ ngày … ), Thời gian đi học (từ ngày….đến ngày….), Thời gian đi thực tế(từ ngày….đến ngày….), Thời gian nghỉ có phép (từ ngày….đến ngày….)]
+Index: []

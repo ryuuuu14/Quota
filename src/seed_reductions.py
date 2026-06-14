@@ -66,6 +66,7 @@ REDUCTIONS = [
     
     ('Đi học / Bồi dưỡng (từ 6 đến dưới 10 tháng)', 'SPECIAL', 100.0, 50.0, 'Yêu cầu thời gian >= 6 tháng.'),
     ('Đi học / Bồi dưỡng (từ 10 tháng trở lên)', 'SPECIAL', 100.0, 100.0, 'Yêu cầu thời gian >= 10 tháng.'),
+    ('Đi học / Bồi dưỡng (dưới 6 tháng)', 'SPECIAL', 100.0, 0.0, 'Yêu cầu thời gian < 6 tháng.'),
     
     ('Nam nuôi con nhỏ (vợ mất) dưới 12 tháng', 'SPECIAL', 0.0, 15.0, 'Yêu cầu có xác nhận của địa phương.'),
     ('Nam nuôi con nhỏ (vợ mất) từ 12 đến 36 tháng', 'SPECIAL', 0.0, 10.0, 'Yêu cầu có xác nhận của địa phương.'),
@@ -77,7 +78,9 @@ REDUCTIONS = [
     ('Thành viên Tổ tư vấn/Nhóm nghiên cứu', 'SPECIAL', 15.0, 0.0, None),
     
     ('Công tác tại phòng không giữ chức danh (Giảm NCKH)', 'SPECIAL', 0.0, 50.0, 'Không áp dụng cho Giáo sư, Phó Giáo sư.'),
+    ('Nghỉ có phép', 'SPECIAL', 100.0, 0.0, 'Khấu trừ giờ dạy theo thời gian nghỉ phép'),
 ]
+
 
 def run():
     conn = get_connection()

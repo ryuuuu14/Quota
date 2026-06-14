@@ -42,7 +42,7 @@ section.main {
     width: 100% !important;
     background: #ffffff !important;
     border: 1px solid rgba(0,0,0,0.04) !important;
-    border-radius: 24px !important;
+    border-radius: var(--radius-xl) !important;
     box-shadow: 0 20px 60px -20px rgba(0,0,0,0.08) !important;
     animation: card-in 0.5s cubic-bezier(0.16,1,0.3,1) both;
 }

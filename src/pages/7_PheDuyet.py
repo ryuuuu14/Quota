@@ -1,20 +1,136 @@
 import streamlit as st
-import pandas as pd
 import json
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from database import get_connection, init_db
 from components import (
     render_sidebar,
-    inject_premium_css,
     render_empty_state,
     render_warning_state,
 )
 
-init_db()
+# ── Helper: parse a raw date-range string into (start_date, end_date) ──────────
+def _parse_date_range(raw: str):
+    """Return (start_date, end_date) as date objects, or (None, None) on failure."""
+    import re
+    raw = str(raw).strip()
+    if not raw or raw.lower() in ("none", "nan", ""):
+        return None, None
+
+    # Normalise separators: ' - ', ' to ', ' đến ' (spaces required to avoid splitting ISO dates)
+    sep_pattern = r"\s+(?:đến|to)\s+|\s+-\s+"
+    parts = re.split(sep_pattern, raw, maxsplit=1)
+
+    def _try_parse(s):
+        s = s.strip()
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                pass
+        # Try pandas as last resort
+        try:
+            import pandas as pd
+            return pd.to_datetime(s, dayfirst=True).date()
+        except Exception:
+            return None
+
+    if len(parts) == 2:
+        d1 = _try_parse(parts[0])
+        d2 = _try_parse(parts[1])
+        if d1 and d2:
+            return (d1, d2) if d1 <= d2 else (d2, d1)
+    elif len(parts) == 1:
+        d = _try_parse(parts[0])
+        if d:
+            return d, d  # single-day leave
+    return None, None
+
+
+def _months_between(d1, d2) -> float:
+    """Return fractional months between two date objects."""
+    if d1 is None or d2 is None:
+        return 0.0
+    from dateutil.relativedelta import relativedelta
+    rd = relativedelta(d2, d1)
+    return rd.years * 12 + rd.months + rd.days / 30.0
+
+
+def _insert_leave_reductions(cursor, teacher_id: int, staging_row, now_str: str):
+    """
+    Parse study_leave / field_trip / permitted_leave from staging_row.
+    Determine the correct reduction_rule_id and insert REDUCTION history records.
+    """
+    leave_fields = [
+        ("study_leave",    "study"),
+        ("field_trip",     "field_trip"),
+        ("permitted_leave","permitted"),
+    ]
+
+    for col, leave_type in leave_fields:
+        raw = staging_row.get(col)
+        import pandas as pd
+        if pd.isna(raw) if hasattr(pd, 'isna') else (raw is None):
+            continue
+        raw = str(raw).strip()
+        if not raw or raw.lower() in ("none", "nan", ""):
+            continue
+
+        start_d, end_d = _parse_date_range(raw)
+        if start_d is None:
+            continue
+
+        duration_months = _months_between(start_d, end_d)
+
+        # Determine rule name based on leave type and duration
+        if leave_type == "study":
+            if duration_months >= 10:
+                rule_name = "Đi học / Bồi dưỡng (từ 10 tháng trở lên)"
+            elif duration_months >= 6:
+                rule_name = "Đi học / Bồi dưỡng (từ 6 đến dưới 10 tháng)"
+            else:
+                rule_name = "Đi học / Bồi dưỡng (dưới 6 tháng)"
+        elif leave_type == "field_trip":
+            if duration_months >= 10:
+                rule_name = "Đi thực tế / Trưng tập (từ 10 tháng trở lên)"
+            else:
+                rule_name = "Đi thực tế / Trưng tập (dưới 10 tháng)"
+        else:  # permitted_leave
+            rule_name = "Nghỉ có phép"
+
+        # Look up reduction rule id
+        cursor.execute(
+            "SELECT id FROM reduction_rules WHERE name = ? LIMIT 1",
+            (rule_name,)
+        )
+        rule_row = cursor.fetchone()
+        if not rule_row:
+            continue  # Rule not seeded — skip silently
+
+        rule_id = rule_row["id"]
+        start_str = start_d.isoformat()
+        end_str = end_d.isoformat() if end_d else start_str
+
+        # Avoid duplicate REDUCTION records for the same rule + period
+        cursor.execute("""
+            SELECT id FROM teacher_role_history
+            WHERE teacher_id = ? AND record_type = 'REDUCTION'
+              AND value_text = ? AND start_date = ?
+        """, (teacher_id, str(rule_id), start_str))
+        if cursor.fetchone():
+            continue  # Already inserted
+
+        cursor.execute("""
+            INSERT INTO teacher_role_history
+                (teacher_id, record_type, value_text, start_date, end_date)
+            VALUES (?, 'REDUCTION', ?, ?, ?)
+        """, (teacher_id, str(rule_id), start_str, end_str))
+
+if 'db_initialized' not in st.session_state:
+    init_db()
+    st.session_state.db_initialized = True
 
 st.set_page_config(page_title="Phê duyệt Dữ liệu", page_icon="⚖️", layout="wide")
 render_sidebar("pheduyet")
-inject_premium_css()
 
 # Ensure user is logged in as Admin
 # Test compatibility: st.session_state.get("is_admin", False)
@@ -35,28 +151,42 @@ with col2:
     st.markdown('</div>', unsafe_allow_html=True)
 
     conn = get_connection()
+    import pandas as pd
     batches_df = pd.read_sql_query("""
         SELECT * FROM import_batches 
-        WHERE status = 'pending' 
-        ORDER BY created_at DESC
+        ORDER BY 
+            CASE status 
+                WHEN 'pending' THEN 0 
+                WHEN 'approved' THEN 1 
+                ELSE 2 
+            END,
+            created_at DESC
     """, conn)
+
+    status_filter = st.selectbox("Lọc theo trạng thái:", ["Tất cả", "Pending", "Approved", "Rejected"])
+    if status_filter != "Tất cả":
+        batches_df = batches_df[batches_df['status'] == status_filter.lower()]
     
     if batches_df.empty:
         render_empty_state("Hiện không có yêu cầu phê duyệt nào đang chờ.")
         conn.close()
         st.stop()
         
-    st.markdown("### 📋 Danh sách Yêu cầu đang chờ")
+    st.markdown(f"### 📋 Danh sách Yêu cầu ({len(batches_df)})</p>")
     
     # Let's list pending batches
     for idx, row in batches_df.iterrows():
         batch_id = int(row["id"])
         domain = row["domain"]
+        status = row["status"]
         dept_name = row["dept_name"] or "Quản trị viên"
         uploaded_by = row["uploaded_by"]
         filename = row["filename"]
         row_count = row["row_count"]
         created_at = row["created_at"]
+        
+        status_variant = "amber" if status == "pending" else "green" if status == "approved" else "red"
+        status_label = "Chờ duyệt" if status == "pending" else "Đã duyệt" if status == "approved" else "Từ chối"
         
         domain_label = {
             "teachers": "Hồ sơ Cán bộ",
@@ -71,6 +201,7 @@ with col2:
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                     <div>
                         <span class="md-chip md-chip-primary" style="margin-right: 8px;">{domain_label}</span>
+                        <span class="md-chip md-chip-{status_variant}">{status_label}</span>
                         <strong>Lô #{batch_id}</strong> &nbsp;|&nbsp; Đơn vị: <strong>{dept_name}</strong>
                         <div style="font-size: 0.85rem; color: var(--md-on-surface-variant); margin-top: 4px;">
                             Người tải lên: {uploaded_by} &nbsp;•&nbsp; File: <code>{filename}</code> ({row_count} dòng) &nbsp;•&nbsp; Thời gian: {created_at}
@@ -270,19 +401,25 @@ with col2:
                                     new_id = cursor.lastrowid
                                     
                                     # 2. Insert role history for Title & Dept
+                                    title_s_dt = r["title_start_date"] if pd.notna(r.get("title_start_date")) and str(r.get("title_start_date")).strip() else now_str[:10]
+                                    role_s_dt = r["role_start_date"] if pd.notna(r.get("role_start_date")) and str(r.get("role_start_date")).strip() else now_str[:10]
+                                    
                                     cursor.execute("""
                                         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date)
                                         VALUES (?, 'TITLE', ?, ?)
-                                    """, (new_id, r["title"], now_str[:10]))
+                                    """, (new_id, r["title"], title_s_dt))
                                     cursor.execute("""
                                         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date)
                                         VALUES (?, 'DEPARTMENT', ?, ?)
-                                    """, (new_id, r["department"], now_str[:10]))
+                                    """, (new_id, r["department"], role_s_dt))
                                     if r.get("role"):
                                         cursor.execute("""
                                             INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date)
                                             VALUES (?, 'ROLE', ?, ?)
-                                        """, (new_id, r["role"], now_str[:10]))
+                                        """, (new_id, r["role"], role_s_dt))
+                                        
+                                    # 3. Insert leave reduction records (study / field trip / permitted)
+                                    _insert_leave_reductions(cursor, new_id, r, now_str)
     
                                     
                                 elif marker == "UPDATE":
@@ -332,21 +469,27 @@ with col2:
                                             WHERE id = ?
                                         """, (r["subject_group"], r["is_female"], r["employment_type"], r["guest_rank"], t_id))
                                         
+                                        title_s_dt = r["title_start_date"] if pd.notna(r.get("title_start_date")) and str(r.get("title_start_date")).strip() else now_str[:10]
+                                        role_s_dt = r["role_start_date"] if pd.notna(r.get("role_start_date")) and str(r.get("role_start_date")).strip() else now_str[:10]
+                                        
                                         # If title changed, update role history
                                         if r["title"] and r["title"] != old_title:
-                                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = 'TITLE' AND end_date IS NULL", (now_str[:10], t_id))
-                                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, 'TITLE', ?, ?)", (t_id, r["title"], now_str[:10]))
+                                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = 'TITLE' AND end_date IS NULL", (title_s_dt, t_id))
+                                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, 'TITLE', ?, ?)", (t_id, r["title"], title_s_dt))
                                         
                                         # If department changed, update role history
                                         if r["department"] and r["department"] != old_dept:
-                                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = 'DEPARTMENT' AND end_date IS NULL", (now_str[:10], t_id))
-                                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, 'DEPARTMENT', ?, ?)", (t_id, r["department"], now_str[:10]))
+                                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = 'DEPARTMENT' AND end_date IS NULL", (role_s_dt, t_id))
+                                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, 'DEPARTMENT', ?, ?)", (t_id, r["department"], role_s_dt))
                                             
                                         # If role changed, update role history
                                         if r.get("role") and r["role"] != old_role:
-                                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = 'ROLE' AND end_date IS NULL", (now_str[:10], t_id))
-                                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, 'ROLE', ?, ?)", (t_id, r["role"], now_str[:10]))
+                                            cursor.execute("UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = 'ROLE' AND end_date IS NULL", (role_s_dt, t_id))
+                                            cursor.execute("INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date) VALUES (?, 'ROLE', ?, ?)", (t_id, r["role"], role_s_dt))
     
+                                        # Insert leave reduction records (study / field trip / permitted)
+                                        _insert_leave_reductions(cursor, t_id, r, now_str)
+
                                 elif marker == "DELETE":
                                     t_id = r.get("teacher_id")
                                     if pd.isna(t_id): t_id = None

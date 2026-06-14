@@ -50,13 +50,41 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
     expected_cols = [
         "Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng",
         "Học hàm học vị", "Cấp bậc quân hàm", "Chức danh", 
-        "Chức vụ", "Ngày bổ nhiệm", "Đơn vị"
+        "Chức vụ", "Ngày bổ nhiệm chức vụ", "Ngày bổ nhiệm chức danh", "Đơn vị",
+        "Thời gian đi học", "Thời gian đi thực tế", "Thời gian nghỉ có phép"
     ]
     
-    # Check columns
-    for col in expected_cols:
+    # Check required columns
+    required_cols = ["Mã GV", "Họ tên", "Đơn vị"]
+    for col in required_cols:
         if col not in df.columns:
             return [(0, 0, f"Thiếu cột bắt buộc: {col}")]
+
+    # Ensure other optional expected columns exist in dataframe
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    def validate_date_range(range_str):
+        if is_empty_cell(range_str):
+            return True
+        range_str = str(range_str).strip()
+        range_str = range_str.replace("to", "-").replace("đến", "-")
+        parts = [p.strip() for p in range_str.split("-") if p.strip()]
+        if len(parts) > 2 or not parts:
+            return False
+        for part in parts:
+            valid = False
+            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+                try:
+                    datetime.strptime(part, fmt)
+                    valid = True
+                    break
+                except ValueError:
+                    continue
+            if not valid:
+                return False
+        return True
 
     for idx, row in df.iterrows():
         row_num = idx + 5 # standard row start in templates
@@ -66,25 +94,28 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
         if is_empty_cell(name):
             errors.append((idx, row_num, "Họ tên không được để trống."))
             
-        # Subject group
-        grp = row["Tổ bộ môn"]
-        if is_empty_cell(grp):
-            errors.append((idx, row_num, "Tổ bộ môn không được để trống."))
+        # Subject group (optional)
+        if "Tổ bộ môn" in df.columns:
+            grp = row["Tổ bộ môn"]
+            if is_empty_cell(grp):
+                errors.append((idx, row_num, "Tổ bộ môn không được để trống."))
             
-        # Employment type
-        emp_raw = row["Loại hợp đồng"]
-        if is_empty_cell(emp_raw):
-            errors.append((idx, row_num, "Loại hợp đồng không được để trống (Cho phép: TEACHER, STAFF, hoặc GUEST)."))
-        else:
-            emp = str(emp_raw).strip().upper()
-            if emp not in ("TEACHER", "STAFF", "GUEST"):
-                errors.append((idx, row_num, f"Loại hợp đồng '{emp_raw}' không hợp lệ. Phải là: TEACHER, STAFF, hoặc GUEST."))
+        # Employment type (optional)
+        if "Loại hợp đồng" in df.columns:
+            emp_raw = row["Loại hợp đồng"]
+            if is_empty_cell(emp_raw):
+                errors.append((idx, row_num, "Loại hợp đồng không được để trống (Cho phép: TEACHER, STAFF, hoặc GUEST)."))
+            else:
+                emp = str(emp_raw).strip().upper()
+                if emp not in ("TEACHER", "STAFF", "GUEST"):
+                    errors.append((idx, row_num, f"Loại hợp đồng '{emp_raw}' không hợp lệ. Phải là: TEACHER, STAFF, hoặc GUEST."))
             
-        # Police rank
-        rank = row["Cấp bậc quân hàm"]
-        if not is_empty_cell(rank):
-            if str(rank).strip().lower() not in valid_ranks:
-                errors.append((idx, row_num, f"Cấp bậc quân hàm '{rank}' không tồn tại trong hệ thống."))
+        # Police rank (optional)
+        if "Cấp bậc quân hàm" in df.columns:
+            rank = row["Cấp bậc quân hàm"]
+            if not is_empty_cell(rank):
+                if str(rank).strip().lower() not in valid_ranks:
+                    errors.append((idx, row_num, f"Cấp bậc quân hàm '{rank}' không tồn tại trong hệ thống."))
                 
         # Dept
         dept = row["Đơn vị"]
@@ -99,13 +130,30 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
             if str(title).strip().lower() not in valid_titles:
                 errors.append((idx, row_num, f"Chức danh '{title}' không tồn tại trong hệ thống."))
 
-        # Appointment Date
-        app_date = row.get("Ngày bổ nhiệm")
-        if not is_empty_cell(app_date):
+        # Appointment Date (Role)
+        app_date_role = row.get("Ngày bổ nhiệm chức vụ")
+        if not is_empty_cell(app_date_role):
             try:
-                pd.to_datetime(app_date)
+                pd.to_datetime(app_date_role)
             except Exception:
-                errors.append((idx, row_num, f"Ngày bổ nhiệm '{app_date}' không đúng định dạng YYYY-MM-DD."))
+                errors.append((idx, row_num, f"Ngày bổ nhiệm chức vụ '{app_date_role}' không đúng định dạng YYYY-MM-DD."))
+
+        # Appointment Date (Title)
+        app_date_title = row.get("Ngày bổ nhiệm chức danh")
+        if not is_empty_cell(app_date_title):
+            try:
+                pd.to_datetime(app_date_title)
+            except Exception:
+                errors.append((idx, row_num, f"Ngày bổ nhiệm chức danh '{app_date_title}' không đúng định dạng YYYY-MM-DD."))
+
+        # Date range fields
+        for field, label in [("Thời gian đi học", "Thời gian đi học"), 
+                             ("Thời gian đi thực tế", "Thời gian đi thực tế"), 
+                             ("Thời gian nghỉ có phép", "Thời gian nghỉ có phép")]:
+            val = row.get(field)
+            if not is_empty_cell(val):
+                if not validate_date_range(val):
+                    errors.append((idx, row_num, f"Trường '{label}' '{val}' không đúng định dạng (Ví dụ: 04/08/2025 - 28/09/2025 hoặc 04/08/2025)."))
 
     return errors
 

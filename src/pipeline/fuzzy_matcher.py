@@ -155,8 +155,23 @@ def audit_synonyms(db_connection=None) -> Dict:
             "Mã GV", "Tổng GC thực hiện", "NCKH thực hiện",
             "Số giờ miễn giảm", "Định mức GC", "Ghi chú"
         ]
+        expected_teacher_cols = [
+            "Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng",
+            "Học hàm học vị", "Cấp bậc quân hàm", "Chức danh", 
+            "Chức vụ", "Ngày bổ nhiệm chức vụ", "Ngày bổ nhiệm chức danh", "Đơn vị"
+        ]
+        expected_schedule_cols = [
+            "Mã GV (Khóa)", "Họ tên (Khóa)", "Chức danh (Khóa)", "Đơn vị (Khóa)",
+            "Tên môn học", "Loại", "Nhóm", "Sỉ số", "Tiết quy đổi",
+            "Hệ số tín chỉ", "Ghi chú"
+        ]
 
-        all_expected = set(required_activity_cols + required_aggregate_cols)
+        all_expected = set(
+            required_activity_cols + 
+            required_aggregate_cols + 
+            expected_teacher_cols + 
+            expected_schedule_cols
+        )
         synonym_keys = set(registry.expected_columns)
 
         missing_in_synonyms = all_expected - synonym_keys

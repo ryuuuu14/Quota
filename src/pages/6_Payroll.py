@@ -1,10 +1,9 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
 import io
 import time
 from database import get_connection
-from components import render_sidebar, render_metric_card, render_chip
+from components import render_sidebar, render_metric_card, render_chip, render_empty_state
 from payroll import run_payroll_cycle, get_payroll_records
 
 st.set_page_config(page_title="Quản lý Chế độ chi TT11", layout="wide")
@@ -23,9 +22,8 @@ st.markdown(
 )
 
 def get_timeframes():
-    conn = get_connection()
-    df = pd.read_sql_query("SELECT id, name FROM timeframes ORDER BY start_date DESC", conn)
-    conn.close()
+    from database import get_cached_timeframes
+    df = get_cached_timeframes()
     return dict(zip(df['name'], df['id']))
 
 def get_teacher_stats(tf_id):
@@ -46,6 +44,7 @@ def get_teacher_stats(tf_id):
     }
 
 def get_teachers_missing_salary():
+    import pandas as pd
     conn = get_connection()
     df = pd.read_sql_query(
         "SELECT name, employment_type FROM teachers "
@@ -56,16 +55,12 @@ def get_teachers_missing_salary():
     return df
 
 def get_all_teachers():
-    conn = get_connection()
-    df = pd.read_sql_query(
-        "SELECT id, name, employment_type, subject_group FROM teachers ORDER BY name", conn
-    )
-    conn.close()
-    return df
+    from database import get_cached_teachers
+    return get_cached_teachers()
 
 timeframes = get_timeframes()
 if not timeframes:
-    st.warning("Chưa có kỳ học nào trong hệ thống. Vui lòng thêm kỳ học trước.")
+    render_empty_state("Chưa có kỳ học nào trong hệ thống. Vui lòng thêm kỳ học trước.")
     st.stop()
 
 tf_name = st.selectbox("Chọn kỳ học", list(timeframes.keys()), key='tf_main')
@@ -128,6 +123,12 @@ with c_run:
             time.sleep(0.3)
         if "error" in result:
             st.error(f"Lỗi khi tính lương: {result['error']}")
+            if "details" in result and result["details"]:
+                with st.expander("Chi tiết nguyên nhân & cách khắc phục"):
+                    for msg in result["details"]:
+                        st.markdown(f"- {msg}")
+            if st.button("🔄 Thử lại", key="retry_payroll"):
+                st.rerun()
         elif result["guest_count"] == 0 and result["base_count"] == 0 and result["overtime_count"] == 0:
             st.error(f"Không có dữ liệu lương nào được tạo cho {tf_name}")
             with st.expander("Chi tiết nguyên nhân & cách khắc phục", expanded=True):
@@ -176,7 +177,7 @@ st.markdown("### Kết quả bảng lương")
 df_payroll = get_payroll_records(tf_id)
 
 if df_payroll.empty:
-    st.info("Chưa có dữ liệu lương cho kỳ học này. Chạy bảng lương để tạo dữ liệu.")
+    render_empty_state("Chưa có dữ liệu lương cho kỳ học này. Chạy bảng lương để tạo dữ liệu.")
 else:
     df_payroll['amount_vnd_str'] = df_payroll['amount_vnd'].apply(lambda x: f"{x:,.0f} VNĐ")
 
@@ -224,6 +225,7 @@ else:
 
     col_ex, col_cl, _ = st.columns([1, 1, 4])
     with col_ex:
+        import pandas as pd
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine='openpyxl') as writer:
             filtered.to_excel(writer, index=False, sheet_name='Bảng lương')

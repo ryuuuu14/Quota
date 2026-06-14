@@ -131,9 +131,9 @@ def generate_teachers_template(dept_name):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT t.id as teacher_id, t.name, t.subject_group, t.is_female, t.employment_type, t.guest_rank,
+        SELECT t.id as teacher_id, t.name,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title,
-               (SELECT rank_name FROM police_ranks WHERE id = t.police_rank_id) as police_rank,
+               (SELECT start_date FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title_date,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'ROLE' ORDER BY start_date DESC LIMIT 1) as role,
                (SELECT start_date FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'ROLE' ORDER BY start_date DESC LIMIT 1) as role_date
         FROM teachers t
@@ -146,31 +146,24 @@ def generate_teachers_template(dept_name):
     cursor.execute("SELECT name FROM titles ORDER BY name")
     titles_db = [r["name"] for r in cursor.fetchall()]
 
-    cursor.execute("SELECT rank_name FROM police_ranks ORDER BY id")
-    ranks_db = [r["rank_name"] for r in cursor.fetchall()]
-
     cursor.execute("SELECT name FROM reduction_rules WHERE rule_type = 'ROLE' ORDER BY name")
     roles_db = [r["name"] for r in cursor.fetchall()]
     conn.close()
 
     if not titles_db:
         titles_db = ["Chưa cài đặt"]
-    if not ranks_db:
-        ranks_db = ["Chưa cài đặt"]
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Danh sách Cán bộ"
+    ws.title = "Thông tin nhà giáo"
 
-    # Populate metadata sheet for lists to bypass 255-char limit
+    # Populate metadata sheet for lists
     meta_ws = wb.create_sheet(title="Metadata")
     meta_ws.sheet_state = "hidden"
 
     for idx, val in enumerate(titles_db, 1):
         meta_ws.cell(row=idx, column=1, value=val)
-    for idx, val in enumerate(ranks_db, 1):
-        meta_ws.cell(row=idx, column=2, value=val)
-    
+
     roles_list_db = ["Không có"] + roles_db
     for idx, val in enumerate(roles_list_db, 1):
         meta_ws.cell(row=idx, column=3, value=val)
@@ -191,24 +184,28 @@ def generate_teachers_template(dept_name):
         bottom=Side(style='thin', color='CCCCCC')
     )
 
-    ws.merge_cells("A1:K1")
+    last_col = get_column_letter(10)
+    ws.merge_cells(f"A1:{last_col}1")
     ws["A1"] = f"MẪU NHẬP CÁN BỘ HÀNG LOẠT - ĐƠN VỊ: {dept_name.upper()}"
     ws["A1"].font = title_font
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 40
 
-    ws.merge_cells("A2:K2")
-    ws["A2"] = ("Hướng dẫn: Điền thông tin cán bộ. Cột Mã GV để trống nếu thêm mới. Đơn vị được khóa theo tài khoản của bạn. "
-                "Cột Nữ điền 'Có' hoặc 'Không'. Cột Loại hợp đồng chọn: TEACHER, STAFF, GUEST.")
+    ws.merge_cells(f"A2:{last_col}2")
+    ws["A2"] = ("Hướng dẫn: Điền thông tin cán bộ. Cột Mã GV để trống nếu thêm mới. "
+                "Điền thời gian theo định dạng: từ ngày…đến ngày…. Cột Chức vụ/Chức danh chọn từ danh sách.")
     ws["A2"].font = instruction_font
     ws["A2"].fill = instruction_fill
     ws["A2"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     ws.row_dimensions[2].height = 30
 
     headers = [
-        "Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng",
-        "Học hàm học vị", "Cấp bậc quân hàm", "Chức danh",
-        "Chức vụ", "Ngày bổ nhiệm", "Đơn vị"
+        "Mã GV", "Họ tên", "Đơn vị công tác", "Chức vụ",
+        "Thời gian bổ nhiệm chức vụ (từ ngày ….)", "Chức danh",
+        "Thời gian bổ nhiệm chức danh (từ ngày … )",
+        "Thời gian đi học (từ ngày….đến ngày….)",
+        "Thời gian đi thực tế(từ ngày….đến ngày….)",
+        "Thời gian nghỉ có phép (từ ngày….đến ngày….)"
     ]
 
     ws.row_dimensions[4].height = 30
@@ -221,124 +218,68 @@ def generate_teachers_template(dept_name):
         cell.border = thin_border
 
     start_row = 5
-    # Populate active teachers first
     for idx, t in enumerate(teachers):
         current_row = start_row + idx
         ws.row_dimensions[current_row].height = 22
-        
-        ws.cell(row=current_row, column=1, value=t["teacher_id"]).protection = Protection(locked=True)
+
+        ws.cell(row=current_row, column=1, value=t["teacher_id"])
         ws.cell(row=current_row, column=2, value=t["name"])
-        ws.cell(row=current_row, column=3, value=t["subject_group"])
-        ws.cell(row=current_row, column=4, value="Có" if t["is_female"] else "Không")
-        ws.cell(row=current_row, column=5, value=t["employment_type"])
-        ws.cell(row=current_row, column=6, value=t["guest_rank"] or "")
-        ws.cell(row=current_row, column=7, value=t["police_rank"] or "")
-        ws.cell(row=current_row, column=8, value=t["title"] or "")
-        ws.cell(row=current_row, column=9, value=t["role"] or "")
-        ws.cell(row=current_row, column=10, value=t["role_date"] or "")
-        
-        # Locked dept
-        dept_cell = ws.cell(row=current_row, column=11, value=dept_name)
+        dept_cell = ws.cell(row=current_row, column=3, value=dept_name)
         dept_cell.protection = Protection(locked=True)
+        ws.cell(row=current_row, column=4, value=t["role"] or "")
+        ws.cell(row=current_row, column=5, value=str(t["role_date"] or ""))
+        ws.cell(row=current_row, column=6, value=t["title"] or "")
+        ws.cell(row=current_row, column=7, value=str(t["title_date"] or ""))
+        ws.cell(row=current_row, column=8, value="")
+        ws.cell(row=current_row, column=9, value="")
+        ws.cell(row=current_row, column=10, value="")
 
         for col_idx in range(1, 11):
             cell = ws.cell(row=current_row, column=col_idx)
             cell.font = data_font
             cell.border = thin_border
-            # Column 1 is ID, locked above
-            if col_idx != 1 and col_idx != 11:
+            if col_idx != 3:
                 cell.protection = Protection(locked=False)
-            if col_idx in (1, 4, 5, 8):
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-            else:
-                cell.alignment = Alignment(vertical="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Add extra empty rows for inserting new teachers (e.g. 50 extra rows)
     extra_rows = 50
     start_extra = start_row + len(teachers)
     for idx in range(extra_rows):
         current_row = start_extra + idx
         ws.row_dimensions[current_row].height = 22
-        
-        # Locked ID (blank for new)
-        id_cell = ws.cell(row=current_row, column=1, value="")
-        id_cell.protection = Protection(locked=True)
-        
-        # Locked dept
-        dept_cell = ws.cell(row=current_row, column=11, value=dept_name)
+
+        dept_cell = ws.cell(row=current_row, column=3, value=dept_name)
         dept_cell.protection = Protection(locked=True)
 
         for col_idx in range(1, 11):
             cell = ws.cell(row=current_row, column=col_idx)
             cell.font = data_font
             cell.border = thin_border
-            if col_idx != 1 and col_idx != 11:
+            if col_idx != 3:
                 cell.protection = Protection(locked=False)
-            if col_idx in (1, 4, 5, 8):
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-            else:
-                cell.alignment = Alignment(vertical="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Add dropdown validations and helpful input tooltips
     max_row = start_extra + extra_rows - 1
 
-    # ID Info message
     id_dv = DataValidation(type="whole", allow_blank=True)
-    id_dv.prompt = "Mã GV là số nguyên duy nhất tự động. Để trống nếu thêm mới cán bộ."
+    id_dv.prompt = "Mã GV là số nguyên duy nhất. Để trống nếu thêm mới cán bộ."
     id_dv.promptTitle = "Mã Giáo Viên"
     ws.add_data_validation(id_dv)
     id_dv.add(f"A5:A{max_row}")
 
-    # Gender validation
-    gender_dv = DataValidation(type="list", formula1='"Có,Không"', allow_blank=True)
-    gender_dv.prompt = "Chọn Giới tính: Có (Nữ) hoặc Không (Nam)"
-    gender_dv.promptTitle = "Giới tính (Nữ)"
-    ws.add_data_validation(gender_dv)
-    gender_dv.add(f"D5:D{max_row}")
-
-    # Employment type validation
-    emp_dv = DataValidation(type="list", formula1='"TEACHER,STAFF,GUEST"', allow_blank=True)
-    emp_dv.prompt = "Chọn loại hợp đồng: TEACHER, STAFF, hoặc GUEST"
-    emp_dv.promptTitle = "Loại hợp đồng"
-    ws.add_data_validation(emp_dv)
-    emp_dv.add(f"E5:E{max_row}")
-
-    # Rank dropdown validation
-    rank_dv = DataValidation(type="list", formula1=f"Metadata!$B$1:$B${len(ranks_db)}", allow_blank=True)
-    rank_dv.prompt = "Chọn cấp bậc quân hàm phù hợp"
-    rank_dv.promptTitle = "Cấp bậc quân hàm"
-    ws.add_data_validation(rank_dv)
-    rank_dv.add(f"G5:G{max_row}")
-
-    # Title dropdown validation
-    title_dv = DataValidation(type="list", formula1=f"Metadata!$A$1:$A${len(titles_db)}", allow_blank=True)
-    title_dv.prompt = "Chọn chức danh giảng dạy phù hợp"
-    title_dv.promptTitle = "Chức danh"
-    ws.add_data_validation(title_dv)
-    title_dv.add(f"H5:H{max_row}")
-
-    # Role dropdown validation
     role_dv = DataValidation(type="list", formula1=f"Metadata!$C$1:$C${len(roles_list_db)}", allow_blank=True)
     role_dv.prompt = "Chọn chức vụ lãnh đạo (nếu có)"
     role_dv.promptTitle = "Chức vụ"
     ws.add_data_validation(role_dv)
-    role_dv.add(f"I5:I{max_row}")
+    role_dv.add(f"D5:D{max_row}")
 
-    # Date info message
-    date_dv = DataValidation(type="date", allow_blank=True)
-    date_dv.prompt = "Nhập ngày bổ nhiệm chức vụ dạng YYYY-MM-DD"
-    date_dv.promptTitle = "Ngày bổ nhiệm"
-    ws.add_data_validation(date_dv)
-    date_dv.add(f"J5:J{max_row}")
+    title_dv = DataValidation(type="list", formula1=f"Metadata!$A$1:$A${len(titles_db)}", allow_blank=True)
+    title_dv.prompt = "Chọn chức danh giảng dạy phù hợp"
+    title_dv.promptTitle = "Chức danh"
+    ws.add_data_validation(title_dv)
+    title_dv.add(f"F5:F{max_row}")
 
-    # Subject group suggestion message
-    grp_dv = DataValidation(type="custom", allow_blank=True)
-    grp_dv.prompt = "Nhập khối tổ bộ môn giảng dạy (VD: Tự nhiên/Kỹ thuật, Chính trị/Nghiệp vụ...)"
-    grp_dv.promptTitle = "Tổ bộ môn"
-    ws.add_data_validation(grp_dv)
-    grp_dv.add(f"C5:C{max_row}")
-
-    col_widths = {1: 10, 2: 22, 3: 18, 4: 10, 5: 16, 6: 18, 7: 18, 8: 16, 9: 16, 10: 16, 11: 22}
+    col_widths = {1: 10, 2: 22, 3: 22, 4: 18, 5: 26, 6: 18, 7: 26, 8: 26, 9: 26, 10: 26}
     for c, w in col_widths.items():
         ws.column_dimensions[get_column_letter(c)].width = w
 

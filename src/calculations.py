@@ -1,4 +1,5 @@
 import pandas as pd
+import streamlit as st
 from database import get_connection
 
 
@@ -38,7 +39,9 @@ def calculate_t04_weeks(start_date, end_date, holidays=None):
 
 
 
-def get_timeframe_dates(conn, timeframe_id=None):
+@st.cache_data(ttl=300)
+def get_timeframe_dates(timeframe_id=None):
+    conn = get_connection()
     tf_query = "SELECT * FROM timeframes"
     tf_params = []
     if timeframe_id is not None:
@@ -48,6 +51,7 @@ def get_timeframe_dates(conn, timeframe_id=None):
         tf_query += " ORDER BY start_date DESC LIMIT 1"
         
     tf_df = pd.read_sql_query(tf_query, conn, params=tf_params)
+    conn.close()
     if tf_df.empty:
         return None, None, None, None
         
@@ -414,11 +418,17 @@ def _apply_auto_compensation(row, nckh_to_gc_ratio=3.0, gc_to_nckh_ratio=3.0, mi
 
 
 def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_override=None):
-    """
-    Tính toán định mức động cho giảng viên, sử dụng logic proportional timeline
-    """
+    if df_session_override is not None:
+        return _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override)
+    return _teacher_metrics_cached(timeframe_id, teacher_id)
+
+@st.cache_data(ttl=300)
+def _teacher_metrics_cached(timeframe_id, teacher_id):
+    return _teacher_metrics_impl(teacher_id, timeframe_id, None)
+
+def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
     conn = get_connection()
-    tf_id, tf_start, tf_end, std_weeks = get_timeframe_dates(conn, timeframe_id)
+    tf_id, tf_start, tf_end, std_weeks = get_timeframe_dates(timeframe_id)
     
     # Load config constants
     from database import get_setting_value
@@ -859,21 +869,23 @@ def calculate_teacher_metrics(teacher_id=None, timeframe_id=None, df_session_ove
     conn.close()
     return df_out
 
-def get_conversion_limits(teacher_id, timeframe_id):
+def get_conversion_limits(teacher_id, timeframe_id, teacher_row=None):
     """
     Trả về số giờ tối đa có thể quy đổi (Điều 12)
+    Có thể truyền teacher_row (từ DataFrame đã có sẵn) để tránh gọi lại calculate_teacher_metrics.
     """
-    # Load config constants
     from database import get_setting_value
     nckh_to_gc_ratio = float(get_setting_value('nckh_to_gc_ratio', '3.0'))
     gc_to_nckh_ratio = float(get_setting_value('gc_to_nckh_ratio', '3.0'))
     min_direct_teaching_ratio = float(get_setting_value('min_direct_teaching_ratio', '0.50'))
     min_nckh_ratio = float(get_setting_value('min_nckh_ratio', '0.25'))
 
-    df = calculate_teacher_metrics(teacher_id, timeframe_id)
-    if df.empty: return None
-    
-    row = df.iloc[0]
+    if teacher_row is not None:
+        row = teacher_row
+    else:
+        df = calculate_teacher_metrics(teacher_id, timeframe_id)
+        if df.empty: return None
+        row = df.iloc[0]
     res = {
         'can_convert_nckh_to_gc': False,
         'max_nckh_to_spend': 0.0,

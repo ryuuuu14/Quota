@@ -38,7 +38,8 @@ def test_importer_and_diff_pipeline(tmp_path):
             "Cấp bậc quân hàm": "Đại tá",
             "Chức danh": "Giảng viên",
             "Chức vụ": "",
-            "Ngày bổ nhiệm": "",
+            "Ngày bổ nhiệm chức vụ": "",
+            "Ngày bổ nhiệm chức danh": "",
             "Đơn vị": "Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học"
         },
         {
@@ -51,7 +52,8 @@ def test_importer_and_diff_pipeline(tmp_path):
             "Cấp bậc quân hàm": "",
             "Chức danh": "",
             "Chức vụ": "",
-            "Ngày bổ nhiệm": "",
+            "Ngày bổ nhiệm chức vụ": "",
+            "Ngày bổ nhiệm chức danh": "",
             "Đơn vị": "Nonexistent Department" # invalid dept
         }
     ])

@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import pandas as pd
+import streamlit as st
 
 # Always resolve DB relative to project root, never to CWD
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -370,7 +372,10 @@ def init_db():
         title TEXT,
         department TEXT,
         role TEXT,
-        teacher_id INTEGER
+        teacher_id INTEGER,
+        study_leave TEXT,
+        field_trip TEXT,
+        permitted_leave TEXT
     )
     ''')
     try:
@@ -381,6 +386,27 @@ def init_db():
         cursor.execute("ALTER TABLE staging_teachers ADD COLUMN teacher_id INTEGER")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN role_start_date TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN title_start_date TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN study_leave TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN field_trip TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN permitted_leave TEXT")
+    except Exception:
+        pass
+
 
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS staging_activities (
@@ -442,6 +468,17 @@ def init_db():
         timeframe_name TEXT
     )
     ''')
+
+    # ── Performance indexes ──
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_activity_logs_tf ON activity_logs(timeframe_id)",
+        "CREATE INDEX IF NOT EXISTS idx_activity_logs_teacher_tf ON activity_logs(teacher_id, timeframe_id)",
+        "CREATE INDEX IF NOT EXISTS idx_teacher_role_history_teacher_tf ON teacher_role_history(teacher_id)",
+        "CREATE INDEX IF NOT EXISTS idx_manual_conversions_teacher_tf ON manual_conversions(teacher_id, timeframe_id)",
+        "CREATE INDEX IF NOT EXISTS idx_session_totals_tf ON session_teacher_totals(timeframe_id)",
+        "CREATE INDEX IF NOT EXISTS idx_calculated_totals_tf ON teacher_calculated_totals(timeframe_id)",
+    ]:
+        cursor.execute(idx_sql)
 
     conn.commit()
     conn.close()
@@ -638,6 +675,7 @@ def seed_academic_holidays():
     """
     pass
 
+@st.cache_data(ttl=300)
 def get_setting_value(key, default_value=None):
     """Lấy giá trị cấu hình từ bảng settings theo key, trả về default_value nếu không tồn tại."""
     conn = get_connection()
@@ -676,17 +714,20 @@ def compute_total_12m_salary(salary_coefficient, base_salary=None):
         base_salary = get_base_salary()
     return salary_coefficient * base_salary * 12
 
-def get_police_ranks(cursor=None):
-    """Return all police ranks sorted by rank_group, sort_order."""
-    close_on_exit = False
-    if cursor is None:
-        conn = get_connection()
-        cursor = conn.cursor()
-        close_on_exit = True
+@st.cache_data(ttl=300)
+def _cached_police_ranks():
+    conn = get_connection()
+    cursor = conn.cursor()
     cursor.execute("SELECT id, rank_name, coefficient, rank_group FROM police_ranks ORDER BY sort_order")
     rows = cursor.fetchall()
-    if close_on_exit:
-        conn.close()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_police_ranks(cursor=None):
+    """Return all police ranks sorted by rank_group, sort_order."""
+    if cursor is None:
+        return _cached_police_ranks()
+    cursor.execute("SELECT id, rank_name, coefficient, rank_group FROM police_ranks ORDER BY sort_order")
     return [dict(r) for r in rows]
 
 def get_teacher_rank_history(teacher_id, cursor=None):
@@ -810,6 +851,29 @@ def delete_teacher(teacher_id):
     cursor.execute("DELETE FROM teachers WHERE id = ?", (teacher_id,))
     conn.commit()
     conn.close()
+
+@st.cache_data(ttl=300)
+def get_cached_timeframes():
+    conn = get_connection()
+    df = pd.read_sql_query("SELECT id, name, start_date, end_date FROM timeframes ORDER BY start_date DESC", conn)
+    conn.close()
+    return df
+
+@st.cache_data(ttl=60)
+def get_cached_teachers():
+    conn = get_connection()
+    df = pd.read_sql_query(
+        "SELECT id, name, subject_group, employment_type FROM teachers ORDER BY name", conn
+    )
+    conn.close()
+    return df
+
+@st.cache_data(ttl=300)
+def get_cached_activity_types():
+    conn = get_connection()
+    df = pd.read_sql_query("SELECT * FROM activity_types", conn)
+    conn.close()
+    return df
 
 if __name__ == "__main__":
     if os.path.exists(DB_PATH):

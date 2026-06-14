@@ -1,9 +1,173 @@
 import streamlit as st
-import pandas as pd
 from calculations import calculate_teacher_metrics, get_conversion_limits, calculate_department_compensation
-from database import get_connection
+from database import get_connection, get_cached_timeframes
 from components import render_metric_card, render_empty_state, render_warning_state, render_chip, render_sidebar
 from auth import require_role
+
+@st.fragment
+def _render_conversion_suggestions(df_display, selected_tf_id, conn):
+    import pandas as pd
+    with st.expander("Quy đổi & Bù trừ Giờ chuẩn thủ công", expanded=False):
+        st.markdown("<p style='font-size: 14px; color: var(--md-on-surface-variant);'>Gợi ý quy đổi thủ công dựa trên số giờ thừa/thiếu (Điều 12). Bấm nút 'Quy đổi' để áp dụng.</p>", unsafe_allow_html=True)
+        has_suggestion = False
+        for _, row in df_display.iterrows():
+            limits = get_conversion_limits(row['id'], selected_tf_id, teacher_row=row)
+            if not limits: continue
+
+            cursor_check = conn.cursor()
+            cursor_check.execute("""
+                SELECT from_category, to_category, from_amount, to_amount 
+                FROM manual_conversions 
+                WHERE teacher_id = ? AND timeframe_id = ?
+            """, (int(row['id']), selected_tf_id))
+            existing_conv = cursor_check.fetchone()
+
+            if existing_conv:
+                has_suggestion = True
+                from_cat, to_cat, from_amt, to_amt = existing_conv
+                with st.container():
+                    st.markdown(f"""
+<div style="
+    background-color: var(--md-surface-container-lowest);
+    padding: 16px 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--md-outline-variant);
+    border-left: 4px solid var(--md-amber);
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-card);
+">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
+            <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
+                Đang áp dụng quy đổi thủ công: <b>{from_amt:.1f} {from_cat}</b> → <b>{to_amt:.1f} {to_cat}</b>
+            </div>
+        </div>
+        <div>
+            <span class="material-symbols-outlined" style="color: var(--md-amber); font-size: 32px;">verified</span>
+        </div>
+    </div>
+</div>
+                    """, unsafe_allow_html=True)
+                    col_reset, _ = st.columns([3, 7])
+                    if col_reset.button("Hủy quy đổi", key=f"reset_{row['id']}_{selected_tf_id}"):
+                        try:
+                            with get_connection() as conn_write:
+                                cursor_write = conn_write.cursor()
+                                cursor_write.execute("""
+                                    DELETE FROM manual_conversions 
+                                    WHERE teacher_id = ? AND timeframe_id = ?
+                                """, (int(row['id']), selected_tf_id))
+                                conn_write.commit()
+                            st.success(f"Đã hủy quy đổi thủ công cho {row['name']}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Lỗi khi hủy quy đổi: {e}")
+                continue
+
+            if limits['can_convert_nckh_to_gc']:
+                has_suggestion = True
+                with st.container():
+                    st.markdown(f"""
+<div style="
+    background-color: var(--md-surface-container-lowest);
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--md-outline-variant);
+    border-left: 4px solid var(--md-primary-container);
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-card);
+">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
+            <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
+                Đang thiếu {render_chip(f"{abs(row['gc_vuot_thieu_sau_quy_doi']):.1f} GC", "red", "arrow_downward")}
+                nhưng thừa {render_chip(f"{row['nckh_vuot_thieu_sau_quy_doi']:.1f} NCKH", "green", "arrow_upward")}
+            </div>
+        </div>
+        <div>
+            <span class="material-symbols-outlined" style="color: var(--md-primary-container); font-size: 32px;">sync</span>
+        </div>
+    </div>
+</div>
+                    """, unsafe_allow_html=True)
+                    col_btn, _ = st.columns([3, 7])
+                    if col_btn.button(f"Quy đổi: {limits['max_nckh_to_spend']:.1f} NCKH → {limits['gc_gained']:.1f} GC", key=f"n2g_{row['id']}_{selected_tf_id}"):
+                        try:
+                            with get_connection() as conn_write:
+                                cursor_write = conn_write.cursor()
+                                cursor_write.execute("""
+                                    DELETE FROM manual_conversions 
+                                    WHERE teacher_id = ? AND timeframe_id = ?
+                                """, (int(row['id']), selected_tf_id))
+                                cursor_write.execute("""
+                                    INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount)
+                                    VALUES (?, ?, 'NCKH', 'Giảng dạy', ?, ?)
+                                """, (int(row['id']), selected_tf_id, limits['max_nckh_to_spend'], limits['gc_gained']))
+                                conn_write.commit()
+                            st.success(f"Đã áp dụng quy đổi {limits['max_nckh_to_spend']:.1f} NCKH sang {limits['gc_gained']:.1f} Giảng dạy cho {row['name']}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Lỗi khi thực hiện quy đổi: {e}")
+
+            if limits['can_convert_gc_to_nckh']:
+                has_suggestion = True
+                with st.container():
+                    st.markdown(f"""
+<div style="
+    background-color: var(--md-surface-container-lowest);
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--md-outline-variant);
+    border-left: 4px solid var(--md-green);
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-card);
+">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
+            <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
+                Đang thiếu {render_chip(f"{abs(row['nckh_vuot_thieu_sau_quy_doi']):.1f} NCKH", "red", "arrow_downward")}
+                nhưng thừa {render_chip(f"{row['gc_vuot_thieu_sau_quy_doi']:.1f} GC", "green", "arrow_upward")}
+            </div>
+        </div>
+        <div>
+            <span class="material-symbols-outlined" style="color: var(--md-green); font-size: 32px;">sync</span>
+        </div>
+    </div>
+</div>
+                    """, unsafe_allow_html=True)
+                    col_btn, _ = st.columns([3, 7])
+                    if col_btn.button(f"Quy đổi: {limits['max_gc_to_spend']:.1f} GC → {limits['nckh_gained']:.1f} NCKH", key=f"g2n_{row['id']}_{selected_tf_id}"):
+                        try:
+                            with get_connection() as conn_write:
+                                cursor_write = conn_write.cursor()
+                                cursor_write.execute("""
+                                    DELETE FROM manual_conversions 
+                                    WHERE teacher_id = ? AND timeframe_id = ?
+                                """, (int(row['id']), selected_tf_id))
+                                cursor_write.execute("""
+                                    INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount)
+                                    VALUES (?, ?, 'Giảng dạy', 'NCKH', ?, ?)
+                                """, (int(row['id']), selected_tf_id, limits['max_gc_to_spend'], limits['nckh_gained']))
+                                conn_write.commit()
+                            st.success(f"Đã áp dụng quy đổi {limits['max_gc_to_spend']:.1f} Giảng dạy sang {limits['nckh_gained']:.1f} NCKH cho {row['name']}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Lỗi khi thực hiện quy đổi: {e}")
+            elif limits['warning'] and row['nckh_vuot_thieu_sau_quy_doi'] < 0 and row['gc_vuot_thieu_sau_quy_doi'] > 0:
+                has_suggestion = True
+                warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")
+                st.warning(f"**{row['name']}**: Thừa GC, thiếu NCKH nhưng **{warning_text}**")
+            elif limits['warning'] and row['gc_vuot_thieu_sau_quy_doi'] < 0 and row['nckh_vuot_thieu_sau_quy_doi'] > 0:
+                has_suggestion = True
+                warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")
+                st.warning(f"**{row['name']}**: Thừa NCKH, thiếu GC nhưng **{warning_text}**")
+
+        if not has_suggestion:
+            st.markdown('<p style="color: var(--md-on-surface-variant);">Không có gợi ý quy đổi nào tại thời điểm này. Các cán bộ đã hoàn thành hoặc chưa đủ điều kiện.</p>', unsafe_allow_html=True)
+
 
 render_sidebar("dashboard")
 require_role(["admin", "head_dept"], "Bảng điều khiển")
@@ -12,7 +176,7 @@ st.title("Bảng điều khiển (Dashboard)")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Giám sát định mức theo thời gian thực và thực hiện quy đổi giờ theo Điều 12.</p>', unsafe_allow_html=True)
 
 conn = get_connection()
-df_tf = pd.read_sql_query("SELECT * FROM timeframes ORDER BY start_date DESC", conn)
+df_tf = get_cached_timeframes()
 
 if 'selected_tf_id' not in st.session_state:
     st.session_state['selected_tf_id'] = None
@@ -43,6 +207,7 @@ if selected_tf_id:
         df_teachers = calculate_teacher_metrics(timeframe_id=selected_tf_id)
 
     if not df_teachers.empty:
+        import pandas as pd
         hist_query = "SELECT teacher_id, value_text as dept_name FROM teacher_role_history WHERE record_type = 'DEPARTMENT' ORDER BY start_date DESC"
         df_dept_hist = pd.read_sql_query(hist_query, conn)
         df_dept_latest = df_dept_hist.drop_duplicates(subset=['teacher_id'], keep='first')
@@ -106,6 +271,11 @@ if selected_tf_id:
         filter_status = st.selectbox("Lọc theo Trạng thái Chung:", ["Tất cả", "Đạt", "Không đạt"])
         if filter_status != "Tất cả":
             df_display = df_display[df_display['Trạng thái Chung'] == filter_status]
+
+        search_query = st.text_input("Tìm kiếm theo từ khóa (tên, đơn vị, chức danh...):", placeholder="Nhập từ khóa...")
+        if search_query:
+            mask = df_display.astype(str).apply(lambda row: row.str.contains(search_query, case=False, na=False).any(), axis=1)
+            df_display = df_display[mask]
 
         col_mapping = {
             'id': 'ID',
@@ -204,168 +374,8 @@ if selected_tf_id:
             st.dataframe(df_table, width='stretch', column_config=config)
 
         st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">', unsafe_allow_html=True)
-        with st.expander("Quy đổi & Bù trừ Giờ chuẩn thủ công", expanded=False):
-            st.markdown("<p style='font-size: 14px; color: var(--md-on-surface-variant);'>Gợi ý quy đổi thủ công dựa trên số giờ thừa/thiếu (Điều 12). Bấm nút 'Quy đổi' để áp dụng.</p>", unsafe_allow_html=True)
-            has_suggestion = False
-            for _, row in df_display.iterrows():
-                limits = get_conversion_limits(row['id'], selected_tf_id)
-                if not limits: continue
-
-                # Check if this teacher already has a manual conversion in the database
-                cursor_check = conn.cursor()
-                cursor_check.execute("""
-                    SELECT from_category, to_category, from_amount, to_amount 
-                    FROM manual_conversions 
-                    WHERE teacher_id = ? AND timeframe_id = ?
-                """, (int(row['id']), selected_tf_id))
-                existing_conv = cursor_check.fetchone()
-
-                if existing_conv:
-                    has_suggestion = True
-                    from_cat, to_cat, from_amt, to_amt = existing_conv
-                    with st.container():
-                        st.markdown(f"""
-<div style="
-    background-color: var(--md-surface-container-lowest);
-    padding: 16px 20px;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--md-outline-variant);
-    border-left: 4px solid var(--md-amber);
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-card);
-">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
-            <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
-                Đang áp dụng quy đổi thủ công: <b>{from_amt:.1f} {from_cat}</b> → <b>{to_amt:.1f} {to_cat}</b>
-            </div>
-        </div>
-        <div>
-            <span class="material-symbols-outlined" style="color: var(--md-amber); font-size: 32px;">verified</span>
-        </div>
-    </div>
-</div>
-                        """, unsafe_allow_html=True)
-                        col_reset, _ = st.columns([3, 7])
-                        if col_reset.button("Hủy quy đổi", key=f"reset_{row['id']}_{selected_tf_id}"):
-                            try:
-                                with get_connection() as conn_write:
-                                    cursor_write = conn_write.cursor()
-                                    cursor_write.execute("""
-                                        DELETE FROM manual_conversions 
-                                        WHERE teacher_id = ? AND timeframe_id = ?
-                                    """, (int(row['id']), selected_tf_id))
-                                    conn_write.commit()
-                                st.success(f"Đã hủy quy đổi thủ công cho {row['name']}!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi khi hủy quy đổi: {e}")
-                    continue
-
-                if limits['can_convert_nckh_to_gc']:
-                    has_suggestion = True
-                    with st.container():
-                        st.markdown(f"""
-<div style="
-    background-color: var(--md-surface-container-lowest);
-    padding: 20px;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--md-outline-variant);
-    border-left: 4px solid var(--md-primary-container);
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-card);
-">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
-            <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
-                Đang thiếu {render_chip(f"{abs(row['gc_vuot_thieu_sau_quy_doi']):.1f} GC", "red", "arrow_downward")}
-                nhưng thừa {render_chip(f"{row['nckh_vuot_thieu_sau_quy_doi']:.1f} NCKH", "green", "arrow_upward")}
-            </div>
-        </div>
-        <div>
-            <span class="material-symbols-outlined" style="color: var(--md-primary-container); font-size: 32px;">sync</span>
-        </div>
-    </div>
-</div>
-                        """, unsafe_allow_html=True)
-                        col_btn, _ = st.columns([3, 7])
-                        if col_btn.button(f"Quy đổi: {limits['max_nckh_to_spend']:.1f} NCKH → {limits['gc_gained']:.1f} GC", key=f"n2g_{row['id']}_{selected_tf_id}"):
-                            try:
-                                with get_connection() as conn_write:
-                                    cursor_write = conn_write.cursor()
-                                    cursor_write.execute("""
-                                        DELETE FROM manual_conversions 
-                                        WHERE teacher_id = ? AND timeframe_id = ?
-                                    """, (int(row['id']), selected_tf_id))
-                                    cursor_write.execute("""
-                                        INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount)
-                                        VALUES (?, ?, 'NCKH', 'Giảng dạy', ?, ?)
-                                    """, (int(row['id']), selected_tf_id, limits['max_nckh_to_spend'], limits['gc_gained']))
-                                    conn_write.commit()
-                                st.success(f"Đã áp dụng quy đổi {limits['max_nckh_to_spend']:.1f} NCKH sang {limits['gc_gained']:.1f} Giảng dạy cho {row['name']}!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi khi thực hiện quy đổi: {e}")
-
-                if limits['can_convert_gc_to_nckh']:
-                    has_suggestion = True
-                    with st.container():
-                        st.markdown(f"""
-<div style="
-    background-color: var(--md-surface-container-lowest);
-    padding: 20px;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--md-outline-variant);
-    border-left: 4px solid var(--md-green);
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-card);
-">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-            <div style="color: var(--md-on-surface); font-weight: 700; font-size: 1rem;">{row['name']}</div>
-            <div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">
-                Đang thiếu {render_chip(f"{abs(row['nckh_vuot_thieu_sau_quy_doi']):.1f} NCKH", "red", "arrow_downward")}
-                nhưng thừa {render_chip(f"{row['gc_vuot_thieu_sau_quy_doi']:.1f} GC", "green", "arrow_upward")}
-            </div>
-        </div>
-        <div>
-            <span class="material-symbols-outlined" style="color: var(--md-green); font-size: 32px;">sync</span>
-        </div>
-    </div>
-</div>
-                        """, unsafe_allow_html=True)
-                        col_btn, _ = st.columns([3, 7])
-                        if col_btn.button(f"Quy đổi: {limits['max_gc_to_spend']:.1f} GC → {limits['nckh_gained']:.1f} NCKH", key=f"g2n_{row['id']}_{selected_tf_id}"):
-                            try:
-                                with get_connection() as conn_write:
-                                    cursor_write = conn_write.cursor()
-                                    cursor_write.execute("""
-                                        DELETE FROM manual_conversions 
-                                        WHERE teacher_id = ? AND timeframe_id = ?
-                                    """, (int(row['id']), selected_tf_id))
-                                    cursor_write.execute("""
-                                        INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount)
-                                        VALUES (?, ?, 'Giảng dạy', 'NCKH', ?, ?)
-                                    """, (int(row['id']), selected_tf_id, limits['max_gc_to_spend'], limits['nckh_gained']))
-                                    conn_write.commit()
-                                st.success(f"Đã áp dụng quy đổi {limits['max_gc_to_spend']:.1f} Giảng dạy sang {limits['nckh_gained']:.1f} NCKH cho {row['name']}!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi khi thực hiện quy đổi: {e}")
-                elif limits['warning'] and row['nckh_vuot_thieu_sau_quy_doi'] < 0 and row['gc_vuot_thieu_sau_quy_doi'] > 0:
-                    has_suggestion = True
-                    warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")
-                    st.warning(f"**{row['name']}**: Thừa GC, thiếu NCKH nhưng **{warning_text}**")
-                elif limits['warning'] and row['gc_vuot_thieu_sau_quy_doi'] < 0 and row['nckh_vuot_thieu_sau_quy_doi'] > 0:
-                    has_suggestion = True
-                    warning_text = limits['warning'].replace("NCKH", "NCKH").replace("Giảng dạy", "GC")
-                    st.warning(f"**{row['name']}**: Thừa NCKH, thiếu GC nhưng **{warning_text}**")
-
-            if not has_suggestion:
-                st.markdown('<p style="color: var(--md-on-surface-variant);">Không có gợi ý quy đổi nào tại thời điểm này. Các cán bộ đã hoàn thành hoặc chưa đủ điều kiện.</p>', unsafe_allow_html=True)
+        _render_conversion_suggestions(df_display, selected_tf_id, conn)
     else:
         render_empty_state("Chưa có dữ liệu nhà giáo cho năm học này.")
 
-conn.close()
+

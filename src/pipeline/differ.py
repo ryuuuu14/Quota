@@ -10,13 +10,23 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
     """
     cursor = conn.cursor()
     
+    def normalize_date(val):
+        if pd.isna(val) or val is None:
+            return ""
+        try:
+            return pd.to_datetime(val).strftime("%Y-%m-%d")
+        except Exception:
+            return str(val).strip()
+
     # Load all production teachers
     cursor.execute("""
         SELECT t.id, t.name, t.subject_group, t.is_female, t.employment_type, t.guest_rank,
                (SELECT rank_name FROM police_ranks WHERE id = t.police_rank_id) as police_rank,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title,
+               (SELECT start_date FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title_start_date,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'DEPARTMENT' ORDER BY start_date DESC LIMIT 1) as dept,
-               (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'ROLE' ORDER BY start_date DESC LIMIT 1) as role
+               (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'ROLE' ORDER BY start_date DESC LIMIT 1) as role,
+               (SELECT start_date FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'ROLE' ORDER BY start_date DESC LIMIT 1) as role_start_date
         FROM teachers t
     """)
     prod_rows = [dict(r) for r in cursor.fetchall()]
@@ -58,47 +68,68 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
         if prod:
             changes = []
             
-            # Check fields
+            # Check fields (only if column exists in incoming data)
             # 1. Subject group
-            new_grp = str(row["Tổ bộ môn"]).strip()
-            if new_grp.lower() != str(prod["subject_group"]).strip().lower():
-                changes.append(f"Tổ bộ môn: {prod['subject_group']} -> {new_grp}")
+            if "Tổ bộ môn" in df.columns:
+                new_grp = str(row["Tổ bộ môn"]).strip()
+                if new_grp.lower() != str(prod["subject_group"]).strip().lower():
+                    changes.append(f"Tổ bộ môn: {prod['subject_group']} -> {new_grp}")
                 
             # 2. Gender
-            new_fem = parse_bool(row["Nữ"])
-            prod_fem = bool(prod["is_female"])
-            if new_fem != prod_fem:
-                changes.append(f"Nữ: {prod_fem} -> {new_fem}")
+            if "Nữ" in df.columns:
+                new_fem = parse_bool(row["Nữ"])
+                prod_fem = bool(prod["is_female"])
+                if new_fem != prod_fem:
+                    changes.append(f"Nữ: {prod_fem} -> {new_fem}")
                 
             # 3. Employment type
-            new_emp = str(row["Loại hợp đồng"]).strip().upper()
-            prod_emp = str(prod["employment_type"]).strip().upper()
-            if new_emp != prod_emp:
-                changes.append(f"Loại hợp đồng: {prod_emp} -> {new_emp}")
+            if "Loại hợp đồng" in df.columns:
+                new_emp = str(row["Loại hợp đồng"]).strip().upper()
+                prod_emp = str(prod["employment_type"]).strip().upper()
+                if new_emp != prod_emp:
+                    changes.append(f"Loại hợp đồng: {prod_emp} -> {new_emp}")
                 
             # 4. Guest rank
-            new_gr = str(row["Học hàm học vị"]).strip() if not pd.isna(row["Học hàm học vị"]) else ""
-            prod_gr = str(prod["guest_rank"] or "").strip()
-            if new_gr.lower() != prod_gr.lower():
-                changes.append(f"Học hàm học vị: {prod_gr} -> {new_gr}")
+            if "Học hàm học vị" in df.columns:
+                new_gr = str(row["Học hàm học vị"]).strip() if not pd.isna(row["Học hàm học vị"]) else ""
+                prod_gr = str(prod["guest_rank"] or "").strip()
+                if new_gr.lower() != prod_gr.lower():
+                    changes.append(f"Học hàm học vị: {prod_gr} -> {new_gr}")
                 
             # 5. Role
-            new_role = str(row["Chức vụ"]).strip() if not pd.isna(row["Chức vụ"]) else ""
-            prod_role = str(prod["role"] or "").strip()
-            if new_role.lower() != prod_role.lower():
-                changes.append(f"Chức vụ: {prod_role} -> {new_role}")
+            if "Chức vụ" in df.columns:
+                new_role = str(row["Chức vụ"]).strip() if not pd.isna(row["Chức vụ"]) else ""
+                prod_role = str(prod["role"] or "").strip()
+                if new_role.lower() != prod_role.lower():
+                    changes.append(f"Chức vụ: {prod_role} -> {new_role}")
                 
             # 6. Title
-            new_title = str(row["Chức danh"]).strip() if not pd.isna(row["Chức danh"]) else ""
-            prod_title = str(prod["title"] or "").strip()
-            if new_title.lower() != prod_title.lower():
-                changes.append(f"Chức danh: {prod_title} -> {new_title}")
+            if "Chức danh" in df.columns:
+                new_title = str(row["Chức danh"]).strip() if not pd.isna(row["Chức danh"]) else ""
+                prod_title = str(prod["title"] or "").strip()
+                if new_title.lower() != prod_title.lower():
+                    changes.append(f"Chức danh: {prod_title} -> {new_title}")
                 
             # 7. Police Rank
-            new_pr = str(row["Cấp bậc quân hàm"]).strip() if not pd.isna(row["Cấp bậc quân hàm"]) else ""
-            prod_pr = str(prod["police_rank"] or "").strip()
-            if new_pr.lower() != prod_pr.lower():
-                changes.append(f"Cấp bậc: {prod_pr} -> {new_pr}")
+            if "Cấp bậc quân hàm" in df.columns:
+                new_pr = str(row["Cấp bậc quân hàm"]).strip() if not pd.isna(row["Cấp bậc quân hàm"]) else ""
+                prod_pr = str(prod["police_rank"] or "").strip()
+                if new_pr.lower() != prod_pr.lower():
+                    changes.append(f"Cấp bậc: {prod_pr} -> {new_pr}")
+
+            # 8. Role Appointment Date
+            if "Ngày bổ nhiệm chức vụ" in df.columns:
+                new_role_date = normalize_date(row.get("Ngày bổ nhiệm chức vụ"))
+                prod_role_date = normalize_date(prod.get("role_start_date"))
+                if new_role_date != prod_role_date:
+                    changes.append(f"Ngày bổ nhiệm chức vụ: {prod_role_date or 'Không có'} -> {new_role_date or 'Không có'}")
+
+            # 9. Title Appointment Date
+            if "Ngày bổ nhiệm chức danh" in df.columns:
+                new_title_date = normalize_date(row.get("Ngày bổ nhiệm chức danh"))
+                prod_title_date = normalize_date(prod.get("title_start_date"))
+                if new_title_date != prod_title_date:
+                    changes.append(f"Ngày bổ nhiệm chức danh: {prod_title_date or 'Không có'} -> {new_title_date or 'Không có'}")
 
             if changes:
                 df.at[idx, "diff_marker"] = "UPDATE"

@@ -2,30 +2,18 @@ import os
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 import streamlit as st
-import pandas as pd
 from datetime import date
-from database import get_connection
+from database import get_connection, get_cached_teachers, get_cached_activity_types, get_cached_timeframes
 from components import render_empty_state, render_warning_state, render_sidebar
 from auth import get_current_user, get_scoped_teacher_ids, require_role
 require_role(["admin", "head_dept"], "Ghi nhận Hoạt động")
-from pipeline.mapping_templates import load_mapping_templates, save_mapping_template, delete_mapping_template
 
 
 def _load_sample_data(file_bytes, sheet_name, header_row, headers):
     try:
         import io as _io
-        df = pd.read_excel(_io.BytesIO(file_bytes), sheet_name=sheet_name, header=header_row, nrows=1)
-        if df.empty:
-            return {}
-        return {h: df.iloc[0].get(h, "") for h in headers}
-    except Exception:
-        return {}
-
-
-def _load_sample_data(file_bytes, sheet_name, header_row, headers):
-    try:
         import pandas as pd
-        df = pd.read_excel(file_bytes, sheet_name=sheet_name, header=header_row, nrows=1)
+        df = pd.read_excel(_io.BytesIO(file_bytes), sheet_name=sheet_name, header=header_row, nrows=1)
         if df.empty:
             return {}
         return {h: df.iloc[0].get(h, "") for h in headers}
@@ -44,12 +32,12 @@ conn = get_connection()
 user = get_current_user()
 scoped_ids = get_scoped_teacher_ids(user)
 
-df_teachers = pd.read_sql_query("SELECT id, name, subject_group, employment_type FROM teachers", conn)
+df_teachers = get_cached_teachers()
 if scoped_ids is not None:
     df_teachers = df_teachers[df_teachers['id'].isin(scoped_ids)]
 
-df_activities = pd.read_sql_query("SELECT * FROM activity_types", conn)
-df_timeframes = pd.read_sql_query("SELECT id, name, start_date, end_date FROM timeframes ORDER BY id DESC", conn)
+df_activities = get_cached_activity_types()
+df_timeframes = get_cached_timeframes()
 
 if df_teachers.empty or df_activities.empty or df_timeframes.empty:
     render_warning_state("Cần thêm Nhà giáo, cấu hình Loại hoạt động và Năm học trước khi ghi nhận nhật ký.")
@@ -79,6 +67,7 @@ else:
         """
         
         from calculations import calculate_activity_hours
+        import pandas as pd
         df_logs = pd.read_sql_query(query, conn)
         if scoped_ids is not None:
             df_logs = df_logs[df_logs['teacher_id'].isin(scoped_ids)]
@@ -102,11 +91,13 @@ else:
     
             if user is not None:
                 st.markdown("### 🗑️ Xoá Nhật ký")
-                del_id = st.selectbox(
-                    "Chọn dòng nhật ký cần xoá:", 
-                    options=df_logs['id'].tolist(),
-                    format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]} ({df_logs[df_logs['id'] == x]['Timeframe'].values[0]})"
-                )
+                col_del = st.columns([2, 3])
+                with col_del[0]:
+                    del_id = st.selectbox(
+                        "Chọn dòng nhật ký cần xoá:", 
+                        options=df_logs['id'].tolist(),
+                        format_func=lambda x: f"Dòng #{x}: {df_logs[df_logs['id'] == x]['Nhà giáo'].values[0]} - {df_logs[df_logs['id'] == x]['Hoạt động'].values[0]} ({df_logs[df_logs['id'] == x]['Timeframe'].values[0]})"
+                    )
                 
                 selected_log_row = df_logs[df_logs['id'] == del_id].iloc[0]
                 log_tf_id = int(selected_log_row['timeframe_id'])
@@ -153,6 +144,7 @@ else:
         selected_emp_type = df_teachers[df_teachers['id'] == selected_teacher_id].iloc[0]['employment_type']
 
         def _row_applies(r, emp_type):
+            import pandas as pd
             val = r.get('applicable_employment_types', 'ALL')
             if pd.isna(val) or val == 'ALL':
                 return True
@@ -183,14 +175,16 @@ else:
 
         col4.markdown(f'<div style="padding-top: 10px;"><label style="font-size: 14px; font-weight: 600; color: var(--md-on-surface-variant);">Hệ thống tự động nhận diện Năm học</label><div style="font-size: 16px; font-weight: 700; color: var(--md-primary); margin-top: 8px;">📅 {matching_tf_name}</div></div>', unsafe_allow_html=True)
         
-        with st.expander("⚙️ Thay đổi Năm học thủ công (nếu cần)", expanded=False):
-            tf_list = list(tf_options.keys())
-            default_index = 0
-            for idx, (name, tf_id) in enumerate(tf_options.items()):
-                if tf_id == matching_tf_id:
-                    default_index = idx
-                    break
-            tf_sel = st.selectbox("Chọn Năm học khác", options=tf_list, index=default_index)
+        col_tf, _ = st.columns([1, 2])
+        with col_tf:
+            with st.expander("⚙️ Thay đổi Năm học thủ công (nếu cần)", expanded=False):
+                tf_list = list(tf_options.keys())
+                default_index = 0
+                for idx, (name, tf_id) in enumerate(tf_options.items()):
+                    if tf_id == matching_tf_id:
+                        default_index = idx
+                        break
+                tf_sel = st.selectbox("Chọn Năm học khác", options=tf_list, index=default_index)
         
         # Xác định timeframe được áp dụng cuối cùng
         final_tf_id = tf_options[tf_sel]
@@ -213,7 +207,8 @@ else:
                 st.info("Hoạt động này không tính vào giờ chuẩn giảng dạy (GC) — chỉ mang tính thống kê.")
                 quantity = total_hours
             else:
-                quantity = st.number_input(f"Số lượng gốc ({unit})", min_value=0.0, value=1.0, step=0.5)
+                col_qty, _ = st.columns([1, 1])
+                quantity = col_qty.number_input(f"Số lượng gốc ({unit})", min_value=0.0, value=1.0, step=0.5)
 
             class_level = "Đại học" if act_info['is_teaching_activity'] and not is_freeform else None
             class_type = "Lý thuyết" if act_info['is_teaching_activity'] and not is_freeform else None
@@ -254,21 +249,14 @@ else:
                     rate = act_info['base_conversion_rate']
                     st.info(f"Hoạt động này được tính cố định **{rate}h** chuẩn NCKH theo quy định.")
                 else:
-                    nckh_role_options = {
-                        "Cấp Quốc gia (Chủ nhiệm / Tác giả chính)": ("Quốc gia", True),
-                        "Cấp Quốc gia (Thành viên tham gia)": ("Quốc gia", False),
-                        "Cấp Bộ / Tỉnh (Chủ nhiệm / Tác giả chính)": ("Bộ/Tỉnh", True),
-                        "Cấp Bộ / Tỉnh (Thành viên tham gia)": ("Bộ/Tỉnh", False),
-                        "Cấp Cơ sở (Chủ nhiệm / Tác giả chính)": ("Cơ sở", True),
-                        "Cấp Cơ sở (Thành viên tham gia)": ("Cơ sở", False),
-                        "Cấp Trường (Chủ nhiệm / Tác giả chính)": ("Trường", True),
-                        "Cấp Trường (Thành viên tham gia)": ("Trường", False),
-                    }
-                    nckh_role_sel = st.selectbox(
-                        "Vai trò & Cấp độ đề tài/bài báo",
-                        options=list(nckh_role_options.keys())
-                    )
-                    nckh_level, is_main_author = nckh_role_options[nckh_role_sel]
+                    nckh_level_opts = ["Quốc gia", "Bộ/Tỉnh", "Cơ sở", "Trường"]
+                    nckh_role_map = {"Chủ nhiệm / Tác giả chính": True, "Thành viên tham gia": False}
+                    col_level, col_role = st.columns(2)
+                    with col_level:
+                        nckh_level = st.selectbox("Cấp đề tài", nckh_level_opts, key="nckh_level")
+                    with col_role:
+                        role_label = st.selectbox("Vai trò", list(nckh_role_map.keys()), key="nckh_role")
+                        is_main_author = nckh_role_map[role_label]
 
             if is_freeform:
                 note = freeform_desc
@@ -293,6 +281,21 @@ else:
                 ))
                 conn.commit()
                 st.success("Đã lưu nhật ký thành công!")
+                from calculations import calculate_activity_hours
+                try:
+                    preview = calculate_activity_hours(
+                        {"quantity": quantity, "class_level": class_level,
+                         "class_type": class_type, "student_count": student_count,
+                         "nckh_level": nckh_level, "is_main_author": is_main_author,
+                         "is_foreign_language_instruction": is_foreign_instruction},
+                        act_info
+                    )
+                    st.markdown(f'<div style="background:var(--md-green-bg);padding:8px 12px;border-radius:var(--radius-md);font-size:13px;">'
+                                f'<b>Giờ chuẩn ước tính:</b> {preview:.2f}h &nbsp;|&nbsp; '
+                                f'<span style="color:var(--md-on-surface-variant);">Số lượng: {quantity} × Hệ số: {act_info.get("base_conversion_rate", 1.0)} × Hệ số lớp</span></div>',
+                                unsafe_allow_html=True)
+                except Exception:
+                    pass
                 st.rerun()
 
     with tab_bulk:
@@ -328,7 +331,25 @@ else:
                     key="import_method_radio_choice"
                 )
 
-                if import_method == "activities":
+                # ── Stepper navigation ──
+                stepper_steps = ["Tải lên", "Ghép cột", "Kiểm tra", "Gửi"]
+                if "import_step" not in st.session_state:
+                    st.session_state.import_step = 1
+
+                step_html = '<div style="display:flex;gap:4px;margin:16px 0;padding:8px 0;border-top:1px solid var(--md-outline-variant);border-bottom:1px solid var(--md-outline-variant);">'
+                for i, label in enumerate(stepper_steps):
+                    sn = i + 1
+                    is_active = sn == st.session_state.import_step
+                    is_done = sn < st.session_state.import_step
+                    bg = "var(--md-primary)" if is_active else "var(--md-primary-container)" if is_done else "var(--md-surface-dim)"
+                    c = "#fff" if is_active else "var(--md-primary)" if is_done else "var(--md-on-surface-variant)"
+                    check = "✓ " if is_done else ""
+                    step_html += f'<div style="flex:1;text-align:center;padding:6px 4px;border-radius:var(--radius-md);background:{bg};border:1px solid var(--md-outline-variant);">'
+                    step_html += f'<span style="font-size:12px;font-weight:600;color:{c};">{check}{label}</span></div>'
+                step_html += '</div>'
+                st.markdown(step_html, unsafe_allow_html=True)
+
+                if st.session_state.import_step == 1:
                     # Button to download template
                     from pipeline.templates import generate_activities_template
                     try:
@@ -343,7 +364,12 @@ else:
                     except Exception as e:
                         st.error(f"Lỗi tạo file mẫu: {e}")
 
-                st.info("💡 **Mẹo:** Bạn có thể tải lên bất kỳ bảng Excel nào từ các hệ thống khác. Hệ thống hỗ trợ tính năng tự động nhận diện tiêu đề cột thông minh.")
+                    if st.button("Tiếp theo →", key="step1_next"):
+                        st.session_state.import_step = 2
+                        st.rerun()
+
+                if st.session_state.import_step >= 1:
+                    st.info("💡 **Mẹo:** Bạn có thể tải lên bất kỳ bảng Excel nào từ các hệ thống khác. Hệ thống hỗ trợ tính năng tự động nhận diện tiêu đề cột thông minh.")
 
                 st.markdown("---")
                 st.markdown("##### Tải lên file Excel dữ liệu:")
@@ -397,6 +423,7 @@ else:
                                 all_target_cols = required_cols + optional_cols
 
                                 # Mapping templates management
+                                from pipeline.mapping_templates import load_mapping_templates, save_mapping_template, delete_mapping_template
                                 saved_templates = load_mapping_templates()
                                 template_options = ["(Chọn cấu hình đã lưu)"] + list(saved_templates.keys())
 
@@ -426,6 +453,10 @@ else:
                                         return_format="structured")
                                     defaults = match_result.to_legacy_dict()
 
+                                if st.button("Tiếp theo →", key="step2_next"):
+                                    st.session_state.import_step = 3
+                                    st.rerun()
+
                                 # --- Initialize session mapping ---
                                 mapping_key = f"_excel_mapping_{hash(file_bytes)}_{selected_tpl}_{import_method}"
                                 if mapping_key not in st.session_state:
@@ -452,7 +483,7 @@ else:
                                 col_left, col_right = st.columns([0.4, 0.6])
 
                                 with col_left:
-                                    st.caption("GHEP COT")
+                                    st.caption("GHÉP CỘT")
                                     col_map = {m.expected_column: m for m in (match_result.mappings if match_result else [])}
                                     req_cols_list = required_cols
                                     opt_cols_list = optional_cols
@@ -467,7 +498,7 @@ else:
                                         with rc[0]:
                                             st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
                                         with rc[1]:
-                                            st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge">BAT BUOC</span></span>',
+                                            st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge">BẮT BUỘC</span></span>',
                                                         unsafe_allow_html=True)
                                         with rc[2]:
                                             di = 0
@@ -476,12 +507,12 @@ else:
                                                 di = headers.index(cur) + 1
                                             elif m and m.matched_header in headers:
                                                 di = headers.index(m.matched_header) + 1
-                                            sel = st.selectbox("", ["(Khong chon)"] + headers, index=di,
+                                            sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
                                                                key=f"sp_req_{col}", label_visibility="collapsed")
-                                            current_mapping[col] = None if sel == "(Khong chon)" else sel
+                                            current_mapping[col] = None if sel == "(Không chọn)" else sel
 
                                     if opt_cols_list:
-                                        with st.expander(f"Khong bat buoc ({len(opt_cols_list)} truong)", expanded=False):
+                                        with st.expander(f"Không bắt buộc ({len(opt_cols_list)} trường)", expanded=False):
                                             for col in opt_cols_list:
                                                 m = col_map.get(col)
                                                 val = current_mapping.get(col)
@@ -499,36 +530,36 @@ else:
                                                         di = headers.index(cur) + 1
                                                     elif m and m.matched_header in headers:
                                                         di = headers.index(m.matched_header) + 1
-                                                    sel = st.selectbox("", ["(Khong chon)"] + headers, index=di,
+                                                    sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
                                                                        key=f"sp_opt_{col}", label_visibility="collapsed")
-                                                    current_mapping[col] = None if sel == "(Khong chon)" else sel
+                                                    current_mapping[col] = None if sel == "(Không chọn)" else sel
 
                                     missing_req = [c for c in required_cols if current_mapping.get(c) is None]
                                     if missing_req:
-                                        st.markdown(f'<span style="color:#dc2626;font-size:13px;">Thieu {len(missing_req)} cot bat buoc</span>',
+                                        st.markdown(f'<span style="color:#dc2626;font-size:13px;">Thiếu {len(missing_req)} cột bắt buộc</span>',
                                                     unsafe_allow_html=True)
 
                                     if match_result and match_result.unmatched_excel_headers:
                                         u = match_result.unmatched_excel_headers[0]
                                         hint = ""
                                         if u.suggested_matches:
-                                            hint = f" Goi y: {u.suggested_matches[0].header} ({u.suggested_matches[0].confidence}%)"
-                                        st.markdown(f'<span style="color:#ca8a04;font-size:12px;">{len(match_result.unmatched_excel_headers)} cot chua dung{hint}</span>',
+                                            hint = f" Gợi ý: {u.suggested_matches[0].header} ({u.suggested_matches[0].confidence}%)"
+                                        st.markdown(f'<span style="color:#ca8a04;font-size:12px;">{len(match_result.unmatched_excel_headers)} cột chưa dùng{hint}</span>',
                                                     unsafe_allow_html=True)
 
-                                    tpl_name = st.text_input("Luu mau:", key="sp_tpl_name", placeholder="Ten mau...", label_visibility="collapsed")
+                                    tpl_name = st.text_input("Lưu mẫu:", key="sp_tpl_name", placeholder="Tên mẫu...", label_visibility="collapsed")
                                     c_save, c_submit = st.columns([1, 1])
                                     with c_save:
-                                        if st.button("Luu mau", use_container_width=True, key="sp_save_tpl"):
+                                        if st.button("Lưu mẫu", use_container_width=True, key="sp_save_tpl"):
                                             if tpl_name.strip():
                                                 save_mapping_template(tpl_name.strip(), dict(current_mapping))
-                                                st.success("Da luu mau")
+                                                st.success("Đã lưu mẫu")
                                     with c_submit:
-                                        if st.button("Xac nhan", type="primary", use_container_width=True, key="sp_confirm"):
-                                            pass
+                                        if st.button("Xác nhận", type="primary", use_container_width=True, key="sp_confirm"):
+                                            st.session_state["mapping_confirmed"] = True
 
                                 with col_right:
-                                    st.caption("XEM TRUOC DU LIEU")
+                                    st.caption("XEM TRƯỚC DỮ LIỆU GỐC")
                                     try:
                                         import io as _io
                                         df_full = pd.read_excel(_io.BytesIO(file_bytes), sheet_name=selected_sheet,
@@ -538,7 +569,7 @@ else:
                                             head = df_full.head(50)
                                             tail = df_full.tail(50)
 
-                                            st.markdown(f'<span style="font-size:12px;color:#6b7280;">50 dong dau ({n} dong)</span>',
+                                            st.markdown(f'<span style="font-size:12px;color:#6b7280;">50 dong dau ({n} dong — file goc)</span>',
                                                         unsafe_allow_html=True)
                                             st.dataframe(head, use_container_width=True, height=200)
 
@@ -546,9 +577,9 @@ else:
                                                         unsafe_allow_html=True)
                                             st.dataframe(tail, use_container_width=True, height=200)
                                         else:
-                                            st.caption("Khong co du lieu de xem truoc")
+                                            st.caption("Không có dữ liệu để xem trước")
                                     except Exception as _e:
-                                        st.caption(f"Khong the doc du lieu xem truoc: {_e}")
+                                        st.caption(f"Không thể đọc dữ liệu xem trước: {_e}")
 
                                 # Verify required mapping completed
                                 missing_required = [c for c in required_cols if current_mapping.get(c) is None]
@@ -617,49 +648,52 @@ else:
                                                     from pipeline.validator import parse_bool, safe_float
 
                                                     if import_method == "activities":
-                                                        for idx_r, row in df_diff.iterrows():
-                                                            is_main = parse_bool(row.get("Tác giả chính", False))
-                                                            is_foreign = parse_bool(row.get("Giảng dạy tiếng nước ngoài", False))
-                                                            qty = safe_float(row["Số lượng"])
-                                                            std_cnt = int(safe_float(row.get("Số học viên", 0)) or 0)
-                                                            log_d_parsed = pd.to_datetime(row["Ngày thực hiện"]).strftime("%Y-%m-%d")
+                                                        with st.spinner("Đang xử lý dữ liệu hoạt động..."):
+                                                            import pandas as pd
+                                                            for idx_r, row in df_diff.iterrows():
+                                                                is_main = parse_bool(row.get("Tác giả chính", False))
+                                                                is_foreign = parse_bool(row.get("Giảng dạy tiếng nước ngoài", False))
+                                                                qty = safe_float(row["Số lượng"])
+                                                                std_cnt = int(safe_float(row.get("Số học viên", 0)) or 0)
+                                                                log_d_parsed = pd.to_datetime(row["Ngày thực hiện"]).strftime("%Y-%m-%d")
 
-                                                            cur.execute('''
-                                                                INSERT INTO staging_activities (
-                                                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
-                                                                    teacher_name, activity_type_name, log_date, quantity,
-                                                                    class_level, class_type, student_count, nckh_level,
-                                                                    is_main_author, is_foreign_language_instruction, note, timeframe_name
-                                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                                            ''', (
-                                                                batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
-                                                                row["Mã GV"], row["Tên loại hoạt động"], log_d_parsed, qty,
-                                                                row.get("Cấp lớp", None) if not pd.isna(row.get("Cấp lớp", None)) else None,
-                                                                row.get("Loại lớp", None) if not pd.isna(row.get("Loại lớp", None)) else None,
-                                                                std_cnt,
-                                                                row.get("Cấp đề tài", None) if not pd.isna(row.get("Cấp đề tài", None)) else None,
-                                                                is_main, is_foreign,
-                                                                row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
-                                                                selected_tf_name
-                                                            ))
+                                                                cur.execute('''
+                                                                    INSERT INTO staging_activities (
+                                                                        batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                        teacher_name, activity_type_name, log_date, quantity,
+                                                                        class_level, class_type, student_count, nckh_level,
+                                                                        is_main_author, is_foreign_language_instruction, note, timeframe_name
+                                                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                                ''', (
+                                                                    batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                    row["Mã GV"], row["Tên loại hoạt động"], log_d_parsed, qty,
+                                                                    row.get("Cấp lớp", None) if not pd.isna(row.get("Cấp lớp", None)) else None,
+                                                                    row.get("Loại lớp", None) if not pd.isna(row.get("Loại lớp", None)) else None,
+                                                                    std_cnt,
+                                                                    row.get("Cấp đề tài", None) if not pd.isna(row.get("Cấp đề tài", None)) else None,
+                                                                    is_main, is_foreign,
+                                                                    row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
+                                                                    selected_tf_name
+                                                                ))
                                                     else:  # aggregate_totals
-                                                        for idx_r, row in df_diff.iterrows():
-                                                            cur.execute('''
-                                                                INSERT INTO staging_aggregate_totals (
-                                                                    batch_id, row_num, diff_marker, diff_detail, validation_errors,
-                                                                    teacher_name, tong_gc_da_thuc_hien, nckh_da_thuc_hien,
-                                                                    so_gio_duoc_mien_giam, dinh_muc_gc_phai_thuc_hien, note, timeframe_name
-                                                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                                            ''', (
-                                                                batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
-                                                                row["Mã GV"],
-                                                                safe_float(row["Tổng GC thực hiện"]) or 0.0,
-                                                                safe_float(row["NCKH thực hiện"]) or 0.0,
-                                                                safe_float(row["Số giờ miễn giảm"]) or 0.0,
-                                                                safe_float(row["Định mức GC"]) or 0.0,
-                                                                row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
-                                                                selected_tf_name
-                                                            ))
+                                                        with st.spinner("Đang xử lý dữ liệu tổng hợp..."):
+                                                            for idx_r, row in df_diff.iterrows():
+                                                                cur.execute('''
+                                                                    INSERT INTO staging_aggregate_totals (
+                                                                        batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                        teacher_name, tong_gc_da_thuc_hien, nckh_da_thuc_hien,
+                                                                        so_gio_duoc_mien_giam, dinh_muc_gc_phai_thuc_hien, note, timeframe_name
+                                                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                                ''', (
+                                                                    batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                    row["Mã GV"],
+                                                                    safe_float(row["Tổng GC thực hiện"]) or 0.0,
+                                                                    safe_float(row["NCKH thực hiện"]) or 0.0,
+                                                                    safe_float(row["Số giờ miễn giảm"]) or 0.0,
+                                                                    safe_float(row["Định mức GC"]) or 0.0,
+                                                                    row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
+                                                                    selected_tf_name
+                                                                ))
 
                                                     conn_write.commit()
                                                     st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
@@ -674,7 +708,8 @@ else:
                                 "**Gợi ý khắc phục:**\n"
                                 "- Đảm bảo file không bị lỗi, mật khẩu bảo vệ hoặc bị mã hóa.\n"
                                 "- Kiểm tra xem bạn đã chọn đúng tên Sheet và Dòng chứa tiêu đề cột (0-indexed) chưa.\n"
-                                f"- *Chi tiết kỹ thuật:* {e_headers}"
                             )
+                            with st.expander("Chi tiết kỹ thuật"):
+                                st.code(str(e_headers))
 
 conn.close()

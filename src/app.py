@@ -8,8 +8,10 @@ os.environ.setdefault('DB_PATH', os.path.join(_project_root, 'data', 'database.s
 from database import init_db, seed_initial_data, get_connection
 from components import render_sidebar
 
-# Auto-initialize on every startup (CREATE IF NOT EXISTS is idempotent)
-init_db()
+# Auto-initialize once per session (CREATE IF NOT EXISTS + seeding is idempotent)
+if 'db_initialized' not in st.session_state:
+    init_db()
+    st.session_state.db_initialized = True
 
 # Auto-seed if DB appears empty (e.g. brand-new data/database.sqlite)
 _conn = get_connection()
