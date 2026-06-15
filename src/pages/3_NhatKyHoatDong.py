@@ -503,116 +503,135 @@ else:
                                     </style>""", unsafe_allow_html=True)
 
                                     if st.session_state.import_step == 2:
-                                        st.caption("GHÉP CỘT DỮ LIỆU")
-                                        st.markdown("Vui lòng ghép các cột từ file Excel của bạn tương ứng với các trường dữ liệu hệ thống yêu cầu.")
-                                        col_map = {m.expected_column: m for m in (match_result.mappings if match_result else [])}
-                                        req_cols_list = required_cols
-                                        opt_cols_list = optional_cols
+                                        col_left, col_right = st.columns([0.4, 0.6])
+                                        with col_left:
+                                            st.caption("GHÉP CỘT DỮ LIỆU")
+                                            st.markdown("Vui lòng ghép các cột từ file Excel của bạn tương ứng với các trường dữ liệu hệ thống yêu cầu.")
+                                            col_map = {m.expected_column: m for m in (match_result.mappings if match_result else [])}
+                                            req_cols_list = required_cols
+                                            opt_cols_list = optional_cols
 
-                                        for col in req_cols_list:
-                                            m = col_map.get(col)
-                                            val = current_mapping.get(col)
-                                            is_missing = val is None
-                                            dot = "r" if is_missing else ("g" if m and m.confidence >= 90 else "y")
+                                            for col in req_cols_list:
+                                                m = col_map.get(col)
+                                                val = current_mapping.get(col)
+                                                is_missing = val is None
+                                                dot = "r" if is_missing else ("g" if m and m.confidence >= 90 else "y")
 
-                                            rc = st.columns([0.3, 1.5, 2.8])
-                                            with rc[0]:
-                                                st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
-                                            with rc[1]:
-                                                st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge">BẮT BUỘC</span></span>',
+                                                rc = st.columns([0.3, 1.5, 2.8])
+                                                with rc[0]:
+                                                    st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
+                                                with rc[1]:
+                                                    st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge">BẮT BUỘC</span></span>',
+                                                                unsafe_allow_html=True)
+                                                with rc[2]:
+                                                    di = 0
+                                                    cur = current_mapping.get(col)
+                                                    if cur in headers:
+                                                        di = headers.index(cur) + 1
+                                                    elif m and m.matched_header in headers:
+                                                        di = headers.index(m.matched_header) + 1
+                                                    sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
+                                                                       key=f"sp_req_{col}", label_visibility="collapsed")
+                                                    current_mapping[col] = None if sel == "(Không chọn)" else sel
+
+                                            for col in conditional_cols:
+                                                m = col_map.get(col)
+                                                val = current_mapping.get(col)
+                                                is_missing = val is None
+                                                dot = "y" if is_missing else ("g" if m and m.confidence >= 90 else "y")
+
+                                                rc = st.columns([0.3, 1.5, 2.8])
+                                                with rc[0]:
+                                                    st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
+                                                with rc[1]:
+                                                    st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge" style="background:#ca8a04;">THEO LOẠI</span></span>',
+                                                                unsafe_allow_html=True)
+                                                with rc[2]:
+                                                    di = 0
+                                                    cur = current_mapping.get(col)
+                                                    if cur in headers:
+                                                        di = headers.index(cur) + 1
+                                                    elif m and m.matched_header in headers:
+                                                        di = headers.index(m.matched_header) + 1
+                                                    sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
+                                                                       key=f"sp_cond_{col}", label_visibility="collapsed")
+                                                    current_mapping[col] = None if sel == "(Không chọn)" else sel
+
+                                            if opt_cols_list:
+                                                with st.expander(f"Không bắt buộc ({len(opt_cols_list)} trường)", expanded=False):
+                                                    for col in opt_cols_list:
+                                                        m = col_map.get(col)
+                                                        val = current_mapping.get(col)
+                                                        dot = "g" if m and m.confidence >= 90 else "y" if m and m.confidence >= 50 else "r"
+
+                                                        oc = st.columns([0.3, 1.8, 2.5])
+                                                        with oc[0]:
+                                                            st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
+                                                        with oc[1]:
+                                                            st.markdown(f'<span style="font-size:13px;">{col}</span>', unsafe_allow_html=True)
+                                                        with oc[2]:
+                                                            di = 0
+                                                            cur = current_mapping.get(col)
+                                                            if cur in headers:
+                                                                di = headers.index(cur) + 1
+                                                            elif m and m.matched_header in headers:
+                                                                di = headers.index(m.matched_header) + 1
+                                                            sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
+                                                                               key=f"sp_opt_{col}", label_visibility="collapsed")
+                                                            current_mapping[col] = None if sel == "(Không chọn)" else sel
+
+                                            missing_req = [c for c in required_cols if current_mapping.get(c) is None]
+                                            if missing_req:
+                                                st.markdown(f'<span style="color:#dc2626;font-size:13px;">Thiếu {len(missing_req)} cột bắt buộc</span>',
                                                             unsafe_allow_html=True)
-                                            with rc[2]:
-                                                di = 0
-                                                cur = current_mapping.get(col)
-                                                if cur in headers:
-                                                    di = headers.index(cur) + 1
-                                                elif m and m.matched_header in headers:
-                                                    di = headers.index(m.matched_header) + 1
-                                                sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
-                                                                   key=f"sp_req_{col}", label_visibility="collapsed")
-                                                current_mapping[col] = None if sel == "(Không chọn)" else sel
 
-                                        for col in conditional_cols:
-                                            m = col_map.get(col)
-                                            val = current_mapping.get(col)
-                                            is_missing = val is None
-                                            dot = "y" if is_missing else ("g" if m and m.confidence >= 90 else "y")
-
-                                            rc = st.columns([0.3, 1.5, 2.8])
-                                            with rc[0]:
-                                                st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
-                                            with rc[1]:
-                                                st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge" style="background:#ca8a04;">THEO LOẠI</span></span>',
+                                            if match_result and match_result.unmatched_excel_headers:
+                                                u = match_result.unmatched_excel_headers[0]
+                                                hint = ""
+                                                if u.suggested_matches:
+                                                    hint = f" Gợi ý: {u.suggested_matches[0].header} ({u.suggested_matches[0].confidence}%)"
+                                                st.markdown(f'<span style="color:#ca8a04;font-size:12px;">{len(match_result.unmatched_excel_headers)} cột chưa dùng{hint}</span>',
                                                             unsafe_allow_html=True)
-                                            with rc[2]:
-                                                di = 0
-                                                cur = current_mapping.get(col)
-                                                if cur in headers:
-                                                    di = headers.index(cur) + 1
-                                                elif m and m.matched_header in headers:
-                                                    di = headers.index(m.matched_header) + 1
-                                                sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
-                                                                   key=f"sp_cond_{col}", label_visibility="collapsed")
-                                                current_mapping[col] = None if sel == "(Không chọn)" else sel
 
-                                        if opt_cols_list:
-                                            with st.expander(f"Không bắt buộc ({len(opt_cols_list)} trường)", expanded=False):
-                                                for col in opt_cols_list:
-                                                    m = col_map.get(col)
-                                                    val = current_mapping.get(col)
-                                                    dot = "g" if m and m.confidence >= 90 else "y" if m and m.confidence >= 50 else "r"
-
-                                                    oc = st.columns([0.3, 1.8, 2.5])
-                                                    with oc[0]:
-                                                        st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
-                                                    with oc[1]:
-                                                        st.markdown(f'<span style="font-size:13px;">{col}</span>', unsafe_allow_html=True)
-                                                    with oc[2]:
-                                                        di = 0
-                                                        cur = current_mapping.get(col)
-                                                        if cur in headers:
-                                                            di = headers.index(cur) + 1
-                                                        elif m and m.matched_header in headers:
-                                                            di = headers.index(m.matched_header) + 1
-                                                        sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
-                                                                           key=f"sp_opt_{col}", label_visibility="collapsed")
-                                                        current_mapping[col] = None if sel == "(Không chọn)" else sel
-
-                                        missing_req = [c for c in required_cols if current_mapping.get(c) is None]
-                                        if missing_req:
-                                            st.markdown(f'<span style="color:#dc2626;font-size:13px;">Thiếu {len(missing_req)} cột bắt buộc</span>',
-                                                        unsafe_allow_html=True)
-
-                                        if match_result and match_result.unmatched_excel_headers:
-                                            u = match_result.unmatched_excel_headers[0]
-                                            hint = ""
-                                            if u.suggested_matches:
-                                                hint = f" Gợi ý: {u.suggested_matches[0].header} ({u.suggested_matches[0].confidence}%)"
-                                            st.markdown(f'<span style="color:#ca8a04;font-size:12px;">{len(match_result.unmatched_excel_headers)} cột chưa dùng{hint}</span>',
-                                                        unsafe_allow_html=True)
-
-                                        st.markdown("---")
-                                        tpl_name = st.text_input("Lưu mẫu cấu hình hiện tại (nếu cần):", key="sp_confirm_tpl_name", placeholder="Nhập tên mẫu để lưu...")
-                                        c_back, c_save, c_next = st.columns([1, 1, 1.5])
-                                        with c_back:
-                                            if st.button("← Tải file khác", use_container_width=True, key="sp_confirm_back_1"):
-                                                st.session_state.import_step = 1
-                                                st.rerun()
-                                        with c_save:
-                                            if st.button("💾 Lưu mẫu", use_container_width=True, key="sp_confirm_save_tpl"):
-                                                if tpl_name.strip():
-                                                    save_mapping_template(tpl_name.strip(), dict(current_mapping))
-                                                    st.success("Đã lưu mẫu!")
-                                                else:
-                                                    st.error("Vui lòng nhập tên mẫu.")
-                                        with c_next:
-                                            if st.button("Kiểm tra dữ liệu →", type="primary", use_container_width=True, key="sp_confirm_next_3"):
-                                                missing_required = [c for c in required_cols if current_mapping.get(c) is None]
-                                                if missing_required:
-                                                    st.error(f"⚠️ Vui lòng ghép tất cả các cột bắt buộc: {', '.join(missing_required)}")
-                                                else:
-                                                    st.session_state.import_step = 3
+                                            st.markdown("---")
+                                            tpl_name = st.text_input("Lưu mẫu cấu hình hiện tại (nếu cần):", key="sp_confirm_tpl_name", placeholder="Nhập tên mẫu để lưu...")
+                                            c_back, c_save, c_next = st.columns([1, 1, 1.5])
+                                            with c_back:
+                                                if st.button("← Tải file khác", use_container_width=True, key="sp_confirm_back_1"):
+                                                    st.session_state.import_step = 1
                                                     st.rerun()
+                                            with c_save:
+                                                if st.button("💾 Lưu mẫu", use_container_width=True, key="sp_confirm_save_tpl"):
+                                                    if tpl_name.strip():
+                                                        save_mapping_template(tpl_name.strip(), dict(current_mapping))
+                                                        st.success("Đã lưu mẫu!")
+                                                    else:
+                                                        st.error("Vui lòng nhập tên mẫu.")
+                                            with c_next:
+                                                if st.button("Kiểm tra dữ liệu →", type="primary", use_container_width=True, key="sp_confirm_next_3"):
+                                                    missing_required = [c for c in required_cols if current_mapping.get(c) is None]
+                                                    if missing_required:
+                                                        st.error(f"⚠️ Vui lòng ghép tất cả các cột bắt buộc: {', '.join(missing_required)}")
+                                                    else:
+                                                        st.session_state.import_step = 3
+                                                        st.rerun()
+                                        with col_right:
+                                            st.caption("XEM TRƯỚC DỮ LIỆU GỐC")
+                                            try:
+                                                import io as _io
+                                                import pandas as pd
+                                                df_full = pd.read_excel(_io.BytesIO(file_bytes), sheet_name=selected_sheet, header=header_row)
+                                                if not df_full.empty:
+                                                    n = len(df_full)
+                                                    st.markdown(f'<span style="font-size:12px;color:#6b7280;">50 dòng đầu ({n} dòng — file gốc)</span>', unsafe_allow_html=True)
+                                                    st.dataframe(df_full.head(50), use_container_width=True, height=200)
+                                                    st.markdown(f'<span style="font-size:12px;color:#6b7280;">50 dòng cuối</span>', unsafe_allow_html=True)
+                                                    st.dataframe(df_full.tail(50), use_container_width=True, height=200)
+                                                else:
+                                                    st.caption("Không có dữ liệu để xem trước")
+                                            except Exception as _e:
+                                                st.caption(f"Không thể đọc dữ liệu xem trước: {_e}")
+
                                     if st.session_state.import_step >= 3:
                                         st.caption("XEM TRƯỚC DỮ LIỆU ĐÃ GHÉP")
                                         
