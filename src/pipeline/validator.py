@@ -160,6 +160,16 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
     cursor.execute("SELECT id FROM teachers")
     valid_teacher_ids = {str(t["id"]) for t in cursor.fetchall()}
 
+    cursor.execute("SELECT name, is_teaching_activity, is_nckh_activity FROM activity_types")
+    act_type_map = {
+        row["name"]: (bool(row["is_teaching_activity"]), bool(row["is_nckh_activity"]))
+        for row in cursor.fetchall()
+    }
+
+    VALID_CAP_LOP = ["Đại học", "Thạc sĩ", "Tiến sĩ", "LLCT Trung cấp", "LLCT Cao cấp", "Bồi dưỡng"]
+    VALID_LOAI_LOP = ["Lý thuyết", "Thực hành", "Ngoại ngữ/CNTT", "Thảo luận", "Bài tập", "Xêmina"]
+    VALID_CAP_DE_TAI = ["Quốc gia", "Bộ/Tỉnh", "Cơ sở", "Trường"]
+
     expected_cols = [
         "Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng"
     ]
@@ -173,7 +183,7 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
         # but we do our best.
         row_num = idx + 5
         
-        t_id_raw = row["Mã GV"]
+        t_id_raw = row.get("Mã GV")
         if is_empty_cell(t_id_raw):
             errors.append((idx, row_num, "Mã GV không được để trống."))
         else:
@@ -184,11 +194,19 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
             except ValueError:
                 errors.append((idx, row_num, f"Mã GV '{t_id_raw}' không hợp lệ."))
 
-        act_type = row["Tên loại hoạt động"]
+        act_type = row.get("Tên loại hoạt động")
+        is_teaching = False
+        is_nckh = False
         if is_empty_cell(act_type):
             errors.append((idx, row_num, "Tên loại hoạt động không được để trống."))
+        else:
+            act_meta = act_type_map.get(act_type)
+            if not act_meta:
+                errors.append((idx, row_num, f"Tên loại hoạt động '{act_type}' không tồn tại trong hệ thống."))
+            else:
+                is_teaching, is_nckh = act_meta
 
-        log_date = row["Ngày thực hiện"]
+        log_date = row.get("Ngày thực hiện")
         if is_empty_cell(log_date):
             errors.append((idx, row_num, "Ngày thực hiện không được để trống."))
         else:
@@ -198,13 +216,42 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
             except Exception:
                 errors.append((idx, row_num, f"Ngày thực hiện '{log_date}' không đúng định dạng YYYY-MM-DD."))
 
-        qty_raw = row["Số lượng"]
+        qty_raw = row.get("Số lượng")
         if is_empty_cell(qty_raw):
             errors.append((idx, row_num, "Số lượng không được để trống."))
         else:
             qty = safe_float(qty_raw)
             if qty is None or qty <= 0:
                 errors.append((idx, row_num, f"Số lượng '{qty_raw}' phải là số dương lớn hơn 0."))
+
+        # Extra validation based on category
+        if is_teaching:
+            cap_lop = row.get("Cấp lớp")
+            if is_empty_cell(cap_lop):
+                errors.append((idx, row_num, "Cấp lớp không được để trống với hoạt động Giảng dạy."))
+            elif str(cap_lop).strip() not in VALID_CAP_LOP:
+                errors.append((idx, row_num, f"Cấp lớp '{cap_lop}' không hợp lệ."))
+
+            loai_lop = row.get("Loại lớp")
+            if is_empty_cell(loai_lop):
+                errors.append((idx, row_num, "Loại lớp không được để trống với hoạt động Giảng dạy."))
+            elif str(loai_lop).strip() not in VALID_LOAI_LOP:
+                errors.append((idx, row_num, f"Loại lớp '{loai_lop}' không hợp lệ."))
+
+            sv_raw = row.get("Số học viên")
+            if is_empty_cell(sv_raw):
+                errors.append((idx, row_num, "Số học viên không được để trống với hoạt động Giảng dạy."))
+            else:
+                sv_val = safe_float(sv_raw)
+                if sv_val is None or sv_val <= 0 or not sv_val.is_integer():
+                    errors.append((idx, row_num, f"Số học viên '{sv_raw}' phải là số nguyên dương."))
+
+        if is_nckh:
+            cap_dt = row.get("Cấp đề tài")
+            if is_empty_cell(cap_dt):
+                errors.append((idx, row_num, "Cấp đề tài không được để trống với hoạt động NCKH."))
+            elif str(cap_dt).strip() not in VALID_CAP_DE_TAI:
+                errors.append((idx, row_num, f"Cấp đề tài '{cap_dt}' không hợp lệ."))
 
     return errors
 

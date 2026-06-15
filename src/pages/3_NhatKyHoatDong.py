@@ -324,15 +324,23 @@ else:
                 st.success(f"✓ Đã xác thực đơn vị: **{dept_name}**")
                 
                 # Selection of import method
+                st.markdown("##### ⚙️ Phương thức nhập dữ liệu:")
                 import_method = st.radio(
                     "Phương thức nhập dữ liệu:",
                     options=["activities", "aggregate_totals"],
-                    format_func=lambda x: "Nhập chi tiết Nhật ký Hoạt động" if x == "activities" else "Nhập tổng số giờ chuẩn tích lũy (Ghi đè)",
-                    key="import_method_radio_choice"
+                    format_func=lambda x: "📝 Nhập chi tiết từng hoạt động (Khuyên dùng)" if x == "activities" else "⚡ Nhập tổng số Giờ chuẩn tích lũy (Ghi đè trực tiếp)",
+                    key="import_method_radio_choice",
+                    label_visibility="collapsed"
                 )
+                
+                if import_method == "activities":
+                    st.info("💡 **Chế độ Nhập chi tiết:** Bạn sẽ tải lên bảng Excel liệt kê từng công việc cụ thể (VD: Dạy lớp A, Nghiên cứu đề tài B). Hệ thống sẽ tự động đối chiếu định mức, áp dụng các quy tắc quy đổi và tự động tính toán số Giờ chuẩn (GC) cho từng dòng.")
+                else:
+                    st.warning("⚠️ **Chế độ Ghi đè tổng số:** Bạn sẽ tải lên bảng tổng hợp ĐÃ CÓ SẴN con số tổng GC của từng cán bộ. Dữ liệu này sẽ **ghi đè trực tiếp** lên hệ thống mà không qua tính toán quy đổi. Chỉ nên dùng khi bạn đã chốt số liệu thủ công từ trước.")
+
 
                 # ── Stepper navigation ──
-                stepper_steps = ["Tải lên", "Ghép cột", "Kiểm tra", "Gửi"]
+                stepper_steps = ["Tải lên", "Ghép cột", "Kiểm tra & Gửi"]
                 if "import_step" not in st.session_state:
                     st.session_state.import_step = 1
 
@@ -364,10 +372,6 @@ else:
                     except Exception as e:
                         st.error(f"Lỗi tạo file mẫu: {e}")
 
-                    if st.button("Tiếp theo →", key="step1_next"):
-                        st.session_state.import_step = 2
-                        st.rerun()
-
                 if st.session_state.import_step >= 1:
                     st.info("💡 **Mẹo:** Bạn có thể tải lên bất kỳ bảng Excel nào từ các hệ thống khác. Hệ thống hỗ trợ tính năng tự động nhận diện tiêu đề cột thông minh.")
 
@@ -385,324 +389,358 @@ else:
                         st.error("❌ File tải lên vượt quá giới hạn dung lượng cho phép (5MB). Vui lòng thử lại với file nhỏ hơn.")
                     else:
                         file_bytes = uploaded_file.read()
-                        from pipeline.importer import parse_excel_to_df, get_excel_sheet_names, get_excel_headers, remap_dataframe_columns
-                        from pipeline.fuzzy_matcher import match_columns
-                        from pipeline.validator import validate_activities_data, validate_aggregate_totals_data
-                        from pipeline.differ import diff_activities, diff_aggregate_totals
+
+                        if st.session_state.import_step == 1:
+                            st.success("✅ Đã tải file lên thành công. Vui lòng nhấn **Tiếp theo** để chuyển sang bước Ghép cột.")
+                            if st.button("Tiếp theo →", key="step1_next_after_upload"):
+                                st.session_state.import_step = 2
+                                st.rerun()
+
+                        if st.session_state.import_step >= 2:
+
+                            from pipeline.importer import parse_excel_to_df, get_excel_sheet_names, get_excel_headers, remap_dataframe_columns
+                            from pipeline.fuzzy_matcher import match_columns
+                            from pipeline.validator import validate_activities_data, validate_aggregate_totals_data
+                            from pipeline.differ import diff_activities, diff_aggregate_totals
                         
-                        try:
-                            sheet_names = get_excel_sheet_names(file_bytes)
-                            col_sh, col_hd = st.columns(2)
-                            with col_sh:
-                                selected_sheet = st.selectbox(
-                                    "Chọn Sheet cần đọc:",
-                                    options=sheet_names,
-                                    key="import_selected_sheet_sel"
-                                )
-                            with col_hd:
-                                header_row = st.number_input(
-                                    "Dòng chứa tiêu đề (0-indexed):",
-                                    min_value=0,
-                                    max_value=20,
-                                    value=3 if import_method == "activities" else 0,
-                                    step=1,
-                                    key="import_header_row_val"
-                                )
-
-                            headers = get_excel_headers(file_bytes, sheet_name=selected_sheet, header_row=header_row)
-                            if not headers:
-                                st.error("Không tìm thấy tiêu đề cột nào tại dòng đã chọn.")
-                            else:
-                                if import_method == "activities":
-                                    required_cols = ["Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng"]
-                                    optional_cols = ["Cấp lớp", "Loại lớp", "Số học viên", "Cấp đề tài", "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"]
-                                else:
-                                    required_cols = ["Mã GV", "Tổng GC thực hiện", "NCKH thực hiện", "Số giờ miễn giảm", "Định mức GC"]
-                                    optional_cols = ["Ghi chú"]
-
-                                all_target_cols = required_cols + optional_cols
-
-                                # Mapping templates management
-                                from pipeline.mapping_templates import load_mapping_templates, save_mapping_template, delete_mapping_template
-                                saved_templates = load_mapping_templates()
-                                template_options = ["(Chọn cấu hình đã lưu)"] + list(saved_templates.keys())
-
-                                col_tpl_sel, col_tpl_del = st.columns([3, 1])
-                                with col_tpl_sel:
-                                    selected_tpl = st.selectbox(
-                                        "Sử dụng cấu hình cột đã lưu:",
-                                        options=template_options,
-                                        key="selected_mapping_template_name"
+                            try:
+                                sheet_names = get_excel_sheet_names(file_bytes)
+                                col_sh, col_hd = st.columns(2)
+                                with col_sh:
+                                    selected_sheet = st.selectbox(
+                                        "Chọn Sheet cần đọc:",
+                                        options=sheet_names,
+                                        key="import_selected_sheet_sel"
                                     )
-                                with col_tpl_del:
-                                    st.write("")
-                                    st.write("")
-                                    if selected_tpl != "(Chọn cấu hình đã lưu)":
-                                        if st.button("🗑️ Xóa cấu hình này", key="delete_tpl_btn"):
-                                            delete_mapping_template(selected_tpl)
-                                            st.success(f"Đã xóa cấu hình '{selected_tpl}'")
-                                            st.rerun()
-
-                                # Retrieve defaults with structured result
-                                if selected_tpl != "(Chọn cấu hình đã lưu)":
-                                    defaults = saved_templates[selected_tpl]
-                                    match_result = None
-                                else:
-                                    match_result = match_columns(headers, all_target_cols,
-                                        required_columns=required_cols,
-                                        return_format="structured")
-                                    defaults = match_result.to_legacy_dict()
-
-                                if st.button("Tiếp theo →", key="step2_next"):
-                                    st.session_state.import_step = 3
-                                    st.rerun()
-
-                                # --- Initialize session mapping ---
-                                mapping_key = f"_excel_mapping_{hash(file_bytes)}_{selected_tpl}_{import_method}"
-                                if mapping_key not in st.session_state:
-                                    st.session_state[mapping_key] = dict(defaults)
-                                current_mapping = st.session_state[mapping_key]
-
-                                # --- Load sample data once ---
-                                sample_key = f"_sample_data_{hash(file_bytes)}_{selected_sheet}_{header_row}"
-                                if sample_key not in st.session_state:
-                                    st.session_state[sample_key] = _load_sample_data(
-                                        file_bytes, selected_sheet, header_row, headers
+                                with col_hd:
+                                    header_row = st.number_input(
+                                        "Dòng chứa tiêu đề (0-indexed):",
+                                        min_value=0,
+                                        max_value=20,
+                                        value=3 if import_method == "activities" else 0,
+                                        step=1,
+                                        key="import_header_row_val"
                                     )
 
-                                # --- Split panel: mapping + data preview ---
-                                st.markdown("""<style>
-                                .sp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; display:inline-block; vertical-align:middle; margin-right:6px; }
-                                .sp-dot.g { background:#22c55e; }
-                                .sp-dot.y { background:#eab308; }
-                                .sp-dot.r { background:#ef4444; }
-                                .sp-badge { background:#ef4444; color:#fff; font-size:9px; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:600; white-space:nowrap; }
-                                .sp-preview { border-left:1px solid #e5e7eb; padding-left:16px; }
-                                </style>""", unsafe_allow_html=True)
+                                headers = get_excel_headers(file_bytes, sheet_name=selected_sheet, header_row=header_row)
+                                if not headers:
+                                    st.error("Không tìm thấy tiêu đề cột nào tại dòng đã chọn.")
+                                else:
+                                    conditional_cols = []
+                                    if import_method == "activities":
+                                        is_teaching_sheet = any(k in selected_sheet.lower() for k in ["chuyên môn", "giảng dạy"])
+                                        is_nckh_sheet = any(k in selected_sheet.lower() for k in ["nckh", "nghiên cứu"])
 
-                                col_left, col_right = st.columns([0.4, 0.6])
-
-                                with col_left:
-                                    st.caption("GHÉP CỘT")
-                                    col_map = {m.expected_column: m for m in (match_result.mappings if match_result else [])}
-                                    req_cols_list = required_cols
-                                    opt_cols_list = optional_cols
-
-                                    for col in req_cols_list:
-                                        m = col_map.get(col)
-                                        val = current_mapping.get(col)
-                                        is_missing = val is None
-                                        dot = "r" if is_missing else ("g" if m and m.confidence >= 90 else "y")
-
-                                        rc = st.columns([0.3, 1.5, 2.8])
-                                        with rc[0]:
-                                            st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
-                                        with rc[1]:
-                                            st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge">BẮT BUỘC</span></span>',
-                                                        unsafe_allow_html=True)
-                                        with rc[2]:
-                                            di = 0
-                                            cur = current_mapping.get(col)
-                                            if cur in headers:
-                                                di = headers.index(cur) + 1
-                                            elif m and m.matched_header in headers:
-                                                di = headers.index(m.matched_header) + 1
-                                            sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
-                                                               key=f"sp_req_{col}", label_visibility="collapsed")
-                                            current_mapping[col] = None if sel == "(Không chọn)" else sel
-
-                                    if opt_cols_list:
-                                        with st.expander(f"Không bắt buộc ({len(opt_cols_list)} trường)", expanded=False):
-                                            for col in opt_cols_list:
-                                                m = col_map.get(col)
-                                                val = current_mapping.get(col)
-                                                dot = "g" if m and m.confidence >= 90 else "y" if m and m.confidence >= 50 else "r"
-
-                                                oc = st.columns([0.3, 1.8, 2.5])
-                                                with oc[0]:
-                                                    st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
-                                                with oc[1]:
-                                                    st.markdown(f'<span style="font-size:13px;">{col}</span>', unsafe_allow_html=True)
-                                                with oc[2]:
-                                                    di = 0
-                                                    cur = current_mapping.get(col)
-                                                    if cur in headers:
-                                                        di = headers.index(cur) + 1
-                                                    elif m and m.matched_header in headers:
-                                                        di = headers.index(m.matched_header) + 1
-                                                    sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
-                                                                       key=f"sp_opt_{col}", label_visibility="collapsed")
-                                                    current_mapping[col] = None if sel == "(Không chọn)" else sel
-
-                                    missing_req = [c for c in required_cols if current_mapping.get(c) is None]
-                                    if missing_req:
-                                        st.markdown(f'<span style="color:#dc2626;font-size:13px;">Thiếu {len(missing_req)} cột bắt buộc</span>',
-                                                    unsafe_allow_html=True)
-
-                                    if match_result and match_result.unmatched_excel_headers:
-                                        u = match_result.unmatched_excel_headers[0]
-                                        hint = ""
-                                        if u.suggested_matches:
-                                            hint = f" Gợi ý: {u.suggested_matches[0].header} ({u.suggested_matches[0].confidence}%)"
-                                        st.markdown(f'<span style="color:#ca8a04;font-size:12px;">{len(match_result.unmatched_excel_headers)} cột chưa dùng{hint}</span>',
-                                                    unsafe_allow_html=True)
-
-                                    tpl_name = st.text_input("Lưu mẫu:", key="sp_tpl_name", placeholder="Tên mẫu...", label_visibility="collapsed")
-                                    c_save, c_submit = st.columns([1, 1])
-                                    with c_save:
-                                        if st.button("Lưu mẫu", use_container_width=True, key="sp_save_tpl"):
-                                            if tpl_name.strip():
-                                                save_mapping_template(tpl_name.strip(), dict(current_mapping))
-                                                st.success("Đã lưu mẫu")
-                                    with c_submit:
-                                        if st.button("Xác nhận", type="primary", use_container_width=True, key="sp_confirm"):
-                                            st.session_state["mapping_confirmed"] = True
-
-                                with col_right:
-                                    st.caption("XEM TRƯỚC DỮ LIỆU GỐC")
-                                    try:
-                                        import io as _io
-                                        df_full = pd.read_excel(_io.BytesIO(file_bytes), sheet_name=selected_sheet,
-                                                                header=header_row)
-                                        if not df_full.empty:
-                                            n = len(df_full)
-                                            head = df_full.head(50)
-                                            tail = df_full.tail(50)
-
-                                            st.markdown(f'<span style="font-size:12px;color:#6b7280;">50 dong dau ({n} dong — file goc)</span>',
-                                                        unsafe_allow_html=True)
-                                            st.dataframe(head, use_container_width=True, height=200)
-
-                                            st.markdown(f'<span style="font-size:12px;color:#6b7280;">50 dong cuoi</span>',
-                                                        unsafe_allow_html=True)
-                                            st.dataframe(tail, use_container_width=True, height=200)
+                                        required_cols = ["Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng"]
+                                        
+                                        if is_teaching_sheet:
+                                            required_cols.extend(["Cấp lớp", "Loại lớp", "Số học viên"])
+                                            optional_cols = ["Cấp đề tài", "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"]
+                                        elif is_nckh_sheet:
+                                            required_cols.extend(["Cấp đề tài"])
+                                            optional_cols = ["Cấp lớp", "Loại lớp", "Số học viên", "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"]
                                         else:
-                                            st.caption("Không có dữ liệu để xem trước")
-                                    except Exception as _e:
-                                        st.caption(f"Không thể đọc dữ liệu xem trước: {_e}")
-
-                                # Verify required mapping completed
-                                missing_required = [c for c in required_cols if current_mapping.get(c) is None]
-                                if missing_required:
-                                    st.warning(f"⚠️ Vui lòng ghép tất cả các cột bắt buộc: {', '.join(missing_required)}")
-                                else:
-                                    # Read & remap
-                                    df_raw = parse_excel_to_df(file_bytes, header_row=header_row, sheet_name=selected_sheet)
-                                    df_parsed = remap_dataframe_columns(df_raw, current_mapping)
-
-                                    if df_parsed.empty:
-                                        st.info("Không có dòng dữ liệu nào sau khi đọc.")
-                                    elif len(df_parsed) > 100000:
-                                        st.error("File Excel qua lon (>100.000 dong). Vui long chia nho file.")
+                                            conditional_cols = ["Cấp lớp", "Loại lớp", "Số học viên", "Cấp đề tài"]
+                                            optional_cols = ["Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"]
                                     else:
-                                        # Validate
-                                        if import_method == "activities":
-                                            errors = validate_activities_data(df_parsed, get_connection())
-                                        else:
-                                            errors = validate_aggregate_totals_data(df_parsed, get_connection())
+                                        required_cols = ["Mã GV", "Tổng GC thực hiện", "NCKH thực hiện", "Số giờ miễn giảm", "Định mức GC"]
+                                        optional_cols = ["Ghi chú"]
 
-                                        if errors:
-                                            st.error("❌ Phát hiện lỗi định dạng dữ liệu trong file Excel. Vui lòng sửa lại:")
-                                            for idx_e, r_num, err_msg in errors[:20]:
-                                                st.write(f"- Dòng {r_num}: {err_msg}")
-                                            if len(errors) > 20:
-                                                st.caption(f"... và {len(errors) - 20} lỗi khác.")
-                                        else:
-                                            st.success(f"✓ Dữ liệu hợp lệ! Đã đọc thành công {len(df_parsed)} dòng.")
+                                    all_target_cols = required_cols + conditional_cols + optional_cols
 
-                                            # Diff
+                                    # Mapping templates management
+                                    from pipeline.mapping_templates import load_mapping_templates, save_mapping_template, delete_mapping_template
+                                    saved_templates = load_mapping_templates()
+                                    template_options = ["(Chọn cấu hình đã lưu)"] + list(saved_templates.keys())
+
+                                    col_tpl_sel, col_tpl_del = st.columns([3, 1])
+                                    with col_tpl_sel:
+                                        selected_tpl = st.selectbox(
+                                            "Sử dụng cấu hình cột đã lưu:",
+                                            options=template_options,
+                                            key="selected_mapping_template_name"
+                                        )
+                                    with col_tpl_del:
+                                        st.write("")
+                                        st.write("")
+                                        if selected_tpl != "(Chọn cấu hình đã lưu)":
+                                            if st.button("🗑️ Xóa cấu hình này", key="delete_tpl_btn"):
+                                                delete_mapping_template(selected_tpl)
+                                                st.success(f"Đã xóa cấu hình '{selected_tpl}'")
+                                                st.rerun()
+
+                                    # Retrieve defaults with structured result
+                                    if selected_tpl != "(Chọn cấu hình đã lưu)":
+                                        defaults = saved_templates[selected_tpl]
+                                        match_result = None
+                                    else:
+                                        match_result = match_columns(headers, all_target_cols,
+                                            required_columns=required_cols,
+                                            return_format="structured")
+                                        defaults = match_result.to_legacy_dict()
+
+                                    # --- Initialize session mapping ---
+                                    mapping_key = f"_excel_mapping_{hash(file_bytes)}_{selected_tpl}_{import_method}"
+                                    if mapping_key not in st.session_state:
+                                        st.session_state[mapping_key] = dict(defaults)
+                                    current_mapping = st.session_state[mapping_key]
+
+                                    # --- Load sample data once ---
+                                    sample_key = f"_sample_data_{hash(file_bytes)}_{selected_sheet}_{header_row}"
+                                    if sample_key not in st.session_state:
+                                        st.session_state[sample_key] = _load_sample_data(
+                                            file_bytes, selected_sheet, header_row, headers
+                                        )
+
+                                    # --- Split panel: mapping + data preview ---
+                                    st.markdown("""<style>
+                                    .sp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; display:inline-block; vertical-align:middle; margin-right:6px; }
+                                    .sp-dot.g { background:#22c55e; }
+                                    .sp-dot.y { background:#eab308; }
+                                    .sp-dot.r { background:#ef4444; }
+                                    .sp-badge { background:#ef4444; color:#fff; font-size:9px; padding:1px 5px; border-radius:3px; margin-left:4px; font-weight:600; white-space:nowrap; }
+                                    .sp-preview { border-left:1px solid #e5e7eb; padding-left:16px; }
+                                    </style>""", unsafe_allow_html=True)
+
+                                    if st.session_state.import_step == 2:
+                                        st.caption("GHÉP CỘT DỮ LIỆU")
+                                        st.markdown("Vui lòng ghép các cột từ file Excel của bạn tương ứng với các trường dữ liệu hệ thống yêu cầu.")
+                                        col_map = {m.expected_column: m for m in (match_result.mappings if match_result else [])}
+                                        req_cols_list = required_cols
+                                        opt_cols_list = optional_cols
+
+                                        for col in req_cols_list:
+                                            m = col_map.get(col)
+                                            val = current_mapping.get(col)
+                                            is_missing = val is None
+                                            dot = "r" if is_missing else ("g" if m and m.confidence >= 90 else "y")
+
+                                            rc = st.columns([0.3, 1.5, 2.8])
+                                            with rc[0]:
+                                                st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
+                                            with rc[1]:
+                                                st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge">BẮT BUỘC</span></span>',
+                                                            unsafe_allow_html=True)
+                                            with rc[2]:
+                                                di = 0
+                                                cur = current_mapping.get(col)
+                                                if cur in headers:
+                                                    di = headers.index(cur) + 1
+                                                elif m and m.matched_header in headers:
+                                                    di = headers.index(m.matched_header) + 1
+                                                sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
+                                                                   key=f"sp_req_{col}", label_visibility="collapsed")
+                                                current_mapping[col] = None if sel == "(Không chọn)" else sel
+
+                                        for col in conditional_cols:
+                                            m = col_map.get(col)
+                                            val = current_mapping.get(col)
+                                            is_missing = val is None
+                                            dot = "y" if is_missing else ("g" if m and m.confidence >= 90 else "y")
+
+                                            rc = st.columns([0.3, 1.5, 2.8])
+                                            with rc[0]:
+                                                st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
+                                            with rc[1]:
+                                                st.markdown(f'<span style="font-size:13px;font-weight:500;">{col}<span class="sp-badge" style="background:#ca8a04;">THEO LOẠI</span></span>',
+                                                            unsafe_allow_html=True)
+                                            with rc[2]:
+                                                di = 0
+                                                cur = current_mapping.get(col)
+                                                if cur in headers:
+                                                    di = headers.index(cur) + 1
+                                                elif m and m.matched_header in headers:
+                                                    di = headers.index(m.matched_header) + 1
+                                                sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
+                                                                   key=f"sp_cond_{col}", label_visibility="collapsed")
+                                                current_mapping[col] = None if sel == "(Không chọn)" else sel
+
+                                        if opt_cols_list:
+                                            with st.expander(f"Không bắt buộc ({len(opt_cols_list)} trường)", expanded=False):
+                                                for col in opt_cols_list:
+                                                    m = col_map.get(col)
+                                                    val = current_mapping.get(col)
+                                                    dot = "g" if m and m.confidence >= 90 else "y" if m and m.confidence >= 50 else "r"
+
+                                                    oc = st.columns([0.3, 1.8, 2.5])
+                                                    with oc[0]:
+                                                        st.markdown(f'<span class="sp-dot {dot}"></span>', unsafe_allow_html=True)
+                                                    with oc[1]:
+                                                        st.markdown(f'<span style="font-size:13px;">{col}</span>', unsafe_allow_html=True)
+                                                    with oc[2]:
+                                                        di = 0
+                                                        cur = current_mapping.get(col)
+                                                        if cur in headers:
+                                                            di = headers.index(cur) + 1
+                                                        elif m and m.matched_header in headers:
+                                                            di = headers.index(m.matched_header) + 1
+                                                        sel = st.selectbox("", ["(Không chọn)"] + headers, index=di,
+                                                                           key=f"sp_opt_{col}", label_visibility="collapsed")
+                                                        current_mapping[col] = None if sel == "(Không chọn)" else sel
+
+                                        missing_req = [c for c in required_cols if current_mapping.get(c) is None]
+                                        if missing_req:
+                                            st.markdown(f'<span style="color:#dc2626;font-size:13px;">Thiếu {len(missing_req)} cột bắt buộc</span>',
+                                                        unsafe_allow_html=True)
+
+                                        if match_result and match_result.unmatched_excel_headers:
+                                            u = match_result.unmatched_excel_headers[0]
+                                            hint = ""
+                                            if u.suggested_matches:
+                                                hint = f" Gợi ý: {u.suggested_matches[0].header} ({u.suggested_matches[0].confidence}%)"
+                                            st.markdown(f'<span style="color:#ca8a04;font-size:12px;">{len(match_result.unmatched_excel_headers)} cột chưa dùng{hint}</span>',
+                                                        unsafe_allow_html=True)
+
+                                        st.markdown("---")
+                                        tpl_name = st.text_input("Lưu mẫu cấu hình hiện tại (nếu cần):", key="sp_confirm_tpl_name", placeholder="Nhập tên mẫu để lưu...")
+                                        c_back, c_save, c_next = st.columns([1, 1, 1.5])
+                                        with c_back:
+                                            if st.button("← Tải file khác", use_container_width=True, key="sp_confirm_back_1"):
+                                                st.session_state.import_step = 1
+                                                st.rerun()
+                                        with c_save:
+                                            if st.button("💾 Lưu mẫu", use_container_width=True, key="sp_confirm_save_tpl"):
+                                                if tpl_name.strip():
+                                                    save_mapping_template(tpl_name.strip(), dict(current_mapping))
+                                                    st.success("Đã lưu mẫu!")
+                                                else:
+                                                    st.error("Vui lòng nhập tên mẫu.")
+                                        with c_next:
+                                            if st.button("Kiểm tra dữ liệu →", type="primary", use_container_width=True, key="sp_confirm_next_3"):
+                                                missing_required = [c for c in required_cols if current_mapping.get(c) is None]
+                                                if missing_required:
+                                                    st.error(f"⚠️ Vui lòng ghép tất cả các cột bắt buộc: {', '.join(missing_required)}")
+                                                else:
+                                                    st.session_state.import_step = 3
+                                                    st.rerun()
+                                    if st.session_state.import_step >= 3:
+                                        st.caption("XEM TRƯỚC DỮ LIỆU ĐÃ GHÉP")
+                                        
+                                        nav_c1, nav_c2 = st.columns([1, 4])
+                                        with nav_c1:
+                                            if st.button("← Quay lại sửa ghép cột", key="sp_confirm_back_2"):
+                                                st.session_state.import_step = 2
+                                                st.rerun()
+                                        st.markdown("---")
+
+                                    if True:
+                                        # Read & remap
+                                        df_raw = parse_excel_to_df(file_bytes, header_row=header_row, sheet_name=selected_sheet)
+                                        df_parsed = remap_dataframe_columns(df_raw, current_mapping)
+
+                                        if df_parsed.empty:
+                                            st.info("Không có dòng dữ liệu nào sau khi đọc.")
+                                        elif len(df_parsed) > 100000:
+                                            st.error("File Excel qua lon (>100.000 dong). Vui long chia nho file.")
+                                        else:
+                                            # Validate
                                             if import_method == "activities":
-                                                df_diff = diff_activities(df_parsed, get_connection(), selected_tf_name)
+                                                errors = validate_activities_data(df_parsed, get_connection())
                                             else:
-                                                df_diff = diff_aggregate_totals(df_parsed, get_connection(), selected_tf_name)
+                                                errors = validate_aggregate_totals_data(df_parsed, get_connection())
 
-                                            # Diff counts
-                                            counts = df_diff["diff_marker"].value_counts().to_dict()
-                                            c_new = counts.get("NEW", 0)
-                                            c_upd = counts.get("UPDATE", 0)
-                                            c_skip = counts.get("SKIP", 0)
+                                            if errors:
+                                                st.error("❌ Phát hiện lỗi định dạng dữ liệu trong file Excel. Vui lòng sửa lại:")
+                                                for idx_e, r_num, err_msg in errors[:20]:
+                                                    st.write(f"- Dòng {r_num}: {err_msg}")
+                                                if len(errors) > 20:
+                                                    st.caption(f"... và {len(errors) - 20} lỗi khác.")
+                                            else:
+                                                st.success(f"✓ Dữ liệu hợp lệ! Đã đọc thành công {len(df_parsed)} dòng.")
 
-                                            cols_m = st.columns(3)
-                                            cols_m[0].metric("Thêm mới", c_new)
-                                            cols_m[1].metric("Cập nhật / Thay đổi", c_upd)
-                                            cols_m[2].metric("Trùng khớp (Bỏ qua)", c_skip)
+                                                # Diff
+                                                if import_method == "activities":
+                                                    df_diff = diff_activities(df_parsed, get_connection(), selected_tf_name)
+                                                else:
+                                                    df_diff = diff_aggregate_totals(df_parsed, get_connection(), selected_tf_name)
 
-                                            # Submit batch
-                                            if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_batch_approve"):
-                                                conn_write = get_connection()
-                                                try:
-                                                    cur = conn_write.cursor()
-                                                    cur.execute('''
-                                                        INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
-                                                        VALUES (?, ?, 'pending', ?, ?, ?)
-                                                    ''', (import_method, dept_name, f"Code {dept_auth_code}", uploaded_file.name, len(df_diff)))
-                                                    batch_id = cur.lastrowid
+                                                # Diff counts
+                                                counts = df_diff["diff_marker"].value_counts().to_dict()
+                                                c_new = counts.get("NEW", 0)
+                                                c_upd = counts.get("UPDATE", 0)
+                                                c_skip = counts.get("SKIP", 0)
 
-                                                    from pipeline.validator import parse_bool, safe_float
+                                                cols_m = st.columns(3)
+                                                cols_m[0].metric("Thêm mới", c_new)
+                                                cols_m[1].metric("Cập nhật / Thay đổi", c_upd)
+                                                cols_m[2].metric("Trùng khớp (Bỏ qua)", c_skip)
 
-                                                    if import_method == "activities":
-                                                        with st.spinner("Đang xử lý dữ liệu hoạt động..."):
-                                                            import pandas as pd
-                                                            for idx_r, row in df_diff.iterrows():
-                                                                is_main = parse_bool(row.get("Tác giả chính", False))
-                                                                is_foreign = parse_bool(row.get("Giảng dạy tiếng nước ngoài", False))
-                                                                qty = safe_float(row["Số lượng"])
-                                                                std_cnt = int(safe_float(row.get("Số học viên", 0)) or 0)
-                                                                log_d_parsed = pd.to_datetime(row["Ngày thực hiện"]).strftime("%Y-%m-%d")
+                                                # Submit batch
+                                                if st.button("🚀 Gửi yêu cầu phê duyệt", type="primary", key="btn_submit_batch_approve"):
+                                                    conn_write = get_connection()
+                                                    try:
+                                                        cur = conn_write.cursor()
+                                                        cur.execute('''
+                                                            INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
+                                                            VALUES (?, ?, 'pending', ?, ?, ?)
+                                                        ''', (import_method, dept_name, f"Code {dept_auth_code}", uploaded_file.name, len(df_diff)))
+                                                        batch_id = cur.lastrowid
 
-                                                                cur.execute('''
-                                                                    INSERT INTO staging_activities (
-                                                                        batch_id, row_num, diff_marker, diff_detail, validation_errors,
-                                                                        teacher_name, activity_type_name, log_date, quantity,
-                                                                        class_level, class_type, student_count, nckh_level,
-                                                                        is_main_author, is_foreign_language_instruction, note, timeframe_name
-                                                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                                                ''', (
-                                                                    batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
-                                                                    row["Mã GV"], row["Tên loại hoạt động"], log_d_parsed, qty,
-                                                                    row.get("Cấp lớp", None) if not pd.isna(row.get("Cấp lớp", None)) else None,
-                                                                    row.get("Loại lớp", None) if not pd.isna(row.get("Loại lớp", None)) else None,
-                                                                    std_cnt,
-                                                                    row.get("Cấp đề tài", None) if not pd.isna(row.get("Cấp đề tài", None)) else None,
-                                                                    is_main, is_foreign,
-                                                                    row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
-                                                                    selected_tf_name
-                                                                ))
-                                                    else:  # aggregate_totals
-                                                        with st.spinner("Đang xử lý dữ liệu tổng hợp..."):
-                                                            for idx_r, row in df_diff.iterrows():
-                                                                cur.execute('''
-                                                                    INSERT INTO staging_aggregate_totals (
-                                                                        batch_id, row_num, diff_marker, diff_detail, validation_errors,
-                                                                        teacher_name, tong_gc_da_thuc_hien, nckh_da_thuc_hien,
-                                                                        so_gio_duoc_mien_giam, dinh_muc_gc_phai_thuc_hien, note, timeframe_name
-                                                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                                                ''', (
-                                                                    batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
-                                                                    row["Mã GV"],
-                                                                    safe_float(row["Tổng GC thực hiện"]) or 0.0,
-                                                                    safe_float(row["NCKH thực hiện"]) or 0.0,
-                                                                    safe_float(row["Số giờ miễn giảm"]) or 0.0,
-                                                                    safe_float(row["Định mức GC"]) or 0.0,
-                                                                    row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
-                                                                    selected_tf_name
-                                                                ))
+                                                        from pipeline.validator import parse_bool, safe_float
 
-                                                    conn_write.commit()
-                                                    st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
-                                                    st.balloons()
-                                                except Exception as ex:
-                                                    st.error(f"Lỗi khi gửi yêu cầu: {ex}")
-                                                finally:
-                                                    conn_write.close()
-                        except Exception as e_headers:
-                            st.error(
-                                "⚠️ **Lỗi đọc file Excel:** Không thể phân tích cấu trúc của file Excel được tải lên.\n\n"
-                                "**Gợi ý khắc phục:**\n"
-                                "- Đảm bảo file không bị lỗi, mật khẩu bảo vệ hoặc bị mã hóa.\n"
-                                "- Kiểm tra xem bạn đã chọn đúng tên Sheet và Dòng chứa tiêu đề cột (0-indexed) chưa.\n"
-                            )
-                            with st.expander("Chi tiết kỹ thuật"):
-                                st.code(str(e_headers))
+                                                        if import_method == "activities":
+                                                            with st.spinner("Đang xử lý dữ liệu hoạt động..."):
+                                                                import pandas as pd
+                                                                for idx_r, row in df_diff.iterrows():
+                                                                    is_main = parse_bool(row.get("Tác giả chính", False))
+                                                                    is_foreign = parse_bool(row.get("Giảng dạy tiếng nước ngoài", False))
+                                                                    qty = safe_float(row["Số lượng"])
+                                                                    std_cnt = int(safe_float(row.get("Số học viên", 0)) or 0)
+                                                                    log_d_parsed = pd.to_datetime(row["Ngày thực hiện"]).strftime("%Y-%m-%d")
+
+                                                                    cur.execute('''
+                                                                        INSERT INTO staging_activities (
+                                                                            batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                            teacher_name, activity_type_name, log_date, quantity,
+                                                                            class_level, class_type, student_count, nckh_level,
+                                                                            is_main_author, is_foreign_language_instruction, note, timeframe_name
+                                                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                                    ''', (
+                                                                        batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                        row["Mã GV"], row["Tên loại hoạt động"], log_d_parsed, qty,
+                                                                        row.get("Cấp lớp", None) if not pd.isna(row.get("Cấp lớp", None)) else None,
+                                                                        row.get("Loại lớp", None) if not pd.isna(row.get("Loại lớp", None)) else None,
+                                                                        std_cnt,
+                                                                        row.get("Cấp đề tài", None) if not pd.isna(row.get("Cấp đề tài", None)) else None,
+                                                                        is_main, is_foreign,
+                                                                        row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
+                                                                        selected_tf_name
+                                                                    ))
+                                                        else:  # aggregate_totals
+                                                            with st.spinner("Đang xử lý dữ liệu tổng hợp..."):
+                                                                for idx_r, row in df_diff.iterrows():
+                                                                    cur.execute('''
+                                                                        INSERT INTO staging_aggregate_totals (
+                                                                            batch_id, row_num, diff_marker, diff_detail, validation_errors,
+                                                                            teacher_name, tong_gc_da_thuc_hien, nckh_da_thuc_hien,
+                                                                            so_gio_duoc_mien_giam, dinh_muc_gc_phai_thuc_hien, note, timeframe_name
+                                                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                                    ''', (
+                                                                        batch_id, idx_r + header_row + 2, row["diff_marker"], row["diff_detail"], "",
+                                                                        row["Mã GV"],
+                                                                        safe_float(row["Tổng GC thực hiện"]) or 0.0,
+                                                                        safe_float(row["NCKH thực hiện"]) or 0.0,
+                                                                        safe_float(row["Số giờ miễn giảm"]) or 0.0,
+                                                                        safe_float(row["Định mức GC"]) or 0.0,
+                                                                        row.get("Ghi chú", None) if not pd.isna(row.get("Ghi chú", None)) else None,
+                                                                        selected_tf_name
+                                                                    ))
+
+                                                        conn_write.commit()
+                                                        st.success("🎉 Đã gửi yêu cầu phê duyệt đến Quản trị viên thành công!")
+                                                        st.balloons()
+                                                    except Exception as ex:
+                                                        st.error(f"Lỗi khi gửi yêu cầu: {ex}")
+                                                    finally:
+                                                        conn_write.close()
+                            except Exception as e_headers:
+                                st.error(
+                                    "⚠️ **Lỗi đọc file Excel:** Không thể phân tích cấu trúc của file Excel được tải lên.\n\n"
+                                    "**Gợi ý khắc phục:**\n"
+                                    "- Đảm bảo file không bị lỗi, mật khẩu bảo vệ hoặc bị mã hóa.\n"
+                                    "- Kiểm tra xem bạn đã chọn đúng tên Sheet và Dòng chứa tiêu đề cột (0-indexed) chưa.\n"
+                                )
+                                with st.expander("Chi tiết kỹ thuật"):
+                                    st.code(str(e_headers))
 
 conn.close()

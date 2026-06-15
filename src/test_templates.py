@@ -8,11 +8,11 @@ def test_generate_teachers_template():
     assert isinstance(data, bytes)
     wb = openpyxl.load_workbook(io.BytesIO(data))
     ws = wb.active
-    assert ws.title == "Danh sách Cán bộ"
+    assert ws.title == "Thông tin nhà giáo"
     # Header check
     assert ws.cell(row=4, column=1).value == "Mã GV"
     assert ws.cell(row=4, column=2).value == "Họ tên"
-    assert ws.cell(row=4, column=11).value == "Đơn vị"
+    assert ws.cell(row=4, column=3).value == "Đơn vị công tác"
 
 def test_generate_activities_template():
     data = generate_activities_template("Chính trị, Pháp luật, Nghiệp vụ", "2024-2025")

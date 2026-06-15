@@ -183,3 +183,105 @@ def test_ghost_rows_and_null_validations(tmp_path):
     
     conn.close()
 
+
+def test_category_specific_activity_validation(tmp_path):
+    test_db = os.path.join(tmp_path, "test_val.sqlite")
+    os.environ["DB_PATH"] = test_db
+    init_db()
+    seed_initial_data()
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # 1. Clear default/empty activity types and seed our mock ones
+    cursor.execute("DELETE FROM activity_types")
+    
+    # Let's seed some teaching, nckh, and NVK activities
+    mock_activities = [
+        ("GD - Lý thuyết ĐH", "Giảng dạy", "Tiết", 1.0, 1, 0),
+        ("NCKH - Đề tài cơ sở", "NCKH", "Đề tài", 1.0, 0, 1),
+        ("NVK - Coi thi", "Hoạt động chuyên môn", "Buổi", 1.0, 0, 0)
+    ]
+    for a in mock_activities:
+        cursor.execute("""
+            INSERT INTO activity_types (name, category, unit, base_conversion_rate, is_teaching_activity, is_nckh_activity)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, a)
+        
+    # Ensure there is a valid teacher with ID 1
+    cursor.execute("INSERT OR IGNORE INTO teachers (id, name, subject_group, employment_type) VALUES (1, 'Teacher A', 'Bộ môn Toán', 'TEACHER')")
+    conn.commit()
+
+    # Case A: Valid Teaching Activity
+    df_valid_teaching = pd.DataFrame([{
+        "Mã GV": "1",
+        "Tên loại hoạt động": "GD - Lý thuyết ĐH",
+        "Ngày thực hiện": "2026-06-15",
+        "Số lượng": 10.0,
+        "Cấp lớp": "Đại học",
+        "Loại lớp": "Lý thuyết",
+        "Số học viên": 50
+    }])
+    errs = validate_activities_data(df_valid_teaching, conn)
+    assert len(errs) == 0, f"Expected no errors, got {errs}"
+
+    # Case B: Teaching Activity missing required fields
+    df_invalid_teaching = pd.DataFrame([{
+        "Mã GV": "1",
+        "Tên loại hoạt động": "GD - Lý thuyết ĐH",
+        "Ngày thực hiện": "2026-06-15",
+        "Số lượng": 10.0,
+        "Cấp lớp": None,
+        "Loại lớp": "Lý thuyết",
+        "Số học viên": -5
+    }])
+    errs = validate_activities_data(df_invalid_teaching.map(sanitize_value), conn)
+    err_msgs = [e[2] for e in errs]
+    assert any("Cấp lớp" in msg for msg in err_msgs)
+    assert any("Số học viên" in msg for msg in err_msgs)
+
+    # Case C: Valid NCKH Activity
+    df_valid_nckh = pd.DataFrame([{
+        "Mã GV": "1",
+        "Tên loại hoạt động": "NCKH - Đề tài cơ sở",
+        "Ngày thực hiện": "2026-06-15",
+        "Số lượng": 1.0,
+        "Cấp đề tài": "Cơ sở"
+    }])
+    errs = validate_activities_data(df_valid_nckh, conn)
+    assert len(errs) == 0, f"Expected no errors, got {errs}"
+
+    # Case D: NCKH Activity missing required field or invalid
+    df_invalid_nckh = pd.DataFrame([{
+        "Mã GV": "1",
+        "Tên loại hoạt động": "NCKH - Đề tài cơ sở",
+        "Ngày thực hiện": "2026-06-15",
+        "Số lượng": 1.0,
+        "Cấp đề tài": "InvalidLevel"
+    }])
+    errs = validate_activities_data(df_invalid_nckh, conn)
+    err_msgs = [e[2] for e in errs]
+    assert any("Cấp đề tài" in msg for msg in err_msgs)
+
+    # Case E: Valid NVK Activity with no extra fields
+    df_valid_nvk = pd.DataFrame([{
+        "Mã GV": "1",
+        "Tên loại hoạt động": "NVK - Coi thi",
+        "Ngày thực hiện": "2026-06-15",
+        "Số lượng": 2.0
+    }])
+    errs = validate_activities_data(df_valid_nvk, conn)
+    assert len(errs) == 0, f"Expected no errors, got {errs}"
+
+    # Case F: Unknown Activity Type
+    df_unknown = pd.DataFrame([{
+        "Mã GV": "1",
+        "Tên loại hoạt động": "Unknown Activity",
+        "Ngày thực hiện": "2026-06-15",
+        "Số lượng": 2.0
+    }])
+    errs = validate_activities_data(df_unknown, conn)
+    err_msgs = [e[2] for e in errs]
+    assert any("không tồn tại trong hệ thống" in msg for msg in err_msgs)
+
+    conn.close()
+
