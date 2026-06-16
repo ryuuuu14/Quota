@@ -1363,15 +1363,15 @@ with tab3:
                                         except Exception as e_parse:
                                             st.error(f"Không thể đọc file: {e_parse}")
 
-                            except Exception as e_headers:
-                                st.error(
-                                    "⚠️ **Lỗi đọc file Excel:** Không thể phân tích cấu trúc của file Excel được tải lên.\n\n"
-                                    "**Gợi ý khắc phục:**\n"
-                                    "- Đảm bảo file không bị lỗi, mật khẩu bảo vệ hoặc bị mã hóa.\n"
-                                    "- Kiểm tra xem bạn đã chọn đúng tên Sheet và Dòng chứa tiêu đề cột (0-indexed) chưa.\n"
-                                )
-                                with st.expander("Chi tiết kỹ thuật"):
-                                    st.code(str(e_headers))
+                        except Exception as e_headers:
+                            st.error(
+                                "⚠️ **Lỗi đọc file Excel:** Không thể phân tích cấu trúc của file Excel được tải lên.\n\n"
+                                "**Gợi ý khắc phục:**\n"
+                                "- Đảm bảo file không bị lỗi, mật khẩu bảo vệ hoặc bị mã hóa.\n"
+                                "- Kiểm tra xem bạn đã chọn đúng tên Sheet và Dòng chứa tiêu đề cột (0-indexed) chưa.\n"
+                            )
+                            with st.expander("Chi tiết kỹ thuật"):
+                                st.code(str(e_headers))
 
 
     # Close the shared page-level DB connection after all tabs have rendered
