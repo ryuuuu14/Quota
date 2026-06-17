@@ -527,7 +527,7 @@ with tab1:
                             opts_dict = {f"{row['name']}": row['id'] for _, row in df_opts.iterrows()}
                             options = list(opts_dict.keys()) if opts_dict else ["(Chưa có dữ liệu)"]
 
-                        with st.form(f"dynamic_form_{field_type}"):
+                        with st.container(border=True):
                             st.markdown(f"**{form_title}**")
                             selected_val = st.selectbox("Chọn giá trị mới", options=options)
 
@@ -545,7 +545,7 @@ with tab1:
                                     if use_override:
                                         weeks_override = st.number_input("Số tuần thực tế", min_value=0.0, max_value=52.0, value=44.0, step=0.5)
 
-                            if st.form_submit_button("Lưu Lịch sử"):
+                            if st.button("Lưu Lịch sử", type="primary"):
                                 if not options or options[0] == "(Chưa có dữ liệu)":
                                     st.error("Vui lòng cài đặt danh mục trước.")
                                 else:
