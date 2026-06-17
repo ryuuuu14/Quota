@@ -403,7 +403,7 @@ with tab1:
                                 cursor.execute("""
                                     INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
                                     VALUES ('teachers', ?, 'pending', ?, ?, 1)
-                                """, (c_dept, f"User {user['username']}", f"Cập nhật thông tin {t_data['name']}", 1))
+                                """, (c_dept, f"User {user['username']}", f"Cập nhật thông tin {t_data['name']}"))
                                 batch_id = cursor.lastrowid
 
                                 cursor.execute("""
@@ -589,7 +589,7 @@ with tab1:
                                         cursor.execute("""
                                             INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
                                             VALUES ('teachers', ?, 'pending', ?, ?, 1)
-                                        """, (c_dept, f"User {user['username']}", f"Yêu cầu điều chỉnh {action_type} - {t_data['name']}", 1))
+                                        """, (c_dept, f"User {user['username']}", f"Yêu cầu điều chỉnh {action_type} - {t_data['name']}"))
                                         batch_id = cursor.lastrowid
 
                                         cursor.execute("""
@@ -769,7 +769,7 @@ with tab1:
                             cursor.execute("""
                                 INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
                                 VALUES ('teachers', ?, 'pending', ?, ?, 1)
-                            """, (c_dept, f"User {user['username']}", f"Yêu cầu xóa hồ sơ - {t_data['name']}", 1))
+                            """, (c_dept, f"User {user['username']}", f"Yêu cầu xóa hồ sơ - {t_data['name']}"))
                             batch_id = cursor.lastrowid
 
                             cursor.execute("""
@@ -901,7 +901,7 @@ with tab2:
                             cursor.execute("""
                                 INSERT INTO import_batches (domain, dept_name, status, uploaded_by, filename, row_count)
                                 VALUES ('teachers', ?, 'pending', ?, ?, 1)
-                            """, (initial_dept, f"User {user['username']}", "Thêm mới cán bộ", 1))
+                            """, (initial_dept, f"User {user['username']}", "Thêm mới cán bộ"))
                             batch_id = cursor.lastrowid
 
                             cursor.execute("""
