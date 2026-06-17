@@ -953,6 +953,28 @@ def render_sidebar(active_page="home"):
 </div>
 """, unsafe_allow_html=True)
 
+        # ---- GLOBAL TIMEFRAME SELECTOR ----
+        from database import get_cached_timeframes
+        df_tf = get_cached_timeframes()
+        if not df_tf.empty:
+            tf_options = {f"{row['name']}": int(row['id']) for _, row in df_tf.iterrows()}
+            
+            # Init global state if missing
+            if 'global_tf_id' not in st.session_state or st.session_state['global_tf_id'] not in tf_options.values():
+                st.session_state['global_tf_id'] = int(df_tf.iloc[0]['id'])
+
+            current_val = st.session_state['global_tf_id']
+            current_key = next((k for k, v in tf_options.items() if v == current_val), list(tf_options.keys())[0])
+
+            selected_key = st.selectbox("Năm học (Toàn cục):", options=list(tf_options.keys()), index=list(tf_options.keys()).index(current_key), key="global_tf_selector")
+            
+            if tf_options[selected_key] != current_val:
+                st.session_state['global_tf_id'] = tf_options[selected_key]
+                st.rerun()
+            
+            st.markdown('<div style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
+        # -----------------------------------
+
         st.page_link("app.py", label="Trang chủ", icon=":material/home:")
         st.page_link("pages/1_Dashboard.py", label="Bảng điều khiển", icon=":material/dashboard:")
         st.page_link("pages/2_QuanLyCanBo.py", label="Quản lý Cán bộ", icon=":material/groups:")

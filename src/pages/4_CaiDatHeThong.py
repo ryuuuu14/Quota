@@ -1,5 +1,6 @@
 import streamlit as st
-from database import get_connection
+import sqlite3
+from database import get_connection, ThreadLocalConnectionProxy, delete_timeframe, get_cached_timeframes
 from components import render_empty_state, render_sidebar, render_warning_state
 
 render_sidebar("caidat")
@@ -20,7 +21,7 @@ st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">C�
 if read_only:
     st.info("ℹ️ **Quyền xem cấu hình:** Tài khoản Trưởng Khoa/Bộ môn chỉ có quyền xem cấu hình thông số hệ thống và gửi yêu cầu điều chỉnh các quy tắc miễn giảm/chức vụ.")
 
-conn = get_connection()
+conn = ThreadLocalConnectionProxy()
 
 # Tab setup
 tabs = st.tabs([
@@ -90,13 +91,21 @@ def render_delete_button(table, row_id, id_col='id', rule_type=None, rule_name="
         with col_yes:
             if st.button("Có", key=f"yes_{table}_{row_id}"):
                 try:
-                    cursor = conn.cursor()
-                    cursor.execute(f"DELETE FROM {table} WHERE {id_col} = ?", (int(row_id) if id_col == 'id' else row_id,))
-                    conn.commit()
+                    if table == 'timeframes':
+                        delete_timeframe(int(row_id), conn=conn)
+                        conn.commit()
+                    else:
+                        cursor = conn.cursor()
+                        cursor.execute(f"DELETE FROM {table} WHERE {id_col} = ?", (int(row_id) if id_col == 'id' else row_id,))
+                        conn.commit()
                     st.session_state[confirm_key] = False
                     st.success("Đã xoá!")
                     st.rerun()
+                except sqlite3.IntegrityError:
+                    conn.rollback()
+                    st.error("Dữ liệu này đang được sử dụng ở nơi khác, không thể xóa.")
                 except Exception as e:
+                    conn.rollback()
                     st.error(f"Lỗi: {e}")
         with col_no:
             if st.button("Hủy", key=f"no_{table}_{row_id}"):
@@ -152,9 +161,17 @@ def _tab1_body():
                         cursor = conn.cursor()
                         cursor.execute("INSERT INTO timeframes (name, start_date, end_date) VALUES (?, ?, ?)", (tf_name, tf_start, tf_end))
                         conn.commit()
+                        try:
+                            get_cached_timeframes.clear()
+                        except Exception:
+                            pass
                         st.success("Thêm thành công!")
                         st.rerun()
+                    except sqlite3.IntegrityError:
+                        conn.rollback()
+                        st.error("Lỗi: Dữ liệu bị trùng lặp hoặc không hợp lệ.")
                     except Exception as e:
+                        conn.rollback()
                         st.error(f"Lỗi: {e}")
     st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 24px 0;">', unsafe_allow_html=True)
     st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">edit_calendar</span> Điều chỉnh ngày làm việc đột xuất</h3>', unsafe_allow_html=True)
@@ -226,7 +243,11 @@ miễn giảm của giáo viên (như thai sản, ốm đau) trùng vào kỳ ng
                                 conn.commit()
                                 st.success("Đã thêm điều chỉnh. Số tuần làm việc sẽ được tính lại tương ứng.")
                                 st.rerun()
+                            except sqlite3.IntegrityError:
+                                conn.rollback()
+                                st.error("Lỗi: Dữ liệu bị trùng lặp hoặc không hợp lệ.")
                             except Exception as e:
+                                conn.rollback()
                                 st.error(f"Lỗi: {e}")
                 else:
                     st.warning("Vui lòng thêm Năm học trước khi tạo điều chỉnh.")

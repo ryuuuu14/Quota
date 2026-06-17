@@ -3,7 +3,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 import streamlit as st
 from datetime import date
-from database import get_connection, get_cached_teachers, get_cached_activity_types, get_cached_timeframes
+from database import get_connection, get_cached_teachers, get_cached_activity_types, get_cached_timeframes, ThreadLocalConnectionProxy
 from components import render_empty_state, render_warning_state, render_sidebar
 from auth import get_current_user, get_scoped_teacher_ids, require_role
 require_role(["admin", "head_dept"], "Ghi nhận Hoạt động")
@@ -27,7 +27,7 @@ render_sidebar("nhatky")
 st.title("📝 Ghi nhận Hoạt động")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Nhập liệu các hoạt động giảng dạy, NCKH và nhiệm vụ khác.</p>', unsafe_allow_html=True)
 
-conn = get_connection()
+conn = ThreadLocalConnectionProxy()
 
 user = get_current_user()
 scoped_ids = get_scoped_teacher_ids(user)
@@ -161,33 +161,12 @@ else:
         col3, col4 = st.columns(2)
         log_date = col3.date_input("Ngày thực hiện", value=date.today())
         
-        matching_tf_name = "Chưa xác định"
-        matching_tf_id = None
-        log_date_str = log_date.isoformat()
-        for idx, row in df_timeframes.iterrows():
-            if row['start_date'] <= log_date_str <= row['end_date']:
-                matching_tf_id = int(row['id'])
-                matching_tf_name = row['name']
-                break
-        if matching_tf_id is None and not df_timeframes.empty:
-            matching_tf_id = int(df_timeframes.iloc[0]['id'])
-            matching_tf_name = df_timeframes.iloc[0]['name']
-
-        col4.markdown(f'<div style="padding-top: 10px;"><label style="font-size: 14px; font-weight: 600; color: var(--md-on-surface-variant);">Hệ thống tự động nhận diện Năm học</label><div style="font-size: 16px; font-weight: 700; color: var(--md-primary); margin-top: 8px;">📅 {matching_tf_name}</div></div>', unsafe_allow_html=True)
+        global_tf_id = st.session_state.get('global_tf_id')
+        global_tf_name = next((k for k, v in tf_options.items() if v == global_tf_id), "Năm học")
         
-        col_tf, _ = st.columns([1, 2])
-        with col_tf:
-            with st.expander("⚙️ Thay đổi Năm học thủ công (nếu cần)", expanded=False):
-                tf_list = list(tf_options.keys())
-                default_index = 0
-                for idx, (name, tf_id) in enumerate(tf_options.items()):
-                    if tf_id == matching_tf_id:
-                        default_index = idx
-                        break
-                tf_sel = st.selectbox("Chọn Năm học khác", options=tf_list, index=default_index)
+        col4.markdown(f'<div style="padding-top: 10px;"><label style="font-size: 14px; font-weight: 600; color: var(--md-on-surface-variant);">Năm học (Toàn cục)</label><div style="font-size: 16px; font-weight: 700; color: var(--md-primary); margin-top: 8px;">📅 {global_tf_name}</div></div>', unsafe_allow_html=True)
         
-        # Xác định timeframe được áp dụng cuối cùng
-        final_tf_id = tf_options[tf_sel]
+        final_tf_id = global_tf_id
         
         # Check lock state for the selected target timeframe
         cursor = conn.cursor()
@@ -195,7 +174,7 @@ else:
         is_tf_locked = cursor.fetchone()[0] > 0
         
         if is_tf_locked:
-            st.warning(f"⚠️ Năm học **{tf_sel}** đã được khóa nhập lẻ để quản lý tập trung bằng Excel. Vui lòng chọn năm học khác hoặc xóa file Excel tại trang Nhập dữ liệu để mở khóa.")
+            st.warning(f"⚠️ Năm học **{global_tf_name}** đã được khóa nhập lẻ để quản lý tập trung bằng Excel. Vui lòng chọn năm học khác hoặc xóa file Excel tại trang Nhập dữ liệu để mở khóa.")
             
         with st.form("log_activity_form"):
             is_freeform = (act_info['category'] == 'Chấp hành Nhiệm vụ khác')
@@ -312,7 +291,10 @@ else:
         with col_code:
             dept_auth_code = st.text_input("Nhập mã bảo mật Khoa/Bộ môn:", type="password", key="dept_auth_code_activities")
         with col_tf:
-            selected_tf_name = st.selectbox("Chọn Năm học:", options=list(tf_options.keys()), key="tf_select_activities")
+            global_tf_id = st.session_state.get('global_tf_id')
+            global_tf_name = next((k for k, v in tf_options.items() if v == global_tf_id), "Năm học")
+            st.markdown(f'<div style="padding-top: 10px;"><label style="font-size: 14px; font-weight: 600; color: var(--md-on-surface-variant);">Năm học (Toàn cục)</label><div style="font-size: 16px; font-weight: 700; color: var(--md-primary); margin-top: 8px;">📅 {global_tf_name}</div></div>', unsafe_allow_html=True)
+            selected_tf_name = global_tf_name
             
         if dept_auth_code:
             from auth import get_department_by_code

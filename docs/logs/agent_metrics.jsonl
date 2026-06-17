@@ -472,3 +472,15 @@
 {"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6029605865478516, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
 {"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.5514621734619141, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
 {"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.5462169647216797, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 1.6067028045654297, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 150.0, "tokens_in": 10, "tokens_out": 20, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 1.0569095611572266, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6215572357177734, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.5686283111572266, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.858306884765625, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.7593631744384766, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 150.0, "tokens_in": 10, "tokens_out": 20, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 0.5962848663330078, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6527900695800781, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6012916564941406, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.5352497100830078, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}

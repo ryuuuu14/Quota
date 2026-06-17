@@ -1,6 +1,6 @@
 import streamlit as st
 from calculations import calculate_teacher_metrics, get_conversion_limits, calculate_department_compensation
-from database import get_connection, get_cached_timeframes
+from database import get_connection, get_cached_timeframes, ThreadLocalConnectionProxy
 from components import render_metric_card, render_empty_state, render_warning_state, render_chip, render_sidebar
 from auth import require_role
 
@@ -175,29 +175,10 @@ require_role(["admin", "head_dept"], "Bảng điều khiển")
 st.title("Bảng điều khiển (Dashboard)")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Giám sát định mức theo thời gian thực và thực hiện quy đổi giờ theo Điều 12.</p>', unsafe_allow_html=True)
 
-conn = get_connection()
+conn = ThreadLocalConnectionProxy()
 df_tf = get_cached_timeframes()
 
-if 'selected_tf_id' not in st.session_state:
-    st.session_state['selected_tf_id'] = None
-
-if st.session_state['selected_tf_id'] is None and not df_tf.empty:
-    st.session_state['selected_tf_id'] = int(df_tf.iloc[0]['id'])
-
-selected_tf_id = st.session_state['selected_tf_id']
-
-if not df_tf.empty and selected_tf_id:
-    tf_options = {f"{row['name']} ({row['start_date']} đến {row['end_date']})": row['id'] for _, row in df_tf.iterrows()}
-    current_key = [k for k, v in tf_options.items() if v == st.session_state['selected_tf_id']]
-    current_key = current_key[0] if current_key else list(tf_options.keys())[0]
-
-    col_tf, _ = st.columns([8, 4])
-    tf_sel = col_tf.selectbox("Chọn năm học:", options=list(tf_options.keys()), index=list(tf_options.keys()).index(current_key))
-    if tf_options[tf_sel] != st.session_state['selected_tf_id']:
-        st.session_state['selected_tf_id'] = int(tf_options[tf_sel])
-        st.rerun()
-
-selected_tf_id = st.session_state['selected_tf_id']
+selected_tf_id = st.session_state.get('global_tf_id')
 
 if df_tf.empty:
     render_warning_state("Hệ thống chưa có Năm học. Vui lòng tạo trong Cài đặt Hệ thống.")

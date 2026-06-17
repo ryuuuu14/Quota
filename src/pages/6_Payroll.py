@@ -63,8 +63,12 @@ if not timeframes:
     render_empty_state("Chưa có kỳ học nào trong hệ thống. Vui lòng thêm kỳ học trước.")
     st.stop()
 
-tf_name = st.selectbox("Chọn kỳ học", list(timeframes.keys()), key='tf_main')
-tf_id = timeframes[tf_name]
+tf_id = st.session_state.get('global_tf_id')
+if not tf_id:
+    render_empty_state("Vui lòng chọn năm học ở menu bên trái.")
+    st.stop()
+
+tf_name = next((k for k, v in timeframes.items() if v == tf_id), "Không xác định")
 
 stats = get_teacher_stats(tf_id)
 c1, c2, c3, c4, c5 = st.columns(5)

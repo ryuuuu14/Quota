@@ -24,6 +24,34 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+class ThreadLocalConnectionProxy:
+    def __init__(self):
+        import threading
+        self._local = threading.local()
+
+    @property
+    def _conn(self):
+        if not hasattr(self._local, 'conn'):
+            self._local.conn = get_connection()
+        return self._local.conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        return self._conn.__enter__()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self._conn.__exit__(exc_type, exc_val, exc_tb)
+
+    def close(self):
+        if hasattr(self._local, 'conn'):
+            try:
+                self._local.conn.close()
+            except Exception:
+                pass
+            delattr(self._local, 'conn')
+
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
@@ -881,6 +909,33 @@ def delete_teacher(teacher_id):
     cursor.execute("DELETE FROM teachers WHERE id = ?", (teacher_id,))
     conn.commit()
     conn.close()
+
+def delete_timeframe(timeframe_id, conn=None):
+    if conn is None:
+        conn = get_connection()
+        should_close = True
+    else:
+        should_close = False
+
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM academic_holidays WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM activity_logs WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM payroll_records WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM manual_conversions WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM session_teacher_totals WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM bulk_teaching_assignments WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM bulk_import_files WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM teacher_calculated_totals WHERE timeframe_id = ?", (timeframe_id,))
+    cursor.execute("DELETE FROM timeframes WHERE id = ?", (timeframe_id,))
+
+    if should_close:
+        conn.commit()
+        conn.close()
+
+    try:
+        get_cached_timeframes.clear()
+    except Exception:
+        pass
 
 @st.cache_data(ttl=300)
 def get_cached_timeframes():

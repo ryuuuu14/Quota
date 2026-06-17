@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import date, datetime
-from database import get_connection, delete_teacher
+from database import get_connection, delete_teacher, ThreadLocalConnectionProxy
 from components import render_empty_state, render_warning_state, render_sidebar, render_chip
 from calculations import calculate_t04_weeks, get_timeframe_dates
 from database import get_base_salary, compute_total_12m_salary, get_police_ranks
@@ -11,7 +11,7 @@ render_sidebar("canbo")
 st.title("Quản lý Hồ sơ Nhà giáo")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Quản lý thông tin cơ bản và quá trình công tác của nhà giáo.</p>', unsafe_allow_html=True)
 
-conn = get_connection()
+conn = ThreadLocalConnectionProxy()
 
 # Fetch base salary globally to avoid NameError
 base_raw = get_base_salary()
