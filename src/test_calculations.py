@@ -93,7 +93,7 @@ def test_calculate_t04_weeks_with_holidays():
     assert w_h == 3.0, f"Expected 3.0, got {w_h}"
     print("test_calculate_t04_weeks_with_holidays passed.")
 
-from calculations import calculate_teacher_metrics
+from calculations import calculate_teacher_metrics, get_teacher_formula_breakdown
 
 def test_bui_thi_x():
     old_db_path = os.environ.pop('DB_PATH', None)
@@ -105,13 +105,15 @@ def test_bui_thi_x():
         # Find Bùi Thị X dynamically
         teacher_row = c.execute("SELECT id FROM teachers WHERE name = 'Bùi Thị X'").fetchone()
         tf_row = c.execute("SELECT id, start_date FROM timeframes WHERE name = 'Năm học 2025-2026'").fetchone()
-        num_holidays = c.execute("SELECT COUNT(*) FROM academic_holidays WHERE timeframe_id = ?", (tf_row[0],)).fetchone()[0]
-        print("NUM HOLIDAYS IN TEST:", num_holidays)
-        conn.close()
         
         if not teacher_row or not tf_row:
             print("Bùi Thị X or Timeframe not found in DB, skipping verification.")
+            conn.close()
             return
+            
+        num_holidays = c.execute("SELECT COUNT(*) FROM academic_holidays WHERE timeframe_id = ?", (tf_row[0],)).fetchone()[0]
+        print("NUM HOLIDAYS IN TEST:", num_holidays)
+        conn.close()
 
         teacher_id = teacher_row[0]
         timeframe_id = tf_row[0]
@@ -142,6 +144,32 @@ def test_bui_thi_x():
             os.environ['DB_PATH'] = old_db_path
 
     print("test_bui_thi_x passed.")
+
+
+def test_get_teacher_formula_breakdown_exists():
+    old_db_path = os.environ.pop('DB_PATH', None)
+    try:
+        from database import get_connection
+        conn = get_connection()
+        c = conn.cursor()
+        teacher_row = c.execute("SELECT id FROM teachers LIMIT 1").fetchone()
+        tf_row = c.execute("SELECT id FROM timeframes LIMIT 1").fetchone()
+        conn.close()
+        
+        if not teacher_row or not tf_row:
+            print("No teachers/timeframes in DB, skipping breakdown verification.")
+            return
+
+        breakdown = get_teacher_formula_breakdown(teacher_row[0], tf_row[0])
+        assert breakdown is not None
+        assert 'teacher_name' in breakdown
+        assert 'segments' in breakdown
+        assert 'reductions' in breakdown
+        assert 'total_required_gc' in breakdown
+    finally:
+        if old_db_path is not None:
+            os.environ['DB_PATH'] = old_db_path
+    print("test_get_teacher_formula_breakdown_exists passed.")
 
 from calculations import _apply_auto_compensation
 
@@ -210,5 +238,6 @@ if __name__ == "__main__":
     test_thao_luan_equivalent()
     test_calculate_t04_weeks_with_holidays()
     test_bui_thi_x()
+    test_get_teacher_formula_breakdown_exists()
     test_apply_auto_compensation_cases()
     print("All tests passed!")

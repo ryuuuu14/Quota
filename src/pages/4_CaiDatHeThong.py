@@ -10,7 +10,10 @@ import streamlit as st
 import sqlite3
 import database
 import importlib
-importlib.reload(database)
+try:
+    importlib.reload(database)
+except TypeError:
+    pass
 
 from database import get_connection, ThreadLocalConnectionProxy, delete_timeframe, get_cached_timeframes, seed_holidays_for_timeframe
 from components import render_empty_state, render_sidebar, render_warning_state

@@ -1,7 +1,17 @@
 import streamlit as st
-from calculations import calculate_teacher_metrics, get_conversion_limits, calculate_department_compensation, get_teacher_formula_breakdown
+try:
+    from calculations import calculate_teacher_metrics, get_conversion_limits, calculate_department_compensation, get_teacher_formula_breakdown
+    _HAS_FORMULA_BREAKDOWN = True
+except ImportError:
+    from calculations import calculate_teacher_metrics, get_conversion_limits, calculate_department_compensation
+    get_teacher_formula_breakdown = None
+    _HAS_FORMULA_BREAKDOWN = False
 from database import get_connection, get_cached_timeframes, ThreadLocalConnectionProxy
-from components import render_metric_card, render_empty_state, render_warning_state, render_chip, render_sidebar, render_formula_card
+try:
+    from components import render_metric_card, render_empty_state, render_warning_state, render_chip, render_sidebar, render_formula_card
+except ImportError:
+    from components import render_metric_card, render_empty_state, render_warning_state, render_chip, render_sidebar
+    render_formula_card = None
 from auth import require_role
 
 @st.fragment
@@ -379,22 +389,26 @@ if selected_tf_id:
         # ── Transparency panel ─────────────────────────────────────────────────
         st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">', unsafe_allow_html=True)
         st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">manage_search</span> Tra cứu Công thức Tính Định mức</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 14px; margin-bottom: 16px;">Chọn một nhà giáo để xem chi tiết từng tham số được sử dụng trong tính toán: ngày lịch, ngày nghỉ lễ, ngày làm việc thực tế, số tuần, công thức GC/NCKH và các quy tắc miễn giảm.</p>', unsafe_allow_html=True)
 
-        teacher_names = ['— Chọn nhà giáo —'] + sorted(df_display['name'].dropna().tolist())
-        selected_teacher_name = st.selectbox(
-            'Chọn nhà giáo để tra cứu công thức:',
-            options=teacher_names,
-            key='formula_teacher_select'
-        )
+        if not _HAS_FORMULA_BREAKDOWN or render_formula_card is None:
+            st.info("Tính năng tra cứu công thức chưa sẵn sàng. Vui lòng cập nhật phiên bản mới nhất và khởi động lại ứng dụng.")
+        else:
+            st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 14px; margin-bottom: 16px;">Chọn một nhà giáo để xem chi tiết từng tham số được sử dụng trong tính toán: ngày lịch, ngày nghỉ lễ, ngày làm việc thực tế, số tuần, công thức GC/NCKH và các quy tắc miễn giảm.</p>', unsafe_allow_html=True)
 
-        if selected_teacher_name != '— Chọn nhà giáo —':
-            matched = df_display[df_display['name'] == selected_teacher_name]
-            if not matched.empty:
-                tid_selected = int(matched.iloc[0]['id'])
-                with st.spinner('Đang tổng hợp chi tiết công thức...'):
-                    breakdown = get_teacher_formula_breakdown(tid_selected, selected_tf_id)
-                render_formula_card(breakdown)
+            teacher_names = ['— Chọn nhà giáo —'] + sorted(df_display['name'].dropna().tolist())
+            selected_teacher_name = st.selectbox(
+                'Chọn nhà giáo để tra cứu công thức:',
+                options=teacher_names,
+                key='formula_teacher_select'
+            )
+
+            if selected_teacher_name != '— Chọn nhà giáo —':
+                matched = df_display[df_display['name'] == selected_teacher_name]
+                if not matched.empty:
+                    tid_selected = int(matched.iloc[0]['id'])
+                    with st.spinner('Đang tổng hợp chi tiết công thức...'):
+                        breakdown = get_teacher_formula_breakdown(tid_selected, selected_tf_id)
+                    render_formula_card(breakdown)
 
         st.markdown(f'<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">', unsafe_allow_html=True)
         _render_conversion_suggestions(df_display, selected_tf_id, conn)
