@@ -1,5 +1,17 @@
+import os
+import sys
+
+# Ensure the local 'src' directory is in PYTHONPATH for Streamlit Cloud stability
+src_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
 import streamlit as st
 import sqlite3
+import database
+import importlib
+importlib.reload(database)
+
 from database import get_connection, ThreadLocalConnectionProxy, delete_timeframe, get_cached_timeframes, seed_holidays_for_timeframe
 from components import render_empty_state, render_sidebar, render_warning_state
 from calculations import get_timeframe_gap_dates
