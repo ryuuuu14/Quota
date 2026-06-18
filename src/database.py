@@ -591,7 +591,9 @@ def seed_initial_data():
     except: pass
         
     try:
-        cursor.execute("INSERT INTO timeframes (name, start_date, end_date, norm_multiplier, standard_academic_weeks) VALUES ('Năm học 2025-2026', '2025-09-01', '2026-07-06', 1.0, 44.0)")
+        cursor.execute("INSERT INTO timeframes (name, start_date, end_date, norm_multiplier, standard_academic_weeks) VALUES ('Năm học 2025-2026', '2025-08-04', '2026-07-06', 1.0, 44.0)")
+        tf_id = cursor.lastrowid
+        seed_holidays_for_timeframe(conn, tf_id, 'Năm học 2025-2026', '2025-08-04', '2026-07-06')
     except: pass
 
     # Seed Titles - Dựa trên quy định Điều 6
@@ -959,6 +961,68 @@ def get_cached_activity_types():
     df = pd.read_sql_query("SELECT * FROM activity_types", conn)
     conn.close()
     return df
+
+HOLIDAY_PRESETS = {
+    "2024-2025": {
+        "tet_start": "2025-01-27",
+        "tet_end": "2025-02-16",
+        "hung_vuong": "2025-04-07",
+    },
+    "2025-2026": {
+        "tet_start": "2026-01-26",
+        "tet_end": "2026-02-15",
+        "hung_vuong": "2026-04-26",
+    },
+    "2026-2027": {
+        "tet_start": "2027-02-15",
+        "tet_end": "2027-03-07",
+        "hung_vuong": "2027-04-16",
+    }
+}
+
+def seed_holidays_for_timeframe(conn, timeframe_id, name, start_date_str, end_date_str):
+    cursor = conn.cursor()
+    
+    preset_key = "2025-2026"  # fallback default
+    for k in HOLIDAY_PRESETS.keys():
+        if k in name:
+            preset_key = k
+            break
+            
+    preset = HOLIDAY_PRESETS[preset_key]
+    
+    from datetime import datetime
+    try:
+        dt_start = datetime.strptime(start_date_str, "%Y-%m-%d")
+        dt_end = datetime.strptime(end_date_str, "%Y-%m-%d")
+        y_start, y_end = dt_start.year, dt_end.year
+    except:
+        parts = preset_key.split('-')
+        y_start, y_end = int(parts[0]), int(parts[1])
+        
+    # Seed ONLY non-summer holidays. Summer break is represented by the gap.
+    holidays = [
+        ("Nghỉ Tết Nguyên đán", preset["tet_start"], preset["tet_end"]),
+        ("Nghỉ Giỗ tổ Hùng Vương", preset["hung_vuong"], preset["hung_vuong"]),
+        
+        ("Ngày Truyền thống CAND (19/8)", f"{y_start}-08-19", f"{y_start}-08-19"),
+        ("Nghỉ Lễ Quốc khánh (2/9)", f"{y_start}-09-02", f"{y_start}-09-03"),
+        ("Nghỉ Tết Dương lịch", f"{y_end}-01-01", f"{y_end}-01-01"),
+        ("Nghỉ Lễ 30/4 & 1/5", f"{y_end}-04-30", f"{y_end}-05-01"),
+    ]
+    
+    cursor.execute("""
+        DELETE FROM academic_holidays 
+        WHERE timeframe_id = ? AND name IN (
+            'Nghỉ Tết Nguyên đán', 'Nghỉ Hè', 'Ngày Truyền thống CAND (19/8)',
+            'Nghỉ Lễ Quốc khánh (2/9)', 'Nghỉ Tết Dương lịch', 
+            'Nghỉ Giỗ tổ Hùng Vương', 'Nghỉ Lễ 30/4 & 1/5'
+        )
+    """, (timeframe_id,))
+    
+    for h_name, h_start, h_end in holidays:
+        cursor.execute("INSERT INTO academic_holidays (timeframe_id, name, start_date, end_date) VALUES (?, ?, ?, ?)", 
+                       (timeframe_id, h_name, h_start, h_end))
 
 if __name__ == "__main__":
     if os.path.exists(DB_PATH):

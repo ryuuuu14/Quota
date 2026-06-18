@@ -8,6 +8,11 @@ from database import get_base_salary, compute_total_12m_salary, get_police_ranks
 st.set_page_config(page_title="Quản lý Hồ sơ Nhà giáo", layout="wide")
 render_sidebar("canbo")
 
+# Show toast from session state if set
+if "profile_creation_toast" in st.session_state:
+    st.toast(st.session_state["profile_creation_toast"], icon="🎉")
+    del st.session_state["profile_creation_toast"]
+
 st.title("Quản lý Hồ sơ Nhà giáo")
 st.markdown('<p style="color: var(--md-on-surface-variant); font-size: 16px;">Quản lý thông tin cơ bản và quá trình công tác của nhà giáo.</p>', unsafe_allow_html=True)
 
@@ -894,7 +899,7 @@ with tab2:
                                 """, (new_teacher_id, role_id, start_date.isoformat()))
 
                             conn.commit()
-                            st.success("Đã thêm hồ sơ và khởi tạo lịch sử!")
+                            st.session_state["profile_creation_toast"] = "Đã thêm hồ sơ và khởi tạo lịch sử thành công!"
                             st.rerun()
                         else:
                             # CRUD as request for Head Dept
@@ -921,7 +926,7 @@ with tab2:
                                 None
                             ))
                             conn.commit()
-                            st.success(f"🎉 Đã gửi yêu cầu thêm cán bộ (Lô #{batch_id}) đến Quản trị viên phê duyệt!")
+                            st.session_state["profile_creation_toast"] = f"Đã gửi yêu cầu thêm cán bộ thành công! (Lô #{batch_id})"
                             st.rerun()
 
     st.markdown('<hr style="border-color: var(--md-outline-variant); margin: 16px 0;">', unsafe_allow_html=True)

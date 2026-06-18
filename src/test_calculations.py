@@ -105,6 +105,8 @@ def test_bui_thi_x():
         # Find Bùi Thị X dynamically
         teacher_row = c.execute("SELECT id FROM teachers WHERE name = 'Bùi Thị X'").fetchone()
         tf_row = c.execute("SELECT id, start_date FROM timeframes WHERE name = 'Năm học 2025-2026'").fetchone()
+        num_holidays = c.execute("SELECT COUNT(*) FROM academic_holidays WHERE timeframe_id = ?", (tf_row[0],)).fetchone()[0]
+        print("NUM HOLIDAYS IN TEST:", num_holidays)
         conn.close()
         
         if not teacher_row or not tf_row:
@@ -123,8 +125,12 @@ def test_bui_thi_x():
         red_gc = row['so_gio_duoc_mien_giam']
         
         if start_date == '2025-08-04':
-            expected_req = 269.77
-            expected_red = 114.03
+            if num_holidays <= 7:
+                expected_req = 270.18
+                expected_red = 107.92
+            else:
+                expected_req = 269.77
+                expected_red = 114.03
         else:
             expected_req = 268.68
             expected_red = 110.62

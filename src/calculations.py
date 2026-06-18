@@ -60,6 +60,24 @@ def get_timeframe_dates(timeframe_id=None):
     std_weeks = float(tf_df.iloc[0].get('standard_academic_weeks', 44.0))
     return int(tf_df.iloc[0]['id']), start_date, end_date, std_weeks
 
+def get_timeframe_gap_dates(start_date, end_date):
+    """
+    Return (gap_start, gap_end) representing the period between the end_date 
+    and the end of a full 52-week calendar year from start_date.
+    Returns (None, None) if there is no gap (timeframe is >= 52 weeks).
+    """
+    s_dt = pd.to_datetime(start_date)
+    e_dt = pd.to_datetime(end_date)
+    full_year_end = s_dt + pd.Timedelta(weeks=52) - pd.Timedelta(days=1)
+    
+    if e_dt >= full_year_end:
+        return None, None
+        
+    gap_start = e_dt + pd.Timedelta(days=1)
+    gap_end = full_year_end
+    return gap_start, gap_end
+
+
 def calculate_activity_hours(log_row, activity_type_row):
     """
     Tính toán quy đổi giờ chuẩn cho từng hoạt động theo quy định T04 (Điều 8)
@@ -704,6 +722,9 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
             total_reduced_gc *= cap
             total_reduced_nckh *= cap
             total_reduced_nvk *= cap
+            cap_alert = f"⚠️ Bị ép định mức (Cap) do năm học dài {total_weeks:.1f} tuần > {std_weeks:.1f} tuần chuẩn"
+            if cap_alert not in applied_reductions:
+                applied_reductions.append(cap_alert)
 
         def get_nvk_base_min(title):
             if title in ['Giáo sư', 'Phó Giáo sư']: return 170

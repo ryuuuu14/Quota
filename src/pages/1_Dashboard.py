@@ -188,6 +188,9 @@ if selected_tf_id:
         df_teachers = calculate_teacher_metrics(timeframe_id=selected_tf_id)
 
     if not df_teachers.empty:
+        if df_teachers['applied_reductions'].str.contains('Bị ép định mức').any():
+            st.warning("⚠️ **Cơ chế Cap (Ép định mức) đang hoạt động:** Số tuần làm việc thực tế đang vượt quá định mức chuẩn của Năm học. Hệ thống tự động co giãn định mức và miễn giảm để bảo đảm công bằng. Vui lòng kiểm tra lại cấu hình ngày nghỉ Lễ/Tết/Hè trong **Cài đặt Hệ thống** nếu điều này là ngoài ý muốn.")
+            
         import pandas as pd
         hist_query = "SELECT teacher_id, value_text as dept_name FROM teacher_role_history WHERE record_type = 'DEPARTMENT' ORDER BY start_date DESC"
         df_dept_hist = pd.read_sql_query(hist_query, conn)

@@ -1,7 +1,8 @@
 import streamlit as st
 import sqlite3
-from database import get_connection, ThreadLocalConnectionProxy, delete_timeframe, get_cached_timeframes
+from database import get_connection, ThreadLocalConnectionProxy, delete_timeframe, get_cached_timeframes, seed_holidays_for_timeframe
 from components import render_empty_state, render_sidebar, render_warning_state
+from calculations import get_timeframe_gap_dates
 
 render_sidebar("caidat")
 
@@ -139,6 +140,35 @@ def render_list_item(content, del_table=None, del_id=None, del_col='id', badge_h
         if del_table and del_id is not None:
             render_delete_button(del_table, del_id, del_col, rule_type=rule_type, rule_name=rule_name)
 
+def render_list_item_with_edit(content, table, row_id, edit_key, del_col='id', badge_html=None, rule_type=None, rule_name=""):
+    badge = f'<span style="margin-left: 8px;">{badge_html}</span>' if badge_html else ""
+    col1, col2 = st.columns([8, 2])
+    with col1:
+        st.markdown(f"""
+<div style="
+    background-color: var(--md-surface-container-lowest);
+    padding: 16px 20px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--md-outline-variant);
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+">
+    <div>{content}{badge}</div>
+</div>
+        """, unsafe_allow_html=True)
+    with col2:
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if not read_only or (table == 'reduction_rules' and (is_admin or is_head)):
+                if st.button("Sửa", key=f"btn_edit_{table}_{row_id}"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+        with col_btn2:
+            render_delete_button(table, row_id, del_col, rule_type=rule_type, rule_name=rule_name)
+
 @st.fragment
 def _tab1_body():
     import pandas as pd
@@ -160,12 +190,14 @@ def _tab1_body():
                     try:
                         cursor = conn.cursor()
                         cursor.execute("INSERT INTO timeframes (name, start_date, end_date) VALUES (?, ?, ?)", (tf_name, tf_start, tf_end))
+                        tf_id = cursor.lastrowid
+                        seed_holidays_for_timeframe(conn, tf_id, tf_name, str(tf_start), str(tf_end))
                         conn.commit()
                         try:
                             get_cached_timeframes.clear()
                         except Exception:
                             pass
-                        st.success("Thêm thành công!")
+                        st.success("Thêm thành công năm học và tự động thiết lập ngày nghỉ!")
                         st.rerun()
                     except sqlite3.IntegrityError:
                         conn.rollback()
@@ -177,51 +209,164 @@ def _tab1_body():
     st.markdown('<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">edit_calendar</span> Điều chỉnh ngày làm việc đột xuất</h3>', unsafe_allow_html=True)
     st.markdown("""
 <p style="color: var(--md-on-surface-variant); font-size: 14px;">
-Ghi nhận các ngày nghỉ trong năm học (Tết Nguyên đán, Nghỉ hè, 30/4, nghỉ do bão lũ, v.v.).
-<b>QUAN TRỌNG:</b> Bắt buộc phải nhập chính xác thời gian nghỉ Tết và nghỉ hè. 
-Hệ thống cần dữ liệu này để tự động khấu trừ (không tính) các tuần nghỉ lễ nếu khoảng thời gian 
-miễn giảm của giáo viên (như thai sản, ốm đau) trùng vào kỳ nghỉ.
+Khai báo các đợt nghỉ trong năm học để xác định chính xác số tuần giảng dạy thực tế.<br><br>
+<b>📌 Chỉ thị quan trọng theo Điều 4:</b><br>
+1. <b>Quy định chuẩn:</b> Một năm học gồm <b>44 tuần dạy học</b> và <b>8 tuần nghỉ</b> (7 tuần nghỉ Hè & Tết Âm lịch, và 1 tuần nghỉ Lễ/Tết Dương lịch/Ngày truyền thống CAND).<br>
+2. <b>Cơ chế tự động:</b> Để bảo vệ quyền lợi giảng viên và đơn giản hóa thiết lập, các đợt nghỉ Tết, Lễ, Giỗ tổ Hùng Vương được tự động điền dựa trên preset khi tạo năm học mới. Nghỉ hè tự động được đại diện bởi khoảng trống (gap) cuối năm học.
 </p>
     """, unsafe_allow_html=True)
-    df_holidays = pd.read_sql_query("""
-        SELECT h.id, h.timeframe_id, h.name, h.start_date, h.end_date, t.name as timeframe_name
-        FROM academic_holidays h
-        JOIN timeframes t ON h.timeframe_id = t.id
-    """, conn)
-    if df_holidays.empty:
-        render_empty_state("Chưa có ngày nghỉ nào được cấu hình. Vui lòng thêm các kỳ nghỉ (Tết, Hè, Lễ).")
+    
+    df_tf_list = pd.read_sql_query("SELECT id, name, start_date, end_date FROM timeframes ORDER BY start_date DESC", conn)
+    
+    all_holidays = []
+    
+    if not df_tf_list.empty:
+        df_db_hols = pd.read_sql_query("""
+            SELECT id, timeframe_id, name, start_date, end_date
+            FROM academic_holidays
+        """, conn)
+        
+        for _, tf_row in df_tf_list.iterrows():
+            tf_id = int(tf_row['id'])
+            tf_name = tf_row['name']
+            tf_start = tf_row['start_date']
+            tf_end = tf_row['end_date']
+            
+            tf_db_hols = df_db_hols[df_db_hols['timeframe_id'] == tf_id]
+            tf_holidays_list = []
+            
+            db_days = 0
+            for _, h_row in tf_db_hols.iterrows():
+                h_days = (pd.to_datetime(h_row['end_date']) - pd.to_datetime(h_row['start_date'])).days + 1
+                db_days += h_days
+                tf_holidays_list.append({
+                    'id': h_row['id'],
+                    'timeframe_id': tf_id,
+                    'name': h_row['name'],
+                    'start_date': str(h_row['start_date']),
+                    'end_date': str(h_row['end_date']),
+                    'timeframe_name': tf_name,
+                    'days_count': h_days,
+                    'is_virtual': False
+                })
+                
+            gap_start, gap_end = get_timeframe_gap_dates(tf_start, tf_end)
+            gap_days = 0
+            if gap_start is not None and gap_end is not None:
+                gap_days = (gap_end - gap_start).days + 1
+                tf_holidays_list.append({
+                    'id': None,
+                    'timeframe_id': tf_id,
+                    'name': 'Nghỉ Hè (Khoảng trống năm học)',
+                    'start_date': gap_start.strftime('%Y-%m-%d'),
+                    'end_date': gap_end.strftime('%Y-%m-%d'),
+                    'timeframe_name': tf_name,
+                    'days_count': gap_days,
+                    'is_virtual': True
+                })
+                
+            total_days = db_days + gap_days
+            if total_days < 56:
+                st.warning(f"⚠️ Cảnh báo: Năm học **{tf_name}** hiện chỉ có {total_days} ngày nghỉ. Tính toán miễn giảm sẽ bị lệch do Cap kích hoạt. Cần tối thiểu ~56 ngày (8 tuần).")
+                
+            all_holidays.extend(tf_holidays_list)
+            
+    if not all_holidays:
+        render_empty_state("Chưa có ngày nghỉ nào được cấu hình. Vui lòng thêm các kỳ nghỉ (Tết, Lễ).")
     else:
-        for tf_name, group in df_holidays.groupby('timeframe_name'):
-            total_days = sum((pd.to_datetime(row['end_date']) - pd.to_datetime(row['start_date'])).days + 1 for _, row in group.iterrows())
-            if total_days < 40:
-                st.warning(f"⚠️ Cảnh báo: Năm học **{tf_name}** hiện chỉ có {total_days} ngày nghỉ. Tính toán miễn giảm (như thai sản, đi học) sẽ bị sai lệch nếu chưa cấu hình đủ Nghỉ hè và Tết (cần tối thiểu ~40 ngày).")
-        for _, row in df_holidays.iterrows():
-            days_count = (pd.to_datetime(row['end_date']) - pd.to_datetime(row['start_date'])).days + 1
-            badge_html = f'<span class="md-chip md-chip-amber"><span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">block</span>{days_count} ngày bị loại</span>'
-            col1, col2 = st.columns([8, 2])
-            with col1:
-                st.markdown(f"""
-<div style="
-    background-color: var(--md-amber-bg);
-    padding: 16px 20px;
-    border-radius: var(--radius-md);
-    border: 1px solid #fde68a;
-    margin-bottom: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-">
-    <div>
-        <div style="color: var(--md-amber); font-weight: 600;">{row['name']}</div>
-        <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
-            {row['start_date']} → {row['end_date']} | Năm học: <b>{row['timeframe_name']}</b>
+        for row in all_holidays:
+            days_count = row['days_count']
+            edit_key = f"edit_academic_holidays_{row['id']}" if not row['is_virtual'] else None
+            
+            if edit_key and st.session_state.get(edit_key, False):
+                with st.container(border=True):
+                    st.markdown(f"##### Chỉnh sửa đợt nghỉ: **{row['name']}**")
+                    with st.form(f"form_edit_hol_{row['id']}"):
+                        new_name = st.text_input("Tên đợt nghỉ", value=row['name'])
+                        df_tf_opts = pd.read_sql_query("SELECT id, name FROM timeframes", conn)
+                        tf_options = {int(tf_r['id']): tf_r['name'] for _, tf_r in df_tf_opts.iterrows()}
+                        new_tf_id = st.selectbox("Áp dụng cho năm học", options=list(tf_options.keys()), index=list(tf_options.keys()).index(int(row['timeframe_id'])) if int(row['timeframe_id']) in tf_options else 0, format_func=lambda x: tf_options[x])
+                        col_d1, col_d2 = st.columns(2)
+                        import datetime
+                        try:
+                            val_start = datetime.datetime.strptime(row['start_date'], "%Y-%m-%d").date()
+                            val_end = datetime.datetime.strptime(row['end_date'], "%Y-%m-%d").date()
+                        except Exception:
+                            import datetime as dt
+                            val_start = dt.date.today()
+                            val_end = dt.date.today()
+                        new_start = col_d1.date_input("Ngày bắt đầu nghỉ", value=val_start)
+                        new_end = col_d2.date_input("Ngày kết thúc nghỉ", value=val_end)
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.form_submit_button("Lưu", type="primary"):
+                            if not new_name.strip():
+                                st.error("Lý do nghỉ không được để trống")
+                            elif new_start > new_end:
+                                st.error("Ngày bắt đầu không được sau ngày kết thúc")
+                            else:
+                                cursor = conn.cursor()
+                                cursor.execute("UPDATE academic_holidays SET timeframe_id = ?, name = ?, start_date = ?, end_date = ? WHERE id = ?", (new_tf_id, new_name.strip(), str(new_start), str(new_end), row['id']))
+                                conn.commit()
+                                st.session_state[edit_key] = False
+                                st.success("Cập nhật đợt nghỉ thành công!")
+                                st.rerun()
+                        if c2.form_submit_button("Hủy"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+            else:
+                if row['is_virtual']:
+                    badge_html = f'<span class="md-chip md-chip-green"><span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">check_circle</span>{days_count} ngày (Khoảng trống)</span>'
+                    card_style = """
+                        background-color: var(--md-green-bg);
+                        padding: 16px 20px;
+                        border-radius: var(--radius-md);
+                        border: 1px solid rgba(0, 103, 71, 0.3);
+                        margin-bottom: 8px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    """
+                    text_color = "var(--md-secondary)"
+                else:
+                    badge_html = f'<span class="md-chip md-chip-amber"><span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">block</span>{days_count} ngày bị loại</span>'
+                    card_style = """
+                        background-color: var(--md-amber-bg);
+                        padding: 16px 20px;
+                        border-radius: var(--radius-md);
+                        border: 1px solid #fde68a;
+                        margin-bottom: 8px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    """
+                    text_color = "var(--md-amber)"
+                    
+                col1, col2 = st.columns([8, 2])
+                with col1:
+                    st.markdown(f"""
+    <div style="{card_style}">
+        <div>
+            <div style="color: {text_color}; font-weight: 600;">{row['name']}</div>
+            <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
+                {row['start_date']} → {row['end_date']} | Năm học: <b>{row['timeframe_name']}</b>
+            </div>
         </div>
+        {badge_html}
     </div>
-    {badge_html}
-</div>
-                """, unsafe_allow_html=True)
-            with col2:
-                render_delete_button('academic_holidays', row['id'])
+                    """, unsafe_allow_html=True)
+                with col2:
+                    if row['is_virtual']:
+                        st.markdown('<div style="text-align: center; color: var(--md-secondary); font-size: 0.85rem; font-weight: 600; margin-top: 24px;">Tự động</div>', unsafe_allow_html=True)
+                    else:
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            if not read_only:
+                                if st.button("Sửa", key=f"btn_edit_academic_holidays_{row['id']}"):
+                                    st.session_state[edit_key] = True
+                                    st.rerun()
+                        with col_btn2:
+                            render_delete_button('academic_holidays', row['id'])
     if not read_only:
         with st.expander("Thêm đợt điều chỉnh mới"):
             with st.form("add_holiday_form"):
@@ -263,31 +408,61 @@ def _tab2_body():
         render_empty_state("Chưa có đơn vị nào.")
     else:
         for _, row in df_depts.iterrows():
-            type_str = "Có giảng dạy" if row['is_teaching_dept'] else "Hành chính"
-            badge_html = f'<span class="md-chip md-chip-{"green" if row["is_teaching_dept"] else "primary"}">{type_str}</span>'
-            col1, col2 = st.columns([8, 2])
-            with col1:
+            edit_key = f"edit_departments_{row['name']}"
+            if st.session_state.get(edit_key, False):
+                with st.container(border=True):
+                    st.markdown(f"##### Chỉnh sửa đơn vị: **{row['name']}**")
+                    with st.form(f"form_edit_dept_{row['name']}"):
+                        new_name = st.text_input("Tên Đơn vị", value=row['name'])
+                        new_code = st.text_input("Mã Đơn vị", value=row['dept_code'] if 'dept_code' in row and row['dept_code'] else "")
+                        new_is_teaching = st.checkbox("Là đơn vị có giảng dạy (Khoa, Bộ môn)", value=bool(row['is_teaching_dept']))
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.form_submit_button("Lưu", type="primary"):
+                            if not new_name.strip():
+                                st.error("Tên Đơn vị không được để trống")
+                            else:
+                                try:
+                                    cursor = conn.cursor()
+                                    cursor.execute("PRAGMA foreign_keys = OFF;")
+                                    try:
+                                        # Update department
+                                        cursor.execute("""
+                                            UPDATE departments 
+                                            SET name = ?, is_teaching_dept = ?, dept_code = ? 
+                                            WHERE name = ?
+                                        """, (new_name.strip(), int(new_is_teaching), new_code.strip() or None, row['name']))
+                                        
+                                        # Update dependencies
+                                        cursor.execute("UPDATE admin_users SET department_name = ? WHERE department_name = ?", (new_name.strip(), row['name']))
+                                        cursor.execute("UPDATE teacher_role_history SET value_text = ? WHERE record_type = 'DEPARTMENT' AND value_text = ?", (new_name.strip(), row['name']))
+                                        conn.commit()
+                                        st.session_state[edit_key] = False
+                                        st.success("Cập nhật đơn vị thành công!")
+                                        st.rerun()
+                                    except sqlite3.IntegrityError:
+                                        conn.rollback()
+                                        st.error("Tên đơn vị hoặc mã đơn vị đã tồn tại.")
+                                    finally:
+                                        cursor.execute("PRAGMA foreign_keys = ON;")
+                                except Exception as e:
+                                    st.error(f"Lỗi: {e}")
+                        if c2.form_submit_button("Hủy"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+            else:
+                type_str = "Có giảng dạy" if row['is_teaching_dept'] else "Hành chính"
+                badge_html = f'<span class="md-chip md-chip-{"green" if row["is_teaching_dept"] else "primary"}">{type_str}</span>'
                 code_prefix = f"[{row['dept_code']}] " if 'dept_code' in row and row['dept_code'] else ""
-                st.markdown(f"""
-<div style="
-    background-color: var(--md-surface-container-lowest);
-    padding: 16px 20px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--md-outline-variant);
-    margin-bottom: 8px;
-    box-shadow: var(--shadow-card);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-">
-    <div style="display: flex; align-items: center; gap: 12px;">
-        <span style="color: var(--md-on-surface); font-weight: 600;">{code_prefix}{row['name']}</span>
-        {badge_html}
-    </div>
-</div>
-                """, unsafe_allow_html=True)
-            with col2:
-                render_delete_button('departments', row['name'], id_col='name')
+                
+                render_list_item_with_edit(
+                    content=f'<span style="color: var(--md-on-surface); font-weight: 600;">{code_prefix}{row["name"]}</span>',
+                    table='departments',
+                    row_id=row['name'],
+                    edit_key=edit_key,
+                    del_col='name',
+                    badge_html=badge_html
+                )
 
     if not read_only:
         with st.expander("Thêm Đơn vị mới"):
@@ -321,7 +496,48 @@ def _tab3_body():
         render_empty_state("Chưa có chức danh nào.")
     else:
         for _, row in df_titles.iterrows():
-            content = f"""
+            edit_key = f"edit_titles_{row['name']}"
+            if st.session_state.get(edit_key, False):
+                with st.container(border=True):
+                    st.markdown(f"##### Chỉnh sửa chức danh: **{row['name']}**")
+                    with st.form(f"form_edit_title_{row['name']}"):
+                        new_name = st.text_input("Tên Chức danh", value=row['name'])
+                        col1, col2, col3 = st.columns(3)
+                        new_nat = col1.number_input("Định mức Giờ giảng - Khối Tự nhiên", min_value=0, step=10, value=int(row['base_teaching_hours_natural']))
+                        new_soc = col2.number_input("Định mức Giờ giảng - Khối Xã hội", min_value=0, step=10, value=int(row['base_teaching_hours_social']))
+                        new_nckh = col3.number_input("Định mức Giờ NCKH", min_value=0, step=10, value=int(row['base_nckh_hours']))
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.form_submit_button("Lưu", type="primary"):
+                            if not new_name.strip():
+                                st.error("Tên Chức danh không được để trống")
+                            else:
+                                try:
+                                    cursor = conn.cursor()
+                                    cursor.execute("PRAGMA foreign_keys = OFF;")
+                                    try:
+                                        cursor.execute("""
+                                            UPDATE titles 
+                                            SET name = ?, base_teaching_hours_natural = ?, base_teaching_hours_social = ?, base_nckh_hours = ? 
+                                            WHERE name = ?
+                                        """, (new_name.strip(), int(new_nat), int(new_soc), int(new_nckh), row['name']))
+                                        cursor.execute("UPDATE teacher_role_history SET value_text = ? WHERE record_type = 'TITLE' AND value_text = ?", (new_name.strip(), row['name']))
+                                        conn.commit()
+                                        st.session_state[edit_key] = False
+                                        st.success("Cập nhật chức danh thành công!")
+                                        st.rerun()
+                                    except sqlite3.IntegrityError:
+                                        conn.rollback()
+                                        st.error("Tên chức danh đã tồn tại.")
+                                    finally:
+                                        cursor.execute("PRAGMA foreign_keys = ON;")
+                                except Exception as e:
+                                    st.error(f"Lỗi: {e}")
+                        if c2.form_submit_button("Hủy"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+            else:
+                content = f"""
 <div>
     <div style="color: var(--md-on-surface); font-weight: 600;">{row['name']}</div>
     <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
@@ -330,8 +546,14 @@ def _tab3_body():
         Định mức Giờ NCKH: <b>{row['base_nckh_hours']}</b>
     </div>
 </div>
-            """
-            render_list_item(content, 'titles', row['name'], del_col='name')
+                """
+                render_list_item_with_edit(
+                    content=content,
+                    table='titles',
+                    row_id=row['name'],
+                    edit_key=edit_key,
+                    del_col='name'
+                )
 
     if not read_only:
         with st.expander("Thêm Chức danh mới"):
@@ -364,7 +586,48 @@ def _tab4_body():
         render_empty_state("Chưa có chức vụ nào.")
     else:
         for _, row in df_roles.iterrows():
-            content = f"""
+            edit_key = f"edit_reduction_rules_{row['id']}"
+            if st.session_state.get(edit_key, False):
+                with st.container(border=True):
+                    action_prefix = "Yêu cầu chỉnh sửa" if not is_admin else "Chỉnh sửa"
+                    st.markdown(f"##### {action_prefix} chức vụ: **{row['name']}**")
+                    with st.form(f"form_edit_role_{row['id']}"):
+                        new_name = st.text_input("Tên chức vụ", value=row['name'])
+                        new_teach = st.number_input("Tỷ lệ miễn giảng dạy (%)", min_value=0.0, max_value=100.0, value=float(row['teaching_reduction_pct']), step=5.0)
+                        new_nckh = st.number_input("Tỷ lệ miễn NCKH (%)", min_value=0.0, max_value=100.0, value=float(row['nckh_reduction_pct']), step=5.0)
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.form_submit_button("Lưu", type="primary"):
+                            if not new_name.strip():
+                                st.error("Tên chức vụ không được để trống")
+                            else:
+                                if is_admin:
+                                    try:
+                                        cursor = conn.cursor()
+                                        cursor.execute("""
+                                            UPDATE reduction_rules
+                                            SET name = ?, teaching_reduction_pct = ?, nckh_reduction_pct = ?
+                                            WHERE id = ?
+                                        """, (new_name.strip(), new_teach, new_nckh, row['id']))
+                                        conn.commit()
+                                        st.session_state[edit_key] = False
+                                        st.success("Cập nhật chức vụ thành công!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Lỗi: {e}")
+                                else:
+                                    try:
+                                        request_reduction_rule_change("update", row['id'], new_name.strip(), "ROLE", new_teach, new_nckh)
+                                        st.session_state[edit_key] = False
+                                        st.success("Đã gửi yêu cầu chỉnh sửa lên hệ thống!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Lỗi: {e}")
+                        if c2.form_submit_button("Hủy"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+            else:
+                content = f"""
 <div>
     <div style="color: var(--md-on-surface); font-weight: 600;">{row['name']}</div>
     <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
@@ -372,8 +635,15 @@ def _tab4_body():
         Miễn giảm NCKH: <b>{row['nckh_reduction_pct']}%</b>
     </div>
 </div>
-            """
-            render_list_item(content, 'reduction_rules', row['id'], rule_type='ROLE', rule_name=row['name'])
+                """
+                render_list_item_with_edit(
+                    content=content,
+                    table='reduction_rules',
+                    row_id=row['id'],
+                    edit_key=edit_key,
+                    rule_type='ROLE',
+                    rule_name=row['name']
+                )
 
     if is_admin or is_head:
         action_prefix = "Yêu cầu " if is_head else ""
@@ -406,38 +676,6 @@ def _tab4_body():
                         except Exception as e:
                             st.error(f"Lỗi: {e}")
 
-        with st.expander(f"{action_prefix}Sửa Chức vụ Quản lý"):
-            with st.form("edit_role_form"):
-                selected_edit_rule = st.selectbox("Chọn chức vụ cần sửa", options=df_roles['name'].tolist() if not df_roles.empty else [])
-                new_r_name = st.text_input("Tên chức vụ mới", value=selected_edit_rule)
-                new_r_teach = st.number_input("Tỷ lệ miễn giảng dạy mới (%)", min_value=0.0, max_value=100.0, step=5.0)
-                new_r_nckh = st.number_input("Tỷ lệ miễn NCKH mới (%)", min_value=0.0, max_value=100.0, step=5.0)
-                
-                if st.form_submit_button("Lưu Thay đổi"):
-                    if not df_roles.empty:
-                        rule_row = df_roles[df_roles['name'] == selected_edit_rule].iloc[0]
-                        rule_id = int(rule_row['id'])
-                        if is_admin:
-                            try:
-                                cursor = conn.cursor()
-                                cursor.execute("""
-                                    UPDATE reduction_rules
-                                    SET name = ?, teaching_reduction_pct = ?, nckh_reduction_pct = ?
-                                    WHERE id = ?
-                                """, (new_r_name, new_r_teach, new_r_nckh, rule_id))
-                                conn.commit()
-                                st.success("Cập nhật thành công!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi: {e}")
-                        else:
-                            try:
-                                request_reduction_rule_change("update", rule_id, new_r_name, "ROLE", new_r_teach, new_r_nckh)
-                                st.success("Đã gửi yêu cầu chỉnh sửa lên hệ thống!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi: {e}")
-
 
 @st.fragment
 def _tab5_body():
@@ -449,7 +687,48 @@ def _tab5_body():
         render_empty_state("Chưa có diện miễn giảm nào.")
     else:
         for _, row in df_specials.iterrows():
-            content = f"""
+            edit_key = f"edit_reduction_rules_{row['id']}"
+            if st.session_state.get(edit_key, False):
+                with st.container(border=True):
+                    action_prefix = "Yêu cầu chỉnh sửa" if not is_admin else "Chỉnh sửa"
+                    st.markdown(f"##### {action_prefix} diện miễn giảm: **{row['name']}**")
+                    with st.form(f"form_edit_special_{row['id']}"):
+                        new_name = st.text_input("Tên diện miễn giảm", value=row['name'])
+                        new_teach = st.number_input("Tỷ lệ miễn giảng dạy (%)", min_value=0.0, max_value=100.0, value=float(row['teaching_reduction_pct']), step=5.0)
+                        new_nckh = st.number_input("Tỷ lệ miễn NCKH (%)", min_value=0.0, max_value=100.0, value=float(row['nckh_reduction_pct']), step=5.0)
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.form_submit_button("Lưu", type="primary"):
+                            if not new_name.strip():
+                                st.error("Tên diện miễn giảm không được để trống")
+                            else:
+                                if is_admin:
+                                    try:
+                                        cursor = conn.cursor()
+                                        cursor.execute("""
+                                            UPDATE reduction_rules
+                                            SET name = ?, teaching_reduction_pct = ?, nckh_reduction_pct = ?
+                                            WHERE id = ?
+                                        """, (new_name.strip(), new_teach, new_nckh, row['id']))
+                                        conn.commit()
+                                        st.session_state[edit_key] = False
+                                        st.success("Cập nhật diện miễn giảm thành công!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Lỗi: {e}")
+                                else:
+                                    try:
+                                        request_reduction_rule_change("update", row['id'], new_name.strip(), "SPECIAL", new_teach, new_nckh)
+                                        st.session_state[edit_key] = False
+                                        st.success("Đã gửi yêu cầu chỉnh sửa lên hệ thống!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Lỗi: {e}")
+                        if c2.form_submit_button("Hủy"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+            else:
+                content = f"""
 <div>
     <div style="color: var(--md-on-surface); font-weight: 600;">{row['name']}</div>
     <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
@@ -457,8 +736,15 @@ def _tab5_body():
         Miễn giảm NCKH: <b>{row['nckh_reduction_pct']}%</b>
     </div>
 </div>
-            """
-            render_list_item(content, 'reduction_rules', row['id'], rule_type='SPECIAL', rule_name=row['name'])
+                """
+                render_list_item_with_edit(
+                    content=content,
+                    table='reduction_rules',
+                    row_id=row['id'],
+                    edit_key=edit_key,
+                    rule_type='SPECIAL',
+                    rule_name=row['name']
+                )
 
     if is_admin or is_head:
         action_prefix = "Yêu cầu " if is_head else ""
@@ -491,38 +777,6 @@ def _tab5_body():
                         except Exception as e:
                             st.error(f"Lỗi: {e}")
 
-        with st.expander(f"{action_prefix}Sửa Diện miễn giảm"):
-            with st.form("edit_special_form"):
-                selected_edit_rule = st.selectbox("Chọn diện miễn giảm cần sửa", options=df_specials['name'].tolist() if not df_specials.empty else [])
-                new_s_name = st.text_input("Tên diện miễn giảm mới", value=selected_edit_rule)
-                new_s_teach = st.number_input("Tỷ lệ miễn giảng dạy mới (%)", min_value=0.0, max_value=100.0, step=5.0)
-                new_s_nckh = st.number_input("Tỷ lệ miễn NCKH mới (%)", min_value=0.0, max_value=100.0, step=5.0)
-                
-                if st.form_submit_button("Lưu Thay đổi"):
-                    if not df_specials.empty:
-                        rule_row = df_specials[df_specials['name'] == selected_edit_rule].iloc[0]
-                        rule_id = int(rule_row['id'])
-                        if is_admin:
-                            try:
-                                cursor = conn.cursor()
-                                cursor.execute("""
-                                    UPDATE reduction_rules
-                                    SET name = ?, teaching_reduction_pct = ?, nckh_reduction_pct = ?
-                                    WHERE id = ?
-                                """, (new_s_name, new_s_teach, new_s_nckh, rule_id))
-                                conn.commit()
-                                st.success("Cập nhật thành công!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi: {e}")
-                        else:
-                            try:
-                                request_reduction_rule_change("update", rule_id, new_s_name, "SPECIAL", new_s_teach, new_s_nckh)
-                                st.success("Đã gửi yêu cầu chỉnh sửa lên hệ thống!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Lỗi: {e}")
-
 
 @st.fragment
 def _tab6_body():
@@ -535,19 +789,70 @@ def _tab6_body():
         render_empty_state("Chưa có loại hoạt động nào.")
     else:
         for _, row in df_acts.iterrows():
-            cat_variant = "primary" if row['category'] == 'Giảng dạy' else ("green" if row['category'] == 'NCKH' else "amber")
-            badge_html = f'<span class="md-chip md-chip-{cat_variant}">{row["category"]}</span>'
-            content = f"""
-    <div>
-        <div style="color: var(--md-on-surface); font-weight: 600;">{row['name']}</div>
-        <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
-            {badge_html}
-            Đơn vị: <b>{row['unit']}</b> |
-            Tỷ lệ: <b>{row['base_conversion_rate']}</b>
+            edit_key = f"edit_activity_types_{row['id']}"
+            if st.session_state.get(edit_key, False):
+                with st.container(border=True):
+                    st.markdown(f"##### Chỉnh sửa loại hoạt động: **{row['name']}**")
+                    with st.form(f"form_edit_activity_type_{row['id']}"):
+                        new_name = st.text_input("Tên Hoạt động", value=row['name'])
+                        col1, col2 = st.columns(2)
+                        categories = ["Giảng dạy", "NCKH", "Hoạt động chuyên môn", "Chấp hành Nhiệm vụ khác"]
+                        default_cat_idx = categories.index(row['category']) if row['category'] in categories else 0
+                        new_cat = col1.selectbox("Nhóm", categories, index=default_cat_idx)
+                        new_unit = col2.text_input("Đơn vị tính", value=row['unit'])
+                        
+                        new_rate = st.number_input("Tỷ lệ quy đổi", value=float(row['base_conversion_rate']), step=0.5)
+                        
+                        default_group_idx = 0 if row['is_teaching_activity'] else (1 if row['is_nckh_activity'] else 2)
+                        new_activity_group = st.radio(
+                            "Phân loại tính chất hoạt động (cho nghĩa vụ chuẩn)", 
+                            ["Giảng dạy trực tiếp trên lớp (Tính vào nghĩa vụ dạy học chính)", "Nghiên cứu khoa học chính (Tính vào nghĩa vụ nghiên cứu)", "Hoạt động chuyên môn / Nhiệm vụ khác (Không tính vào nghĩa vụ chính trực tiếp)"], 
+                            index=default_group_idx,
+                            key=f"group_edit_{row['id']}"
+                        )
+                        new_is_teach = 1 if "Giảng dạy" in new_activity_group else 0
+                        new_is_nckh = 1 if "Nghiên cứu" in new_activity_group else 0
+
+                        c1, c2 = st.columns(2)
+                        if c1.form_submit_button("Lưu", type="primary"):
+                            if not new_name.strip():
+                                st.error("Tên hoạt động không được để trống")
+                            else:
+                                try:
+                                    cursor = conn.cursor()
+                                    cursor.execute("""
+                                        UPDATE activity_types
+                                        SET name = ?, category = ?, unit = ?, base_conversion_rate = ?, is_teaching_activity = ?, is_nckh_activity = ?
+                                        WHERE id = ?
+                                    """, (new_name.strip(), new_cat, new_unit, new_rate, int(new_is_teach), int(new_is_nckh), row['id']))
+                                    conn.commit()
+                                    st.session_state[edit_key] = False
+                                    st.success("Cập nhật loại hoạt động thành công!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Lỗi: {e}")
+                        if c2.form_submit_button("Hủy"):
+                            st.session_state[edit_key] = False
+                            st.rerun()
+            else:
+                cat_variant = "primary" if row['category'] == 'Giảng dạy' else ("green" if row['category'] == 'NCKH' else "amber")
+                badge_html = f'<span class="md-chip md-chip-{cat_variant}">{row["category"]}</span>'
+                content = f"""
+        <div>
+            <div style="color: var(--md-on-surface); font-weight: 600;">{row['name']}</div>
+            <div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">
+                {badge_html}
+                Đơn vị: <b>{row['unit']}</b> |
+                Tỷ lệ: <b>{row['base_conversion_rate']}</b>
+            </div>
         </div>
-    </div>
                 """
-            render_list_item(content, 'activity_types', row['id'])
+                render_list_item_with_edit(
+                    content=content,
+                    table='activity_types',
+                    row_id=row['id'],
+                    edit_key=edit_key
+                )
     
     if not read_only:
         with st.expander("Thêm Loại Hoạt động mới"):

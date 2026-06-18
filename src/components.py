@@ -968,11 +968,39 @@ def render_sidebar(active_page="home"):
 
             selected_key = st.selectbox("Năm học (Toàn cục):", options=list(tf_options.keys()), index=list(tf_options.keys()).index(current_key), key="global_tf_selector")
             
+            # Display weeks used below the dropdown
+            selected_tf_id = tf_options[selected_key]
+            try:
+                from database import ThreadLocalConnectionProxy
+                with ThreadLocalConnectionProxy() as conn_sb:
+                    cur = conn_sb.cursor()
+                    cur.execute("SELECT start_date, end_date FROM timeframes WHERE id = ?", (selected_tf_id,))
+                    tf_info = cur.fetchone()
+                    if tf_info:
+                        start_str, end_str = tf_info
+                        cur.execute("SELECT start_date, end_date FROM academic_holidays WHERE timeframe_id = ?", (selected_tf_id,))
+                        
+                        import pandas as pd
+                        from calculations import calculate_t04_weeks
+                        s_dt = pd.to_datetime(start_str)
+                        e_dt = pd.to_datetime(end_str)
+                        
+                        holidays_list = []
+                        for r in cur.fetchall():
+                            holidays_list.append((pd.to_datetime(r[0]), pd.to_datetime(r[1])))
+                            
+                        weeks_used = calculate_t04_weeks(s_dt, e_dt, holidays_list)
+                        st.markdown(f'<div style="font-size: 12px; color: #FFC107; margin-top: -8px; margin-bottom: 12px; font-weight: 600;">📅 Thực tế: {weeks_used:.1f} tuần dạy học</div>', unsafe_allow_html=True)
+            except Exception as e:
+                # Log to stderr for system administrators
+                import sys
+                print(f"Error calculating weeks in sidebar: {e}", file=sys.stderr)
+            
             if tf_options[selected_key] != current_val:
                 st.session_state['global_tf_id'] = tf_options[selected_key]
                 st.rerun()
             
-            st.markdown('<div style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="margin-bottom: 4px;"></div>', unsafe_allow_html=True)
         # -----------------------------------
 
         st.page_link("app.py", label="Trang chủ", icon=":material/home:")
