@@ -998,3 +998,311 @@ def calculate_department_compensation(df_teachers):
             
     return df
 
+
+def _count_workdays_detailed(start_date, end_date, holidays_list, holidays_named):
+    """
+    Count workdays in [start_date, end_date] and return full breakdown dict.
+    holidays_list: list of (pd.Timestamp start, pd.Timestamp end)
+    holidays_named: list of {'name': str, 'start': pd.Timestamp, 'end': pd.Timestamp}
+    """
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    if start_date > end_date:
+        return {
+            'calendar_days': 0, 'weekend_days': 0,
+            'holiday_days': [], 'holiday_days_count': 0,
+            'active_workdays': 0, 'full_weeks': 0, 'remainder_days': 0, 'exact_weeks': 0.0
+        }
+
+    days_range = pd.date_range(start=start_date, end=end_date)
+    calendar_days = len(days_range)
+    weekend_days = 0
+    holiday_days = []   # list of (date_str, holiday_name)
+    active_workdays = 0
+
+    for day in days_range:
+        if day.weekday() >= 5:
+            weekend_days += 1
+            continue
+        is_h = False
+        h_name = ""
+        for h_start, h_end in holidays_list:
+            if h_start <= day <= h_end:
+                is_h = True
+                for hn in holidays_named:
+                    if hn['start'] <= day <= hn['end']:
+                        h_name = hn['name']
+                        break
+                break
+        if is_h:
+            holiday_days.append((day.strftime('%d/%m/%Y'), h_name))
+        else:
+            active_workdays += 1
+
+    full_weeks = active_workdays // 5
+    remainder_days = active_workdays % 5
+    return {
+        'calendar_days': calendar_days,
+        'weekend_days': weekend_days,
+        'holiday_days': holiday_days,
+        'holiday_days_count': len(holiday_days),
+        'active_workdays': active_workdays,
+        'full_weeks': full_weeks,
+        'remainder_days': remainder_days,
+        'exact_weeks': active_workdays / 5.0,
+    }
+
+
+def get_teacher_formula_breakdown(teacher_id, timeframe_id):
+    """
+    Returns a detailed parameter-level breakdown dict for one teacher.
+    Used by the Dashboard transparency formula card.
+    Shows every intermediate value: calendar days, weekends, holiday names,
+    active workdays, week fractions, formula strings, reduction rules.
+    """
+    conn = get_connection()
+    tf_id, tf_start, tf_end, std_weeks = get_timeframe_dates(timeframe_id)
+    if not tf_id:
+        conn.close()
+        return None
+
+    # Timeframe name
+    tf_row = pd.read_sql_query("SELECT name FROM timeframes WHERE id = ?", conn, params=[tf_id])
+    tf_name = tf_row.iloc[0]['name'] if not tf_row.empty else str(tf_id)
+
+    # Teacher
+    t_row = pd.read_sql_query("SELECT * FROM teachers WHERE id = ?", conn, params=[int(teacher_id)])
+    if t_row.empty:
+        conn.close()
+        return None
+    teacher = t_row.iloc[0]
+
+    # Holidays with names
+    df_hol = pd.read_sql_query(
+        "SELECT name, start_date, end_date FROM academic_holidays WHERE timeframe_id = ?",
+        conn, params=[tf_id]
+    )
+    holidays_list = []
+    holidays_named = []
+    for _, hr in df_hol.iterrows():
+        hs = pd.to_datetime(hr['start_date'])
+        he = pd.to_datetime(hr['end_date'])
+        holidays_list.append((hs, he))
+        holidays_named.append({'name': hr['name'], 'start': hs, 'end': he})
+
+    # Lookup tables
+    df_titles = pd.read_sql_query("SELECT * FROM titles", conn)
+    titles_dict = df_titles.set_index('name').to_dict('index')
+    df_rules = pd.read_sql_query("SELECT * FROM reduction_rules", conn)
+    rules_dict = df_rules.set_index('id').to_dict('index')
+    df_depts = pd.read_sql_query("SELECT * FROM departments", conn)
+    depts_dict = df_depts.set_index('name').to_dict('index')
+
+    # History for this teacher
+    df_hist = pd.read_sql_query(
+        "SELECT * FROM teacher_role_history WHERE teacher_id = ? AND start_date <= ? AND (end_date IS NULL OR end_date >= ?)",
+        conn, params=[int(teacher_id), tf_end.strftime('%Y-%m-%d'), tf_start.strftime('%Y-%m-%d')]
+    )
+    df_hist['start_date'] = pd.to_datetime(df_hist['start_date'])
+    df_hist['end_date'] = pd.to_datetime(df_hist['end_date']).fillna(pd.to_datetime(tf_end))
+
+    title_recs = df_hist[df_hist['record_type'] == 'TITLE'].copy()
+    dept_recs  = df_hist[df_hist['record_type'] == 'DEPARTMENT'].copy()
+    role_recs  = df_hist[df_hist['record_type'] == 'REDUCTION'].copy()
+
+    # Latest title/dept for fallback display
+    latest_title_name = ""
+    latest_base_gc = 0
+    latest_base_nckh = 0
+    if not title_recs.empty:
+        st_titles = title_recs.sort_values('start_date')
+        latest_title_name = st_titles.iloc[-1]['value_text']
+        if latest_title_name in titles_dict:
+            if teacher['subject_group'] == 'Tự nhiên/Kỹ thuật':
+                latest_base_gc = titles_dict[latest_title_name]['base_teaching_hours_natural']
+            else:
+                latest_base_gc = titles_dict[latest_title_name]['base_teaching_hours_social']
+            latest_base_nckh = titles_dict[latest_title_name]['base_nckh_hours']
+
+    latest_dept = ""
+    if not dept_recs.empty:
+        latest_dept = dept_recs.sort_values('start_date').iloc[-1]['value_text']
+
+    NATURAL_DEPTS = {
+        'Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học',
+        'Nhà giáo giảng dạy thực hành',
+        'Khoa Ngoại ngữ - Tin học',
+        'Khoa Quân sự, võ thuật, thể dục thể thao',
+    }
+
+    # Build segments
+    segments_raw = _generate_timeline_segments(tf_start, tf_end, title_recs, dept_recs, role_recs, rules_dict)
+
+    segments_detail = []
+    total_required_gc = 0.0
+    total_required_nckh = 0.0
+
+    for seg_start, seg_end in segments_raw:
+        midpoint = seg_start + (seg_end - seg_start) / 2
+
+        # Active title at midpoint
+        title_name = latest_title_name
+        at = title_recs[(title_recs['start_date'] <= midpoint) & (title_recs['end_date'] >= midpoint)]
+        if not at.empty:
+            title_name = at.iloc[0]['value_text']
+        else:
+            st_t = title_recs.sort_values('start_date')
+            if not st_t.empty:
+                bt = st_t[st_t['start_date'] <= midpoint]
+                title_name = bt.iloc[-1]['value_text'] if not bt.empty else st_t.iloc[0]['value_text']
+
+        # Active dept at midpoint
+        dept_name = latest_dept
+        ad = dept_recs[(dept_recs['start_date'] <= midpoint) & (dept_recs['end_date'] >= midpoint)]
+        if not ad.empty:
+            dept_name = ad.iloc[0]['value_text']
+        else:
+            st_d = dept_recs.sort_values('start_date')
+            if not st_d.empty:
+                bd = st_d[st_d['start_date'] <= midpoint]
+                dept_name = bd.iloc[-1]['value_text'] if not bd.empty else st_d.iloc[0]['value_text']
+
+        # Active ROLE reduction at midpoint
+        role_t_red = 0.0
+        role_n_red = 0.0
+        role_desc = ""
+        active_role = None
+        for _, r in role_recs.iterrows():
+            rid = r['reduction_rule_id']
+            if rid in rules_dict and rules_dict[rid]['rule_type'] == 'ROLE':
+                if pd.to_datetime(r['start_date']) <= midpoint <= pd.to_datetime(r['end_date']):
+                    active_role = r
+                    rl = rules_dict[rid]
+                    role_t_red = rl['teaching_reduction_pct']
+                    role_n_red = rl['nckh_reduction_pct']
+                    role_desc = rl['name']
+                    break
+
+        # Base hours
+        if title_name in titles_dict:
+            seg_base_gc = (titles_dict[title_name]['base_teaching_hours_natural']
+                           if dept_name in NATURAL_DEPTS
+                           else titles_dict[title_name]['base_teaching_hours_social'])
+            seg_base_nckh = titles_dict[title_name]['base_nckh_hours']
+        else:
+            seg_base_gc = latest_base_gc
+            seg_base_nckh = latest_base_nckh
+
+        # NCKH factor (non-teaching dept)
+        nckh_factor = 1.0
+        if dept_name in depts_dict and depts_dict[dept_name]['is_teaching_dept'] == 0:
+            if title_name not in ['Giáo sư', 'Phó Giáo sư']:
+                nckh_factor = 0.5
+
+        # Weeks: override or exact workday count
+        is_overridden = False
+        override_val = None
+        workday_detail = None
+        if (active_role is not None
+                and pd.notnull(active_role.get('actual_weeks_override'))
+                and str(active_role.get('actual_weeks_override')).strip() != ''):
+            is_overridden = True
+            override_val = float(active_role['actual_weeks_override'])
+            r_start_o = max(pd.to_datetime(tf_start), pd.to_datetime(active_role['start_date']))
+            r_end_o   = min(pd.to_datetime(tf_end),   pd.to_datetime(active_role['end_date']))
+            total_days_o = max(1, (r_end_o - r_start_o).days + 1)
+            seg_days_o   = (seg_end - seg_start).days + 1
+            seg_weeks = override_val * (seg_days_o / total_days_o)
+        else:
+            wd = _count_workdays_detailed(seg_start, seg_end, holidays_list, holidays_named)
+            seg_weeks = wd['exact_weeks']
+            workday_detail = wd
+
+        req_gc   = seg_base_gc   * (1 - role_t_red / 100.0) * (seg_weeks / std_weeks)
+        req_nckh = seg_base_nckh * nckh_factor * (1 - role_n_red / 100.0) * (seg_weeks / std_weeks)
+
+        total_required_gc   += req_gc
+        total_required_nckh += req_nckh
+
+        segments_detail.append({
+            'period_start': seg_start.strftime('%d/%m/%Y'),
+            'period_end':   seg_end.strftime('%d/%m/%Y'),
+            'title_name':   title_name,
+            'dept_name':    dept_name,
+            'base_gc':      seg_base_gc,
+            'base_nckh':    seg_base_nckh,
+            'role_desc':     role_desc,
+            'role_t_red_pct': role_t_red,
+            'role_n_red_pct': role_n_red,
+            'nckh_factor':   nckh_factor,
+            'is_overridden': is_overridden,
+            'override_val':  override_val,
+            'seg_weeks':     seg_weeks,
+            'std_weeks':     std_weeks,
+            'req_gc':        req_gc,
+            'req_nckh':      req_nckh,
+            'workday_detail': workday_detail,
+        })
+
+    # Reduction rules (SPECIAL) — show parameters + workday counts
+    reductions_detail = []
+    for _, r in role_recs.iterrows():
+        rid = r['reduction_rule_id']
+        if rid not in rules_dict:
+            continue
+        rl = rules_dict[rid]
+        if rl['rule_type'] != 'SPECIAL' or rl['name'].startswith('Trợ giảng'):
+            continue
+
+        r_start = max(pd.to_datetime(tf_start), pd.to_datetime(r['start_date']))
+        r_end   = min(pd.to_datetime(tf_end),   pd.to_datetime(r['end_date']))
+        if r_start > r_end:
+            continue
+
+        has_override = (pd.notnull(r.get('actual_weeks_override'))
+                        and str(r.get('actual_weeks_override')).strip() != '')
+        override_val_r = float(r['actual_weeks_override']) if has_override else None
+
+        if has_override:
+            red_weeks = override_val_r
+            workday_detail_r = None
+        else:
+            wd_r = _count_workdays_detailed(r_start, r_end, holidays_list, holidays_named)
+            red_weeks = wd_r['exact_weeks']
+            workday_detail_r = wd_r
+
+        reductions_detail.append({
+            'rule_name':             rl['name'],
+            'teaching_reduction_pct': rl['teaching_reduction_pct'],
+            'nckh_reduction_pct':    rl['nckh_reduction_pct'],
+            'period_start':          r_start.strftime('%d/%m/%Y'),
+            'period_end':            r_end.strftime('%d/%m/%Y'),
+            'is_overridden':         has_override,
+            'override_val':          override_val_r,
+            'red_weeks':             red_weeks,
+            'std_weeks':             std_weeks,
+            'workday_detail':        workday_detail_r,
+        })
+
+    conn.close()
+
+    return {
+        'teacher_name':    teacher['name'],
+        'teacher_title':   latest_title_name,
+        'teacher_dept':    latest_dept,
+        'subject_group':   teacher['subject_group'],
+        'tf_name':         tf_name,
+        'tf_start':        tf_start.strftime('%d/%m/%Y'),
+        'tf_end':          tf_end.strftime('%d/%m/%Y'),
+        'std_weeks':       std_weeks,
+        'holidays': [
+            {'name': h['name'],
+             'start': h['start'].strftime('%d/%m/%Y'),
+             'end':   h['end'].strftime('%d/%m/%Y')}
+            for h in holidays_named
+        ],
+        'segments':              segments_detail,
+        'reductions':            reductions_detail,
+        'total_required_gc':    total_required_gc,
+        'total_required_nckh':  total_required_nckh,
+    }

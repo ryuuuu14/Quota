@@ -97,6 +97,272 @@ def render_warning_state(message):
     """, unsafe_allow_html=True)
 
 
+def render_formula_card(breakdown):
+    """
+    Renders a detailed formula transparency card for one teacher.
+    breakdown: dict returned by get_teacher_formula_breakdown() in calculations.py
+    """
+    if not breakdown:
+        st.warning("Không tìm thấy dữ liệu chi tiết cho nhà giáo này.")
+        return
+
+    # ── CSS for formula card ───────────────────────────────────────────────────
+    st.markdown("""
+<style>
+.fc-section { margin-bottom: 20px; }
+.fc-title   { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+               letter-spacing: 0.06em; color: var(--md-on-surface-variant);
+               margin-bottom: 8px; }
+.fc-card    { background: var(--md-surface-container-lowest);
+               border: 1px solid var(--md-outline-variant);
+               border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; }
+.fc-formula { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;
+               color: var(--md-on-surface); background: var(--md-surface-container);
+               padding: 10px 14px; border-radius: 7px; margin: 8px 0; line-height: 1.8; }
+.fc-eq      { color: var(--md-primary); font-weight: 700; }
+.fc-num     { color: #0284c7; }
+.fc-label   { color: var(--md-on-surface-variant); font-size: 0.8rem; }
+.fc-ok      { color: #047857; font-weight: 600; }
+.fc-warn    { color: #d97706; font-weight: 600; }
+.fc-tbl     { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 8px; }
+.fc-tbl th  { background: var(--md-surface-container); color: var(--md-on-surface-variant);
+               font-weight: 600; padding: 6px 10px; text-align: left;
+               border-bottom: 1px solid var(--md-outline-variant); }
+.fc-tbl td  { padding: 5px 10px; border-bottom: 1px solid var(--md-outline-variant); }
+.fc-tbl tr:last-child td { border-bottom: none; }
+.fc-hday    { font-size: 0.78rem; color: var(--md-on-surface-variant); }
+</style>
+""", unsafe_allow_html=True)
+
+    name    = breakdown['teacher_name']
+    title   = breakdown['teacher_title']
+    dept    = breakdown['teacher_dept']
+    tf_name = breakdown['tf_name']
+    tf_s    = breakdown['tf_start']
+    tf_e    = breakdown['tf_end']
+    std_w   = breakdown['std_weeks']
+    segs    = breakdown['segments']
+    reds    = breakdown['reductions']
+    tot_gc  = breakdown['total_required_gc']
+    tot_nck = breakdown['total_required_nckh']
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    st.markdown(f"""
+<div class="fc-card" style="border-left: 4px solid var(--md-primary);">
+<div style="font-size: 1.15rem; font-weight: 800; color: var(--md-on-surface);">
+  {name}
+</div>
+<div style="font-size: 0.88rem; color: var(--md-on-surface-variant); margin-top: 4px;">
+  {title} · {dept}
+</div>
+<div style="font-size: 0.82rem; color: var(--md-on-surface-variant); margin-top: 2px;">
+  Năm học: <b>{tf_name}</b> ({tf_s} → {tf_e}) · Tuần chuẩn: <b>{std_w:.0f} tuần</b>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Holidays reference ─────────────────────────────────────────────────────
+    if breakdown['holidays']:
+        rows_html = "".join(
+            f"<tr><td>{h['name']}</td><td>{h['start']}</td><td>{h['end']}</td></tr>"
+            for h in breakdown['holidays']
+        )
+        st.markdown(f"""
+<div class="fc-section">
+<div class="fc-title">📅 Danh sách ngày nghỉ lễ/Tết trong năm học (dùng để loại khỏi tuần tính toán)</div>
+<div class="fc-card">
+<table class="fc-tbl">
+  <tr><th>Kỳ nghỉ</th><th>Từ ngày</th><th>Đến ngày</th></tr>
+  {rows_html}
+</table>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Segment breakdown ──────────────────────────────────────────────────────
+    st.markdown('<div class="fc-title">📊 Chi tiết tính Định mức theo từng giai đoạn</div>',
+                unsafe_allow_html=True)
+
+    for i, seg in enumerate(segs, 1):
+        wd  = seg['workday_detail']
+        ovr = seg['is_overridden']
+
+        # Build workday arithmetic block
+        if ovr:
+            weeks_block = f"""
+<div class="fc-formula">
+  <span class="fc-label">Số tuần (ghi đè thủ công):</span><br>
+  <span class="fc-num">{seg['seg_weeks']:.4f} tuần</span>
+  <span class="fc-label"> (override = {seg['override_val']})</span>
+</div>"""
+        else:
+            # List holidays that fell in this segment
+            hday_rows = ""
+            if wd and wd['holiday_days']:
+                grouped = {}
+                for d, n in wd['holiday_days']:
+                    grouped.setdefault(n, []).append(d)
+                for hname, hdates in grouped.items():
+                    hday_rows += f"<tr><td class='fc-hday'>{hname}</td><td class='fc-hday'>{', '.join(hdates[:3])}{'...' if len(hdates) > 3 else ''}</td><td class='fc-hday'>{len(hdates)} ngày</td></tr>"
+                hday_table = f"""
+<table class="fc-tbl" style="margin-top:6px;">
+<tr><th>Kỳ nghỉ trùng giai đoạn</th><th>Ngày cụ thể</th><th>Số ngày</th></tr>
+{hday_rows}
+</table>"""
+            else:
+                hday_table = "<div class='fc-label' style='margin-top:6px;'>Không có ngày nghỉ lễ trong giai đoạn này.</div>"
+
+            cal   = wd['calendar_days'] if wd else 0
+            wkend = wd['weekend_days']  if wd else 0
+            hhol  = wd['holiday_days_count'] if wd else 0
+            actv  = wd['active_workdays'] if wd else 0
+            fw    = wd['full_weeks']     if wd else 0
+            rm    = wd['remainder_days'] if wd else 0
+            ex_w  = seg['seg_weeks']
+
+            weeks_block = f"""
+<div class="fc-formula">
+  <span class="fc-label">Đếm ngày làm việc theo T04 Điều 10.1.b:</span><br>
+  Tổng ngày lịch: <span class="fc-num">{cal}</span><br>
+  − Ngày cuối tuần (T7, CN): <span class="fc-num">{wkend}</span><br>
+  − Ngày nghỉ lễ/Tết trùng ngày thường: <span class="fc-num">{hhol}</span><br>
+  <span style="border-top:1px solid var(--md-outline-variant);display:block;margin:4px 0;"></span>
+  <b>= Ngày làm việc thực tế: <span class="fc-num">{actv}</span></b><br>
+  = {fw} tuần đủ × 5 + {rm} ngày dư<br>
+  <span class="fc-eq">⟹ Số tuần = {actv} ÷ 5 = <span class="fc-num">{ex_w:.4f} tuần</span></span>
+</div>
+{hday_table}"""
+
+        # Build GC formula string
+        role_part = ""
+        if seg['role_t_red_pct'] > 0:
+            role_part = f" × (1 − {seg['role_t_red_pct']:.0f}%)"
+        gc_formula = (
+            f"Định mức GC = {seg['base_gc']}"
+            f"{role_part}"
+            f" × {seg['seg_weeks']:.4f} / {seg['std_weeks']:.0f}"
+            f" = <b class='fc-num'>{seg['req_gc']:.2f} GC</b>"
+        )
+
+        nckh_parts = [str(seg['base_nckh'])]
+        if seg['nckh_factor'] != 1.0:
+            nckh_parts.append(f"× {seg['nckh_factor']}")
+        if seg['role_n_red_pct'] > 0:
+            nckh_parts.append(f"× (1 − {seg['role_n_red_pct']:.0f}%)")
+        nckh_parts.append(f"× {seg['seg_weeks']:.4f} / {seg['std_weeks']:.0f}")
+        nckh_formula = "Định mức NCKH = " + " ".join(nckh_parts) + f" = <b class='fc-num'>{seg['req_nckh']:.2f} giờ</b>"
+
+        role_badge = (
+            f"<span style='background:var(--md-amber);color:#000;padding:2px 8px;"
+            f"border-radius:99px;font-size:0.75rem;font-weight:700;'>"
+            f"Kiêm nhiệm: {seg['role_desc']} (−{seg['role_t_red_pct']:.0f}% GD)</span> "
+        ) if seg['role_desc'] else ""
+
+        ovr_badge = (
+            "<span style='background:#dbeafe;color:#1e40af;padding:2px 8px;"
+            "border-radius:99px;font-size:0.75rem;font-weight:700;'>"
+            "⚙️ Số tuần ghi đè thủ công</span> "
+        ) if ovr else ""
+
+        st.markdown(f"""
+<div class="fc-card">
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;">
+  <div style="font-weight:700;color:var(--md-on-surface);">
+    Giai đoạn {i}: {seg['period_start']} → {seg['period_end']}
+  </div>
+  <div style="font-size:0.8rem;color:var(--md-on-surface-variant);">
+    {seg['title_name']} · {seg['dept_name']}
+    {'&nbsp;&nbsp;' + role_badge if role_badge else ''}
+    {ovr_badge}
+  </div>
+</div>
+{weeks_block}
+<div class="fc-formula" style="margin-top:10px;">
+  {gc_formula}<br>
+  {nckh_formula}
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Reductions detail ──────────────────────────────────────────────────────
+    if reds:
+        st.markdown('<div class="fc-title" style="margin-top:16px;">🔻 Chi tiết Miễn giảm định mức (SPECIAL)</div>',
+                    unsafe_allow_html=True)
+        for red in reds:
+            wd_r = red['workday_detail']
+            if red['is_overridden']:
+                weeks_blk = f"""
+<div class="fc-formula">
+  Số tuần miễn giảm (ghi đè): <span class="fc-num">{red['red_weeks']:.4f} tuần</span>
+</div>"""
+            else:
+                cal_r  = wd_r['calendar_days']     if wd_r else 0
+                wk_r   = wd_r['weekend_days']      if wd_r else 0
+                hl_r   = wd_r['holiday_days_count'] if wd_r else 0
+                ac_r   = wd_r['active_workdays']   if wd_r else 0
+                fw_r   = wd_r['full_weeks']         if wd_r else 0
+                rm_r   = wd_r['remainder_days']     if wd_r else 0
+
+                hday_r_html = ""
+                if wd_r and wd_r['holiday_days']:
+                    grouped_r = {}
+                    for d, n in wd_r['holiday_days']:
+                        grouped_r.setdefault(n, []).append(d)
+                    rows_r = "".join(
+                        f"<tr><td class='fc-hday'>{n}</td>"
+                        f"<td class='fc-hday'>{', '.join(ds[:3])}{'...' if len(ds)>3 else ''}</td>"
+                        f"<td class='fc-hday'>{len(ds)} ngày</td></tr>"
+                        for n, ds in grouped_r.items()
+                    )
+                    hday_r_html = f"""
+<table class="fc-tbl" style="margin-top:6px;">
+<tr><th>Kỳ nghỉ trùng giai đoạn</th><th>Ngày cụ thể</th><th>Số ngày</th></tr>
+{rows_r}
+</table>"""
+
+                weeks_blk = f"""
+<div class="fc-formula">
+  Tổng ngày lịch: <span class="fc-num">{cal_r}</span>
+  − Cuối tuần: <span class="fc-num">{wk_r}</span>
+  − Nghỉ lễ: <span class="fc-num">{hl_r}</span><br>
+  <b>= Ngày làm việc: <span class="fc-num">{ac_r}</span></b>
+  = {fw_r} tuần + {rm_r} ngày dư<br>
+  <span class="fc-eq">⟹ {ac_r} ÷ 5 = <span class="fc-num">{red['red_weeks']:.4f} tuần miễn giảm</span></span>
+</div>
+{hday_r_html}"""
+
+            st.markdown(f"""
+<div class="fc-card" style="border-left:4px solid #ef4444;">
+<div style="font-weight:700;color:var(--md-on-surface);">{red['rule_name']}</div>
+<div style="font-size:0.8rem;color:var(--md-on-surface-variant);margin-top:2px;">
+  Thời gian: {red['period_start']} → {red['period_end']} ·
+  Giảm GD: <b>{red['teaching_reduction_pct']:.0f}%</b> ·
+  Giảm NCKH: <b>{red['nckh_reduction_pct']:.0f}%</b>
+</div>
+{weeks_blk}
+<div class="fc-formula" style="margin-top:8px;">
+  Tác động: giảm <span class="fc-num">{red['teaching_reduction_pct']:.0f}%</span>
+  định mức GD trong <span class="fc-num">{red['red_weeks']:.4f}</span> /
+  <span class="fc-num">{red['std_weeks']:.0f}</span> tuần của năm học
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Summary row ───────────────────────────────────────────────────────────
+    st.markdown(f"""
+<div class="fc-card" style="border-left:4px solid #059669;margin-top:16px;">
+<div class="fc-title">Tổng kết (trước quy đổi Điều 12)</div>
+<div class="fc-formula">
+  Tổng định mức GC yêu cầu: <b class="fc-num">{tot_gc:.2f} GC</b><br>
+  Tổng định mức NCKH yêu cầu: <b class="fc-num">{tot_nck:.2f} giờ</b>
+</div>
+<div class="fc-label">
+  * Số giờ miễn giảm thực tế được tính bởi engine chi tiết (xem cột "Số giờ được miễn giảm" trên bảng).
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+
 def render_metric_card(title, value, delta=None, icon=None):
     delta_html = ""
     if delta:
