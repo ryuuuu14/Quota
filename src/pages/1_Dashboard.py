@@ -140,7 +140,7 @@ def _render_conversion_suggestions(df_display, selected_tf_id, conn):
             </div>
         </div>
         <div>
-            <span class="material-symbols-outlined" style="color: var(--md-primary-container); font-size: 32px;">sync</span>
+            <span class="material-symbols-outlined" style="color: var(--md-green); font-size: 32px;">sync</span>
         </div>
     </div>
 </div>
@@ -329,7 +329,7 @@ if selected_tf_id:
         if is_head_dept:
             df_display = df_display[df_display["dept_name"] == dept_name]
             st.markdown(
-                f'<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Bộ môn: {dept_name}</h3>',
+                f'<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-green);">dashboard</span> Tổng quan Bộ môn: {dept_name}</h3>',
                 unsafe_allow_html=True,
             )
 
@@ -363,7 +363,7 @@ if selected_tf_id:
 
         else:
             st.markdown(
-                '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">dashboard</span> Tổng quan Toàn trường</h3>',
+                '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 32px;"><span class="material-symbols-outlined" style="color: var(--md-green);">dashboard</span> Tổng quan Toàn trường</h3>',
                 unsafe_allow_html=True,
             )
 
@@ -405,7 +405,7 @@ if selected_tf_id:
             unsafe_allow_html=True,
         )
         st.markdown(
-            '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">table_chart</span> Bảng Dữ liệu Chi tiết</h3>',
+            '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">table_chart</span> Bảng Dữ liệu Chi tiết</h3>',
             unsafe_allow_html=True,
         )
 
@@ -609,7 +609,7 @@ if selected_tf_id:
             unsafe_allow_html=True,
         )
         st.markdown(
-            '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">manage_search</span> Tra cứu Công thức Tính Định mức</h3>',
+            '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">manage_search</span> Tra cứu Công thức Tính Định mức</h3>',
             unsafe_allow_html=True,
         )
 
@@ -640,7 +640,7 @@ if selected_tf_id:
                         breakdown = get_teacher_formula_breakdown(
                             tid_selected, selected_tf_id
                         )
-                    render_formula_card(breakdown)
+                    render_formula_card(breakdown, matched.iloc[0].to_dict())
 
         st.markdown(
             '<hr style="border-color: var(--md-outline-variant); margin: 32px 0;">',

@@ -1572,6 +1572,55 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
         if r_start > r_end:
             continue
 
+        # Get midpoint of the reduction period to resolve active base hours
+        midpoint_r = r_start + (r_end - r_start) / 2
+
+        # Active title at midpoint_r
+        title_name_r = latest_title_name
+        at_r = title_recs[
+            (title_recs["start_date"] <= midpoint_r)
+            & (title_recs["end_date"] >= midpoint_r)
+        ]
+        if not at_r.empty:
+            title_name_r = at_r.iloc[0]["value_text"]
+        else:
+            st_t_r = title_recs.sort_values("start_date")
+            if not st_t_r.empty:
+                bt_r = st_t_r[st_t_r["start_date"] <= midpoint_r]
+                title_name_r = (
+                    bt_r.iloc[-1]["value_text"]
+                    if not bt_r.empty
+                    else st_t_r.iloc[0]["value_text"]
+                )
+
+        # Active dept at midpoint_r
+        dept_name_r = latest_dept
+        ad_r = dept_recs[
+            (dept_recs["start_date"] <= midpoint_r) & (dept_recs["end_date"] >= midpoint_r)
+        ]
+        if not ad_r.empty:
+            dept_name_r = ad_r.iloc[0]["value_text"]
+        else:
+            st_d_r = dept_recs.sort_values("start_date")
+            if not st_d_r.empty:
+                bd_r = st_d_r[st_d_r["start_date"] <= midpoint_r]
+                dept_name_r = (
+                    bd_r.iloc[-1]["value_text"]
+                    if not bd_r.empty
+                    else st_d_r.iloc[0]["value_text"]
+                )
+
+        if title_name_r in titles_dict:
+            base_gc_r = (
+                titles_dict[title_name_r]["base_teaching_hours_natural"]
+                if dept_name_r in NATURAL_DEPTS
+                else titles_dict[title_name_r]["base_teaching_hours_social"]
+            )
+            base_nckh_r = titles_dict[title_name_r]["base_nckh_hours"]
+        else:
+            base_gc_r = latest_base_gc
+            base_nckh_r = latest_base_nckh
+
         has_override = (
             pd.notnull(r.get("actual_weeks_override"))
             and str(r.get("actual_weeks_override")).strip() != ""
@@ -1599,6 +1648,8 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
                 "override_val": override_val_r,
                 "red_weeks": red_weeks,
                 "std_weeks": std_weeks,
+                "base_gc": base_gc_r,
+                "base_nckh": base_nckh_r,
                 "workday_detail": workday_detail_r,
             }
         )

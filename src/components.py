@@ -107,10 +107,11 @@ def render_warning_state(message):
     )
 
 
-def render_formula_card(breakdown):
+def render_formula_card(breakdown, metrics=None):
     """
     Renders a detailed formula transparency card for one teacher.
     breakdown: dict returned by get_teacher_formula_breakdown() in calculations.py
+    metrics: dict or Series representing the final calculated metrics row for this teacher
     """
     if not breakdown:
         st.warning("Không tìm thấy dữ liệu chi tiết cho nhà giáo này.")
@@ -142,6 +143,7 @@ def render_formula_card(breakdown):
 .fc-tbl td  { padding: 5px 10px; border-bottom: 1px solid var(--md-outline-variant); }
 .fc-tbl tr:last-child td { border-bottom: none; }
 .fc-hday    { font-size: 0.78rem; color: var(--md-on-surface-variant); }
+.fc-tip     { border-bottom: 1px dashed var(--md-outline-variant); cursor: help; text-decoration: none; }
 </style>
 """,
         unsafe_allow_html=True,
@@ -158,6 +160,14 @@ def render_formula_card(breakdown):
     reds = breakdown["reductions"]
     tot_gc = breakdown["total_required_gc"]
     tot_nck = breakdown["total_required_nckh"]
+
+    def format_weeks(w):
+        if w is None:
+            return "0"
+        s = f"{w:.4f}"
+        if "." in s:
+            s = s.rstrip("0").rstrip(".")
+        return s
 
     # ── Header ────────────────────────────────────────────────────────────────
     st.markdown(
@@ -179,18 +189,38 @@ def render_formula_card(breakdown):
 
     # ── Holidays reference ─────────────────────────────────────────────────────
     if breakdown["holidays"]:
-        rows_html = "".join(
-            f"<tr><td>{h['name']}</td><td>{h['start']}</td><td>{h['end']}</td></tr>"
-            for h in breakdown["holidays"]
-        )
+        from datetime import datetime
+        total_holiday_days = 0
+        h_rows = []
+        for h in breakdown["holidays"]:
+            try:
+                s_dt = datetime.strptime(h["start"], "%d/%m/%Y")
+                e_dt = datetime.strptime(h["end"], "%d/%m/%Y")
+                days = (e_dt - s_dt).days + 1
+            except Exception:
+                days = 0
+            total_holiday_days += days
+            h_rows.append(
+                f"<tr><td>{h['name']}</td><td>{h['start']}</td><td>{h['end']}</td><td><b>{days} ngày</b></td></tr>"
+            )
+        rows_html = "".join(h_rows)
+
         st.markdown(
             f"""
 <div class="fc-section">
-<div class="fc-title">📅 Danh sách ngày nghỉ lễ/Tết trong năm học (dùng để loại khỏi tuần tính toán)</div>
+<div class="fc-title">📅 Danh sách ngày nghỉ lễ/Tết trong năm học (dùng để loại khỏi tuần tính toán) (Tổng cộng: {total_holiday_days} ngày)</div>
 <div class="fc-card">
 <table class="fc-tbl">
-  <tr><th>Kỳ nghỉ</th><th>Từ ngày</th><th>Đến ngày</th></tr>
-  {rows_html}
+  <thead>
+    <tr><th>Kỳ nghỉ</th><th>Từ ngày</th><th>Đến ngày</th><th>Số ngày nghỉ</th></tr>
+  </thead>
+  <tbody>
+    {rows_html}
+    <tr style="background: var(--md-surface-container); font-weight: bold;">
+      <td colspan="3" style="text-align: right; border-top: 1px solid var(--md-outline-variant);">Tổng cộng số ngày nghỉ:</td>
+      <td style="border-top: 1px solid var(--md-outline-variant);">{total_holiday_days} ngày</td>
+    </tr>
+  </tbody>
 </table>
 </div>
 </div>
@@ -200,7 +230,7 @@ def render_formula_card(breakdown):
 
     # ── Segment breakdown ──────────────────────────────────────────────────────
     st.markdown(
-        '<div class="fc-title">📊 Chi tiết tính Định mức theo từng giai đoạn</div>',
+        '<div class="fc-title">📊 Chi tiết tính toán định mức Giảng dạy (GC) & NCKH phân rã theo các giai đoạn thay đổi (Chức danh, Đơn vị, Kiêm nhiệm)</div>',
         unsafe_allow_html=True,
     )
 
@@ -213,7 +243,7 @@ def render_formula_card(breakdown):
             weeks_block = f"""
 <div class="fc-formula">
   <span class="fc-label">Số tuần (ghi đè thủ công):</span><br>
-  <span class="fc-num">{seg["seg_weeks"]:.4f} tuần</span>
+  <span class="fc-num">{format_weeks(seg["seg_weeks"])} tuần</span>
   <span class="fc-label"> (override = {seg["override_val"]})</span>
 </div>"""
         else:
@@ -250,31 +280,40 @@ def render_formula_card(breakdown):
   <span style="border-top:1px solid var(--md-outline-variant);display:block;margin:4px 0;"></span>
   <b>= Ngày làm việc thực tế: <span class="fc-num">{actv}</span></b><br>
   = {fw} tuần đủ × 5 + {rm} ngày dư<br>
-  <span class="fc-eq">⟹ Số tuần = {actv} ÷ 5 = <span class="fc-num">{ex_w:.4f} tuần</span></span>
+  <span class="fc-eq">⟹ Số tuần = {actv} ÷ 5 = <span class="fc-num">{format_weeks(ex_w)} tuần</span></span>
 </div>
 {hday_table}"""
 
         # Build GC formula string
-        role_part = ""
-        if seg["role_t_red_pct"] > 0:
-            role_part = f" × (1 − {seg['role_t_red_pct']:.0f}%)"
+        role_pct = seg["role_t_red_pct"]
+        if role_pct > 0:
+            gc_arithmetic = f"{seg['base_gc']} x (1 − {role_pct:.0f}%) x {format_weeks(seg['seg_weeks'])} / {seg['std_weeks']:.0f}"
+        else:
+            gc_arithmetic = f"{seg['base_gc']} x {format_weeks(seg['seg_weeks'])} / {seg['std_weeks']:.0f}"
+
         gc_formula = (
-            f"Định mức GC = {seg['base_gc']}"
-            f"{role_part}"
-            f" × {seg['seg_weeks']:.4f} / {seg['std_weeks']:.0f}"
-            f" = <b class='fc-num'>{seg['req_gc']:.2f} GC</b>"
+            f"<span class='fc-tip' title='Định mức Giảng dạy (Giờ Chuẩn) yêu cầu của giai đoạn này'>Định mức GC yêu cầu</span> = "
+            f"<span class='fc-tip' title='Định mức Giờ Chuẩn hàng năm dựa trên chức danh và lĩnh vực khoa học'>Định mức gốc</span> x "
+            f"(1 − <span class='fc-tip' title='Tỷ lệ giảm định mức giảng dạy do giữ chức danh kiêm nhiệm'>Tỷ lệ kiêm nhiệm</span>) x "
+            f"(<span class='fc-tip' title='Số tuần làm việc thực tế trong giai đoạn'>Tuần thực tế</span> / <span class='fc-tip' title='Số tuần chuẩn quy định cho năm học (mặc định là 44 tuần)'>Tuần chuẩn</span>)<br>"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;= {gc_arithmetic} = <b class='fc-num'>{seg['req_gc']:.2f} Giờ Chuẩn (GC)</b>"
         )
 
         nckh_parts = [str(seg["base_nckh"])]
         if seg["nckh_factor"] != 1.0:
-            nckh_parts.append(f"× {seg['nckh_factor']}")
+            nckh_parts.append(f"x {seg['nckh_factor']}")
         if seg["role_n_red_pct"] > 0:
-            nckh_parts.append(f"× (1 − {seg['role_n_red_pct']:.0f}%)")
-        nckh_parts.append(f"× {seg['seg_weeks']:.4f} / {seg['std_weeks']:.0f}")
+            nckh_parts.append(f"x (1 − {seg['role_n_red_pct']:.0f}%)")
+        nckh_parts.append(f"x {format_weeks(seg['seg_weeks'])} / {seg['std_weeks']:.0f}")
+        nckh_arithmetic = " ".join(nckh_parts)
+
         nckh_formula = (
-            "Định mức NCKH = "
-            + " ".join(nckh_parts)
-            + f" = <b class='fc-num'>{seg['req_nckh']:.2f} giờ</b>"
+            f"<span class='fc-tip' title='Định mức Nghiên cứu khoa học yêu cầu của giai đoạn này'>Định mức NCKH yêu cầu</span> = "
+            f"<span class='fc-tip' title='Định mức giờ Nghiên cứu khoa học hàng năm dựa trên chức danh'>Định mức gốc</span> x "
+            f"<span class='fc-tip' title='Hệ số điều chỉnh định mức nghiên cứu khoa học của đơn vị công tác'>Hệ số đơn vị</span> x "
+            f"(1 − <span class='fc-tip' title='Tỷ lệ giảm định mức nghiên cứu khoa học do giữ chức danh kiêm nhiệm'>Tỷ lệ kiêm nhiệm</span>) x "
+            f"(<span class='fc-tip' title='Số tuần làm việc thực tế trong giai đoạn'>Tuần thực tế</span> / <span class='fc-tip' title='Số tuần chuẩn quy định cho năm học'>Tuần chuẩn</span>)<br>"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;= {nckh_arithmetic} = <b class='fc-num'>{seg['req_nckh']:.2f} giờ NCKH</b>"
         )
 
         role_badge = (
@@ -331,7 +370,7 @@ def render_formula_card(breakdown):
             if red["is_overridden"]:
                 weeks_blk = f"""
 <div class="fc-formula">
-  Số tuần miễn giảm (ghi đè): <span class="fc-num">{red["red_weeks"]:.4f} tuần</span>
+  Số tuần miễn giảm (ghi đè): <span class="fc-num">{format_weeks(red["red_weeks"])} tuần</span>
 </div>"""
             else:
                 cal_r = wd_r["calendar_days"] if wd_r else 0
@@ -365,9 +404,37 @@ def render_formula_card(breakdown):
   − Nghỉ lễ: <span class="fc-num">{hl_r}</span><br>
   <b>= Ngày làm việc: <span class="fc-num">{ac_r}</span></b>
   = {fw_r} tuần + {rm_r} ngày dư<br>
-  <span class="fc-eq">⟹ {ac_r} ÷ 5 = <span class="fc-num">{red["red_weeks"]:.4f} tuần miễn giảm</span></span>
+  <span class="fc-eq">⟹ {ac_r} ÷ 5 = <span class="fc-num">{format_weeks(red["red_weeks"])} tuần miễn giảm</span></span>
 </div>
 {hday_r_html}"""
+
+            base_gc_val = red.get("base_gc", 0.0)
+            base_nckh_val = red.get("base_nckh", 0.0)
+            calc_red_gc = base_gc_val * (red["teaching_reduction_pct"] / 100.0) * (red["red_weeks"] / red["std_weeks"])
+            calc_red_nckh = base_nckh_val * (red["nckh_reduction_pct"] / 100.0) * (red["red_weeks"] / red["std_weeks"])
+
+            t_formula_line = ""
+            if red["teaching_reduction_pct"] > 0:
+                t_formula_line = (
+                    f"<span class='fc-tip' title='Số giờ Giảng dạy (Giờ Chuẩn) được miễn giảm cho chế độ đặc biệt này'>Giờ GC được miễn giảm</span> = "
+                    f"<span class='fc-tip' title='Định mức Giờ Chuẩn hàng năm của giáo viên tại thời điểm áp dụng'>Định mức gốc</span> x "
+                    f"<span class='fc-tip' title='Tỷ lệ phần trăm miễn giảm giảng dạy quy định cho chế độ này'>Tỷ lệ miễn giảm</span> x "
+                    f"(<span class='fc-tip' title='Số tuần nghỉ/miễn giảm thực tế trong giai đoạn'>Tuần miễn giảm thực tế</span> / <span class='fc-tip' title='Số tuần chuẩn quy định cho năm học'>Tuần chuẩn</span>)<br>"
+                    f"&nbsp;&nbsp;&nbsp;&nbsp;= {base_gc_val} x {red['teaching_reduction_pct']:.0f}% x {format_weeks(red['red_weeks'])} / {red['std_weeks']:.0f} = <b class='fc-num'>{calc_red_gc:.2f} Giờ Chuẩn (GC)</b>"
+                )
+
+            n_formula_line = ""
+            if red["nckh_reduction_pct"] > 0:
+                n_formula_line = (
+                    f"<span class='fc-tip' title='Số giờ Nghiên cứu khoa học được miễn giảm cho chế độ đặc biệt này'>Giờ NCKH được miễn giảm</span> = "
+                    f"<span class='fc-tip' title='Định mức giờ Nghiên cứu khoa học hàng năm của giáo viên tại thời điểm áp dụng'>Định mức gốc</span> x "
+                    f"<span class='fc-tip' title='Tỷ lệ phần trăm miễn giảm nghiên cứu khoa học quy định cho chế độ này'>Tỷ lệ miễn giảm</span> x "
+                    f"(<span class='fc-tip' title='Số tuần nghỉ/miễn giảm thực tế trong giai đoạn'>Tuần miễn giảm thực tế</span> / <span class='fc-tip' title='Số tuần chuẩn quy định cho năm học'>Tuần chuẩn</span>)<br>"
+                    f"&nbsp;&nbsp;&nbsp;&nbsp;= {base_nckh_val} x {red['nckh_reduction_pct']:.0f}% x {format_weeks(red['red_weeks'])} / {red['std_weeks']:.0f} = <b class='fc-num'>{calc_red_nckh:.2f} giờ NCKH</b>"
+                )
+
+            formula_sep = "<br>" if (t_formula_line and n_formula_line) else ""
+            impact_formula = f"{t_formula_line}{formula_sep}{n_formula_line}"
 
             st.markdown(
                 f"""
@@ -375,36 +442,152 @@ def render_formula_card(breakdown):
 <div style="font-weight:700;color:var(--md-on-surface);">{red["rule_name"]}</div>
 <div style="font-size:0.8rem;color:var(--md-on-surface-variant);margin-top:2px;">
   Thời gian: {red["period_start"]} → {red["period_end"]} ·
-  Giảm GD: <b>{red["teaching_reduction_pct"]:.0f}%</b> ·
-  Giảm NCKH: <b>{red["nckh_reduction_pct"]:.0f}%</b>
+  Giảm Giảng dạy: <b>{red["teaching_reduction_pct"]:.0f}%</b> ·
+  Giảm Nghiên cứu khoa học: <b>{red["nckh_reduction_pct"]:.0f}%</b>
 </div>
 {weeks_blk}
-<div class="fc-formula" style="margin-top:8px;">
-  Tác động: giảm <span class="fc-num">{red["teaching_reduction_pct"]:.0f}%</span>
-  định mức GD trong <span class="fc-num">{red["red_weeks"]:.4f}</span> /
-  <span class="fc-num">{red["std_weeks"]:.0f}</span> tuần của năm học
+<div class="fc-formula" style="margin-top:10px;">
+  {impact_formula}
 </div>
 </div>
 """,
                 unsafe_allow_html=True,
             )
 
-    # ── Summary row ───────────────────────────────────────────────────────────
+    # ── Summary section ───────────────────────────────────────────────────────────
+    if metrics:
+        base_gc = metrics.get("base_gc", 0.0)
+        reduce_gc = metrics.get("so_gio_duoc_mien_giam", 0.0)
+        req_gc = metrics.get("dinh_muc_gc_phai_thuc_hien", 0.0)
+        done_gc = metrics.get("tổng_gc_da_thuc_hien", 0.0)
+        diff_gc = metrics.get("gc_vuot_thieu_sau_quy_doi", 0.0)
+        status_gc_val = metrics.get("hoan_thanh_gd", "Không đạt")
+
+        base_nckh = metrics.get("base_nckh", 0.0)
+        req_nckh = metrics.get("dinh_muc_nckh_phai_thuc_hien", 0.0)
+        reduce_nckh = max(0.0, base_nckh - req_nckh)
+        done_nckh = metrics.get("nckh_da_thuc_hien", 0.0)
+        diff_nckh = metrics.get("nckh_vuot_thieu_sau_quy_doi", 0.0)
+        status_nckh_val = metrics.get("hoan_thanh_nckh", "Không đạt")
+
+        base_nvk = metrics.get("dinh_muc_nvk_goc", 0.0)
+        reduce_nvk = metrics.get("so_gio_nvk_duoc_mien_giam", 0.0)
+        req_nvk = metrics.get("dinh_muc_nvk_phai_thuc_hien", 0.0)
+        done_nvk = metrics.get("nvk_da_thuc_hien", 0.0)
+        diff_nvk = metrics.get("nvk_vuot_thieu", 0.0)
+        status_nvk_val = metrics.get("hoan_thanh_nvk", "Không đạt")
+
+        overall_status = metrics.get("Trạng thái Chung", "Không đạt")
+    else:
+        # Fallback fields
+        base_gc = tot_gc
+        reduce_gc = 0.0
+        req_gc = tot_gc
+        done_gc = 0.0
+        diff_gc = 0.0
+        status_gc_val = "N/A"
+
+        base_nckh = tot_nck
+        req_nckh = tot_nck
+        reduce_nckh = 0.0
+        done_nckh = 0.0
+        diff_nckh = 0.0
+        status_nckh_val = "N/A"
+
+        base_nvk = 0.0
+        reduce_nvk = 0.0
+        req_nvk = 0.0
+        done_nvk = 0.0
+        diff_nvk = 0.0
+        status_nvk_val = "N/A"
+
+        overall_status = "N/A"
+
+    def format_diff(val):
+        if val > 0:
+            return f"+{val:.1f}"
+        elif val < 0:
+            return f"{val:.1f}"
+        return "0"
+
+    def get_color_style(val):
+        if val < 0:
+            return "color: #b91c1c; font-weight: bold;"
+        elif val > 0:
+            return "color: #047857; font-weight: bold;"
+        return "color: var(--md-on-surface-variant);"
+
+    def get_status_badge(status):
+        if status == "Đạt":
+            return '<span style="background-color: #ecfdf5; color: #047857; font-weight: bold; padding: 2px 8px; border-radius: 99px; font-size: 0.78rem;">Đạt</span>'
+        elif status == "Không đạt":
+            return '<span style="background-color: #fef2f2; color: #b91c1c; font-weight: bold; padding: 2px 8px; border-radius: 99px; font-size: 0.78rem;">Không đạt</span>'
+        return f'<span style="background-color: var(--md-surface-container); color: var(--md-on-surface-variant); padding: 2px 8px; border-radius: 99px; font-size: 0.78rem;">{status}</span>'
+
+    if overall_status == "Đạt":
+        overall_badge = '<span style="background-color: #ecfdf5; color: #047857; font-weight: bold; padding: 4px 12px; border-radius: 99px; font-size: 0.85rem; border: 1px solid #10b981;">🎉 HOÀN THÀNH NHIỆM VỤ CHI TIẾT</span>'
+    elif overall_status == "Không đạt":
+        overall_badge = '<span style="background-color: #fef2f2; color: #b91c1c; font-weight: bold; padding: 4px 12px; border-radius: 99px; font-size: 0.85rem; border: 1px solid #ef4444;">⚠️ CHƯA HOÀN THÀNH NHIỆM VỤ</span>'
+    else:
+        overall_badge = f'<span style="background-color: var(--md-surface-container); color: var(--md-on-surface-variant); padding: 4px 12px; border-radius: 99px; font-size: 0.85rem;">{overall_status}</span>'
+
     st.markdown(
         f"""
 <div class="fc-card" style="border-left:4px solid #059669;margin-top:16px;">
-<div class="fc-title">Tổng kết (trước quy đổi Điều 12)</div>
-<div class="fc-formula">
-  Tổng định mức GC yêu cầu: <b class="fc-num">{tot_gc:.2f} GC</b><br>
-  Tổng định mức NCKH yêu cầu: <b class="fc-num">{tot_nck:.2f} giờ</b>
+<div class="fc-title">📈 Tổng kết kết quả thực hiện định mức & nhiệm vụ năm học</div>
+<div class="fc-label" style="margin-bottom: 8px;">
+  Đối chiếu chi tiết định mức gốc, số giờ miễn giảm, định mức thực tế và kết quả tích lũy sau quy đổi:
 </div>
-<div class="fc-label">
-  * Số giờ miễn giảm thực tế được tính bởi engine chi tiết (xem cột "Số giờ được miễn giảm" trên bảng).
+<table class="fc-tbl">
+  <thead>
+    <tr>
+      <th>Nhiệm vụ</th>
+      <th>Định mức gốc</th>
+      <th>Miễn giảm</th>
+      <th>Định mức yêu cầu</th>
+      <th>Đã thực hiện</th>
+      <th>Vượt/Thiếu</th>
+      <th>Trạng thái</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>Giảng dạy (GC)</b></td>
+      <td>{base_gc:.1f} GC</td>
+      <td>{reduce_gc:.1f} GC</td>
+      <td><b>{req_gc:.1f} GC</b></td>
+      <td>{done_gc:.1f} GC</td>
+      <td style="{get_color_style(diff_gc)}">{format_diff(diff_gc)} GC</td>
+      <td>{get_status_badge(status_gc_val)}</td>
+    </tr>
+    <tr>
+      <td><b>Nghiên cứu khoa học (NCKH)</b></td>
+      <td>{base_nckh:.1f} giờ</td>
+      <td>{reduce_nckh:.1f} giờ</td>
+      <td><b>{req_nckh:.1f} giờ</b></td>
+      <td>{done_nckh:.1f} giờ</td>
+      <td style="{get_color_style(diff_nckh)}">{format_diff(diff_nckh)} giờ</td>
+      <td>{get_status_badge(status_nckh_val)}</td>
+    </tr>
+    <tr>
+      <td><b>Nhiệm vụ khác (NVK)</b></td>
+      <td>{base_nvk:.1f} giờ</td>
+      <td>{reduce_nvk:.1f} giờ</td>
+      <td><b>{req_nvk:.1f} giờ</b></td>
+      <td>{done_nvk:.1f} giờ</td>
+      <td style="{get_color_style(diff_nvk)}">{format_diff(diff_nvk)} giờ</td>
+      <td>{get_status_badge(status_nvk_val)}</td>
+    </tr>
+  </tbody>
+</table>
+<div style="margin-top:16px; font-size: 0.95rem; font-weight: bold; color: var(--md-on-surface); display: flex; align-items: center; gap: 8px;">
+  <span>Kết luận chung năm học:</span> {overall_badge}
 </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
+
 
 
 def render_metric_card(title, value, delta=None, icon=None):

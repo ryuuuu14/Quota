@@ -258,7 +258,7 @@ def _tab1_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">calendar_month</span> Quản lý Năm học / Học kỳ</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">calendar_month</span> Quản lý Năm học / Học kỳ</h3>',
         unsafe_allow_html=True,
     )
     df_tf = pd.read_sql_query(
@@ -307,7 +307,7 @@ def _tab1_body():
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">edit_calendar</span> Điều chỉnh ngày làm việc đột xuất</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">edit_calendar</span> Điều chỉnh ngày làm việc đột xuất</h3>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -581,7 +581,7 @@ def _tab2_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">business</span> Quản lý Đơn vị</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">business</span> Quản lý Đơn vị</h3>',
         unsafe_allow_html=True,
     )
 
@@ -709,7 +709,7 @@ def _tab3_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">badge</span> Định mức Cơ bản theo Chức danh</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">badge</span> Định mức Cơ bản theo Chức danh</h3>',
         unsafe_allow_html=True,
     )
 
@@ -847,7 +847,7 @@ def _tab4_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">manage_accounts</span> Quy tắc Giảm định mức: Chức vụ Quản lý</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">manage_accounts</span> Quy tắc Giảm định mức: Chức vụ Quản lý</h3>',
         unsafe_allow_html=True,
     )
 
@@ -1001,7 +1001,7 @@ def _tab5_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">healing</span> Quy tắc Giảm định mức: Miễn giảm khác</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">healing</span> Quy tắc Giảm định mức: Miễn giảm khác</h3>',
         unsafe_allow_html=True,
     )
 
@@ -1165,7 +1165,7 @@ def _tab6_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">list_alt</span> Danh mục Loại Hoạt động</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">list_alt</span> Danh mục Loại Hoạt động</h3>',
         unsafe_allow_html=True,
     )
 
@@ -1340,7 +1340,7 @@ def _tab7_body():
     import pandas as pd
 
     st.markdown(
-        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-primary-container);">settings_applications</span> Tham số quy đổi & Cấu hình</h3>',
+        '<h3 style="display: flex; align-items: center; gap: 8px;"><span class="material-symbols-outlined" style="color: var(--md-green);">settings_applications</span> Tham số quy đổi & Cấu hình</h3>',
         unsafe_allow_html=True,
     )
     st.markdown(
