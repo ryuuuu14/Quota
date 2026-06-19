@@ -2,9 +2,12 @@ import streamlit as st
 import time
 from auth import authenticate_user, login_user, logout, get_current_user
 
-st.set_page_config(page_title="Đăng nhập", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    page_title="Đăng nhập", layout="wide", initial_sidebar_state="collapsed"
+)
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
@@ -208,12 +211,15 @@ div[data-testid="stVerticalBlock"] > div:first-child {
     .block-container { padding: 32px 24px !important; border-radius: 16px !important; }
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 user = get_current_user()
 
 if user:
-    st.markdown("""
+    st.markdown(
+        """
     <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
         <div class="brand-logo">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -225,15 +231,18 @@ if user:
         <p class="brand-tagline">Quản lý chế độ làm việc nhà giáo</p>
         <div class="brand-divider"></div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     role_labels = {
         "admin": "Qu\u1ea3n tr\u1ecb vi\u00ean",
-        "head_dept": "Tr\u01b0\u1edfng Khoa / B\u1ed9 m\u00f4n"
+        "head_dept": "Tr\u01b0\u1edfng Khoa / B\u1ed9 m\u00f4n",
     }
     role_label = role_labels.get(user["role"], "Ng\u01b0\u1eddi d\u00f9ng")
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="text-align:center">
         <svg width="64" height="64" viewBox="0 0 64 64" style="margin-bottom:12px">
             <circle cx="32" cy="32" r="32" fill="rgba(0,103,71,0.08)"/>
@@ -242,16 +251,24 @@ if user:
         </svg>
         <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:18px;color:#1A1A1A;margin:0 0 4px 0">{user["username"]}</p>
         <p style="font-family:'Be Vietnam Pro',sans-serif;font-weight:600;font-size:13px;color:#FFC107;margin:0 0 2px 0">{role_label}</p>
-        {f'<p style="font-family:\'Be Vietnam Pro\',sans-serif;font-size:12px;color:#5C5248;margin:0 0 24px 0">{user["department_name"]}</p>' if user.get("department_name") else '<div style="height:18px"></div>'}
+        {f"<p style=\"font-family:'Be Vietnam Pro',sans-serif;font-size:12px;color:#5C5248;margin:0 0 24px 0\">{user["department_name"]}</p>" if user.get("department_name") else '<div style="height:18px"></div>'}
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
-    if st.button("\u0110\u0103ng xu\u1ea5t", type="primary", use_container_width=True, key="logout_btn"):
+    if st.button(
+        "\u0110\u0103ng xu\u1ea5t",
+        type="primary",
+        use_container_width=True,
+        key="logout_btn",
+    ):
         logout()
         st.switch_page("pages/8_DangNhap.py")
 
 else:
-    st.markdown("""
+    st.markdown(
+        """
     <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
         <div class="brand-logo">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -264,46 +281,55 @@ else:
         <div class="brand-divider"></div>
         <p class="form-title">Đăng nhập</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input(
             "T\u00ean \u0111\u0103ng nh\u1eadp",
             placeholder="Nh\u1eadp t\u00ean \u0111\u0103ng nh\u1eadp...",
-            key="login_user"
+            key="login_user",
         )
         password = st.text_input(
             "M\u1eadt kh\u1ea9u",
             type="password",
             placeholder="Nh\u1eadp m\u1eadt kh\u1ea9u...",
-            key="login_pass"
+            key="login_pass",
         )
 
         submitted = st.form_submit_button(
-            "\u0110\u0103ng nh\u1eadp",
-            type="primary",
-            use_container_width=True
+            "\u0110\u0103ng nh\u1eadp", type="primary", use_container_width=True
         )
 
         if submitted:
             if not username or not password:
-                st.error("Vui l\u00f2ng nh\u1eadp \u0111\u1ea7y \u0111\u1ee7 th\u00f4ng tin.")
+                st.error(
+                    "Vui l\u00f2ng nh\u1eadp \u0111\u1ea7y \u0111\u1ee7 th\u00f4ng tin."
+                )
             else:
                 res = authenticate_user(username, password)
                 if res:
                     if isinstance(res, dict) and res.get("error") == "teacher_disabled":
-                        st.error("T\u00e0i kho\u1ea3n Gi\u1ea3ng vi\u00ean ch\u01b0a \u0111\u01b0\u1ee3c k\u00edch ho\u1ea1t.")
+                        st.error(
+                            "T\u00e0i kho\u1ea3n Gi\u1ea3ng vi\u00ean ch\u01b0a \u0111\u01b0\u1ee3c k\u00edch ho\u1ea1t."
+                        )
                     else:
                         login_user(res)
                         st.success("\u0110\u0103ng nh\u1eadp th\u00e0nh c\u00f4ng")
                         time.sleep(0.5)
                         st.switch_page("app.py")
                 else:
-                    st.error("Sai t\u00ean \u0111\u0103ng nh\u1eadp ho\u1eb7c m\u1eadt kh\u1ea9u.")
+                    st.error(
+                        "Sai t\u00ean \u0111\u0103ng nh\u1eadp ho\u1eb7c m\u1eadt kh\u1ea9u."
+                    )
 
-    st.markdown("""
+    st.markdown(
+        """
     <div class="meta-footer">
         <span class="meta-version">v2.0</span>
         <span class="meta-status">H\u1ec7 th\u1ed1ng ho\u1ea1t \u0111\u1ed9ng</span>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )

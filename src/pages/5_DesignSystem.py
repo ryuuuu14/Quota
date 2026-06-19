@@ -4,12 +4,15 @@ from components import inject_premium_css
 st.set_page_config(page_title="Design System", layout="wide")
 inject_premium_css()
 
-st.markdown("""
+st.markdown(
+    """
 <h1 style="margin-bottom:4px;">Design System</h1>
 <p style="color:var(--md-on-surface-variant);margin-bottom:32px;">
 Theme "Huyết Mạch" — Burgundy + Gold + Deep Emerald
 </p>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Color Palette ──
 st.markdown("## Color Palette")
@@ -38,7 +41,8 @@ for i, (token, hex_val, desc) in enumerate(palette):
     with cols[i % 4]:
         is_dark = hex_val in ("#1A1A1A", "#800020", "#006747", "#5C5248", "#DC2626")
         text_color = "#FFFFFF" if is_dark else "#1A1A1A"
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div style="background:{hex_val};border-radius:12px;padding:24px 16px;margin-bottom:12px;
                     border:1px solid var(--md-outline-variant);text-align:center;">
             <div style="font-weight:800;font-size:15px;color:{text_color};">{hex_val}</div>
@@ -46,12 +50,15 @@ for i, (token, hex_val, desc) in enumerate(palette):
                 <code>{token}</code><br>{desc}
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
 # ── Typography ──
 st.markdown("---")
 st.markdown("## Typography")
-st.markdown("""
+st.markdown(
+    """
 <div style="font-family:'Be Vietnam Pro',sans-serif;">
     <h1>Heading 1 — Be Vietnam Pro 800</h1>
     <h2>Heading 2 — Be Vietnam Pro 700</h2>
@@ -60,18 +67,27 @@ st.markdown("""
     <p style="font-size:14px;color:var(--md-on-surface-variant);">Body secondary — Be Vietnam Pro 400 · 14px</p>
     <p style="font-family:var(--font-mono);font-size:13px;color:var(--md-on-surface);">Data — JetBrains Mono · 13px tabular-nums · 1,234.56</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Cards ──
 st.markdown("---")
 st.markdown("## Cards")
 c1, c2, c3 = st.columns(3)
 with c1:
-    st.markdown('<div class="md-card"><h4 style="margin:0 0 8px 0;">Default Card</h4><p style="color:var(--md-on-surface-variant);">White card on cream surface with subtle border.</p></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="md-card"><h4 style="margin:0 0 8px 0;">Default Card</h4><p style="color:var(--md-on-surface-variant);">White card on cream surface with subtle border.</p></div>',
+        unsafe_allow_html=True,
+    )
 with c2:
-    st.markdown('<div class="md-card"><div class="md-section-label">METRIC</div><div style="font-size:2.2rem;font-weight:800;color:var(--md-on-surface);">42</div><div style="color:var(--md-on-surface-variant);font-size:0.8rem;">Total teachers</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="md-card"><div class="md-section-label">METRIC</div><div style="font-size:2.2rem;font-weight:800;color:var(--md-on-surface);">42</div><div style="color:var(--md-on-surface-variant);font-size:0.8rem;">Total teachers</div></div>',
+        unsafe_allow_html=True,
+    )
 with c3:
-    st.markdown("""
+    st.markdown(
+        """
     <div style="background:var(--md-surface-dim);border:1px solid var(--md-outline-variant);border-radius:var(--radius-lg);padding:24px;">
         <div class="md-section-label">STATUS BAR</div>
         <div style="display:flex;gap:16px;margin-top:8px;">
@@ -81,7 +97,9 @@ with c3:
             <span class="md-chip md-chip-amber">Amber</span>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 # ── Buttons ──
 st.markdown("---")
@@ -93,11 +111,17 @@ with bc2:
     st.button("Secondary", use_container_width=True)
 with bc3:
     st.button("Danger", type="primary", use_container_width=True)
-    st.markdown('<div style="text-align:center;margin-top:4px;font-size:11px;color:var(--md-on-surface-variant);">(placeholder — styled via CSS)</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align:center;margin-top:4px;font-size:11px;color:var(--md-on-surface-variant);">(placeholder — styled via CSS)</div>',
+        unsafe_allow_html=True,
+    )
 with bc4:
     if st.button("", use_container_width=True):
         pass
-    st.markdown('<div style="text-align:center;margin-top:-28px;font-size:13px;color:var(--md-on-surface-variant);">Logout style</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align:center;margin-top:-28px;font-size:13px;color:var(--md-on-surface-variant);">Logout style</div>',
+        unsafe_allow_html=True,
+    )
 
 # ── Inputs ──
 st.markdown("---")
@@ -131,20 +155,29 @@ wcag_pairs = [
     ("#DC2626 on #FDF8F3", "Error on cream", "6.5:1", "✅ AA"),
 ]
 
-st.markdown('<table style="width:100%;border-collapse:collapse;">'
+st.markdown(
+    '<table style="width:100%;border-collapse:collapse;">'
     '<tr style="border-bottom:2px solid var(--md-outline-variant);">'
     '<th style="text-align:left;padding:8px;">Pair</th>'
     '<th style="text-align:left;padding:8px;">Usage</th>'
     '<th style="text-align:center;padding:8px;">Ratio</th>'
     '<th style="text-align:center;padding:8px;">Status</th>'
-    '</tr>' +
-    "".join(f'<tr style="border-bottom:1px solid var(--md-outline-variant);">'
-            f'<td style="padding:8px;"><code>{p[0]}</code></td>'
-            f'<td style="padding:8px;">{p[1]}</td>'
-            f'<td style="padding:8px;text-align:center;font-weight:600;">{p[2]}</td>'
-            f'<td style="padding:8px;text-align:center;">{p[3]}</td>'
-            f'</tr>' for p in wcag_pairs) +
-    '</table>', unsafe_allow_html=True)
+    "</tr>"
+    + "".join(
+        f'<tr style="border-bottom:1px solid var(--md-outline-variant);">'
+        f'<td style="padding:8px;"><code>{p[0]}</code></td>'
+        f'<td style="padding:8px;">{p[1]}</td>'
+        f'<td style="padding:8px;text-align:center;font-weight:600;">{p[2]}</td>'
+        f'<td style="padding:8px;text-align:center;">{p[3]}</td>'
+        f"</tr>"
+        for p in wcag_pairs
+    )
+    + "</table>",
+    unsafe_allow_html=True,
+)
 
 st.markdown("---")
-st.markdown('<p style="text-align:center;color:var(--md-on-surface-variant);font-size:12px;">Design System v1.0 — Theme "Huyết Mạch"</p>', unsafe_allow_html=True)
+st.markdown(
+    '<p style="text-align:center;color:var(--md-on-surface-variant);font-size:12px;">Design System v1.0 — Theme "Huyết Mạch"</p>',
+    unsafe_allow_html=True,
+)

@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Literal
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel
 
@@ -74,10 +74,12 @@ class MatchResult:
         expectations = []
         for m in self.mappings:
             if m.is_required:
-                expectations.append({
-                    "expectation_type": "expect_column_values_to_not_be_null",
-                    "kwargs": {"column": m.expected_column}
-                })
+                expectations.append(
+                    {
+                        "expectation_type": "expect_column_values_to_not_be_null",
+                        "kwargs": {"column": m.expected_column},
+                    }
+                )
         return expectations
 
 
@@ -88,9 +90,6 @@ class MatcherConfig(BaseModel):
         "enabled": True,
         "engine": "rapidfuzz",
         "cutoff": 70,
-        "fallback_cutoff": 50
+        "fallback_cutoff": 50,
     }
-    features: Dict[str, Any] = {
-        "template_merge": True,
-        "confidence_scoring": True
-    }
+    features: Dict[str, Any] = {"template_merge": True, "confidence_scoring": True}

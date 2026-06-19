@@ -1,6 +1,5 @@
-from typing import Dict, Set, Optional, List
-from ..models import Alternative, MatchType
-from ..synonym_registry import SynonymRegistry
+from typing import Dict, Set, Optional
+from ..models import MatchType
 from .base import MatcherStrategy, MatchCandidate
 
 
@@ -10,7 +9,7 @@ class ExactMatcher(MatcherStrategy):
         expected_column: str,
         norm_expected: str,
         available_headers: Dict[str, str],
-        used_headers: Set[str]
+        used_headers: Set[str],
     ) -> Optional[MatchCandidate]:
         if not self.enabled:
             return None
@@ -23,6 +22,6 @@ class ExactMatcher(MatcherStrategy):
                 mtype=MatchType.EXACT,
                 confidence=100,
                 reason=f"exact: '{norm_expected}' == '{norm_expected}'",
-                alternatives=[self._make_alternative(matched, 100, MatchType.EXACT)]
+                alternatives=[self._make_alternative(matched, 100, MatchType.EXACT)],
             )
         return None

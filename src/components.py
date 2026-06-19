@@ -1,5 +1,6 @@
 import streamlit as st
 
+
 def render_status_bar(name, title, dept, roles_count_or_list, events_count_or_list):
     if isinstance(roles_count_or_list, list):
         roles = roles_count_or_list
@@ -29,7 +30,8 @@ def render_status_bar(name, title, dept, roles_count_or_list, events_count_or_li
     else:
         events_html = """<span class="md-chip" style="background-color: var(--md-surface-container-high); color: var(--md-on-surface-variant); opacity: 0.8; display: inline-flex; align-items: center;">Không có sự kiện miễn giảm</span>"""
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="md-status-bar" style="display: flex; flex-direction: column; gap: 12px; align-items: flex-start; width: 100%;">
 <div style="display: flex; gap: 32px; align-items: center; flex-wrap: wrap; width: 100%;">
 <div>
@@ -58,11 +60,14 @@ def render_status_bar(name, title, dept, roles_count_or_list, events_count_or_li
 </div>
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render_empty_state(message):
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div style="
     background-color: var(--md-surface-container-low);
     padding: 40px 32px;
@@ -77,11 +82,14 @@ def render_empty_state(message):
     <span class="material-symbols-outlined" style="font-size: 48px; color: var(--md-outline); margin-bottom: 12px;">inbox</span>
     <div>{message}</div>
 </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_warning_state(message):
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div style="
     background-color: var(--md-amber-bg);
     padding: 16px 20px;
@@ -94,7 +102,9 @@ def render_warning_state(message):
 ">
     <strong style="color: var(--md-amber);">Lưu ý:</strong> {message}
 </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_formula_card(breakdown):
@@ -107,7 +117,8 @@ def render_formula_card(breakdown):
         return
 
     # ── CSS for formula card ───────────────────────────────────────────────────
-    st.markdown("""
+    st.markdown(
+        """
 <style>
 .fc-section { margin-bottom: 20px; }
 .fc-title   { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
@@ -132,22 +143,25 @@ def render_formula_card(breakdown):
 .fc-tbl tr:last-child td { border-bottom: none; }
 .fc-hday    { font-size: 0.78rem; color: var(--md-on-surface-variant); }
 </style>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
-    name    = breakdown['teacher_name']
-    title   = breakdown['teacher_title']
-    dept    = breakdown['teacher_dept']
-    tf_name = breakdown['tf_name']
-    tf_s    = breakdown['tf_start']
-    tf_e    = breakdown['tf_end']
-    std_w   = breakdown['std_weeks']
-    segs    = breakdown['segments']
-    reds    = breakdown['reductions']
-    tot_gc  = breakdown['total_required_gc']
-    tot_nck = breakdown['total_required_nckh']
+    name = breakdown["teacher_name"]
+    title = breakdown["teacher_title"]
+    dept = breakdown["teacher_dept"]
+    tf_name = breakdown["tf_name"]
+    tf_s = breakdown["tf_start"]
+    tf_e = breakdown["tf_end"]
+    std_w = breakdown["std_weeks"]
+    segs = breakdown["segments"]
+    reds = breakdown["reductions"]
+    tot_gc = breakdown["total_required_gc"]
+    tot_nck = breakdown["total_required_nckh"]
 
     # ── Header ────────────────────────────────────────────────────────────────
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="fc-card" style="border-left: 4px solid var(--md-primary);">
 <div style="font-size: 1.15rem; font-weight: 800; color: var(--md-on-surface);">
   {name}
@@ -159,15 +173,18 @@ def render_formula_card(breakdown):
   Năm học: <b>{tf_name}</b> ({tf_s} → {tf_e}) · Tuần chuẩn: <b>{std_w:.0f} tuần</b>
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
     # ── Holidays reference ─────────────────────────────────────────────────────
-    if breakdown['holidays']:
+    if breakdown["holidays"]:
         rows_html = "".join(
             f"<tr><td>{h['name']}</td><td>{h['start']}</td><td>{h['end']}</td></tr>"
-            for h in breakdown['holidays']
+            for h in breakdown["holidays"]
         )
-        st.markdown(f"""
+        st.markdown(
+            f"""
 <div class="fc-section">
 <div class="fc-title">📅 Danh sách ngày nghỉ lễ/Tết trong năm học (dùng để loại khỏi tuần tính toán)</div>
 <div class="fc-card">
@@ -177,30 +194,34 @@ def render_formula_card(breakdown):
 </table>
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+            unsafe_allow_html=True,
+        )
 
     # ── Segment breakdown ──────────────────────────────────────────────────────
-    st.markdown('<div class="fc-title">📊 Chi tiết tính Định mức theo từng giai đoạn</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="fc-title">📊 Chi tiết tính Định mức theo từng giai đoạn</div>',
+        unsafe_allow_html=True,
+    )
 
     for i, seg in enumerate(segs, 1):
-        wd  = seg['workday_detail']
-        ovr = seg['is_overridden']
+        wd = seg["workday_detail"]
+        ovr = seg["is_overridden"]
 
         # Build workday arithmetic block
         if ovr:
             weeks_block = f"""
 <div class="fc-formula">
   <span class="fc-label">Số tuần (ghi đè thủ công):</span><br>
-  <span class="fc-num">{seg['seg_weeks']:.4f} tuần</span>
-  <span class="fc-label"> (override = {seg['override_val']})</span>
+  <span class="fc-num">{seg["seg_weeks"]:.4f} tuần</span>
+  <span class="fc-label"> (override = {seg["override_val"]})</span>
 </div>"""
         else:
             # List holidays that fell in this segment
             hday_rows = ""
-            if wd and wd['holiday_days']:
+            if wd and wd["holiday_days"]:
                 grouped = {}
-                for d, n in wd['holiday_days']:
+                for d, n in wd["holiday_days"]:
                     grouped.setdefault(n, []).append(d)
                 for hname, hdates in grouped.items():
                     hday_rows += f"<tr><td class='fc-hday'>{hname}</td><td class='fc-hday'>{', '.join(hdates[:3])}{'...' if len(hdates) > 3 else ''}</td><td class='fc-hday'>{len(hdates)} ngày</td></tr>"
@@ -212,13 +233,13 @@ def render_formula_card(breakdown):
             else:
                 hday_table = "<div class='fc-label' style='margin-top:6px;'>Không có ngày nghỉ lễ trong giai đoạn này.</div>"
 
-            cal   = wd['calendar_days'] if wd else 0
-            wkend = wd['weekend_days']  if wd else 0
-            hhol  = wd['holiday_days_count'] if wd else 0
-            actv  = wd['active_workdays'] if wd else 0
-            fw    = wd['full_weeks']     if wd else 0
-            rm    = wd['remainder_days'] if wd else 0
-            ex_w  = seg['seg_weeks']
+            cal = wd["calendar_days"] if wd else 0
+            wkend = wd["weekend_days"] if wd else 0
+            hhol = wd["holiday_days_count"] if wd else 0
+            actv = wd["active_workdays"] if wd else 0
+            fw = wd["full_weeks"] if wd else 0
+            rm = wd["remainder_days"] if wd else 0
+            ex_w = seg["seg_weeks"]
 
             weeks_block = f"""
 <div class="fc-formula">
@@ -235,7 +256,7 @@ def render_formula_card(breakdown):
 
         # Build GC formula string
         role_part = ""
-        if seg['role_t_red_pct'] > 0:
+        if seg["role_t_red_pct"] > 0:
             role_part = f" × (1 − {seg['role_t_red_pct']:.0f}%)"
         gc_formula = (
             f"Định mức GC = {seg['base_gc']}"
@@ -244,35 +265,48 @@ def render_formula_card(breakdown):
             f" = <b class='fc-num'>{seg['req_gc']:.2f} GC</b>"
         )
 
-        nckh_parts = [str(seg['base_nckh'])]
-        if seg['nckh_factor'] != 1.0:
+        nckh_parts = [str(seg["base_nckh"])]
+        if seg["nckh_factor"] != 1.0:
             nckh_parts.append(f"× {seg['nckh_factor']}")
-        if seg['role_n_red_pct'] > 0:
+        if seg["role_n_red_pct"] > 0:
             nckh_parts.append(f"× (1 − {seg['role_n_red_pct']:.0f}%)")
         nckh_parts.append(f"× {seg['seg_weeks']:.4f} / {seg['std_weeks']:.0f}")
-        nckh_formula = "Định mức NCKH = " + " ".join(nckh_parts) + f" = <b class='fc-num'>{seg['req_nckh']:.2f} giờ</b>"
+        nckh_formula = (
+            "Định mức NCKH = "
+            + " ".join(nckh_parts)
+            + f" = <b class='fc-num'>{seg['req_nckh']:.2f} giờ</b>"
+        )
 
         role_badge = (
-            f"<span style='background:var(--md-amber);color:#000;padding:2px 8px;"
-            f"border-radius:99px;font-size:0.75rem;font-weight:700;'>"
-            f"Kiêm nhiệm: {seg['role_desc']} (−{seg['role_t_red_pct']:.0f}% GD)</span> "
-        ) if seg['role_desc'] else ""
+            (
+                f"<span style='background:var(--md-amber);color:#000;padding:2px 8px;"
+                f"border-radius:99px;font-size:0.75rem;font-weight:700;'>"
+                f"Kiêm nhiệm: {seg['role_desc']} (−{seg['role_t_red_pct']:.0f}% GD)</span> "
+            )
+            if seg["role_desc"]
+            else ""
+        )
 
         ovr_badge = (
-            "<span style='background:#dbeafe;color:#1e40af;padding:2px 8px;"
-            "border-radius:99px;font-size:0.75rem;font-weight:700;'>"
-            "⚙️ Số tuần ghi đè thủ công</span> "
-        ) if ovr else ""
+            (
+                "<span style='background:#dbeafe;color:#1e40af;padding:2px 8px;"
+                "border-radius:99px;font-size:0.75rem;font-weight:700;'>"
+                "⚙️ Số tuần ghi đè thủ công</span> "
+            )
+            if ovr
+            else ""
+        )
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
 <div class="fc-card">
 <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;">
   <div style="font-weight:700;color:var(--md-on-surface);">
-    Giai đoạn {i}: {seg['period_start']} → {seg['period_end']}
+    Giai đoạn {i}: {seg["period_start"]} → {seg["period_end"]}
   </div>
   <div style="font-size:0.8rem;color:var(--md-on-surface-variant);">
-    {seg['title_name']} · {seg['dept_name']}
-    {'&nbsp;&nbsp;' + role_badge if role_badge else ''}
+    {seg["title_name"]} · {seg["dept_name"]}
+    {"&nbsp;&nbsp;" + role_badge if role_badge else ""}
     {ovr_badge}
   </div>
 </div>
@@ -282,35 +316,39 @@ def render_formula_card(breakdown):
   {nckh_formula}
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+            unsafe_allow_html=True,
+        )
 
     # ── Reductions detail ──────────────────────────────────────────────────────
     if reds:
-        st.markdown('<div class="fc-title" style="margin-top:16px;">🔻 Chi tiết Miễn giảm định mức (SPECIAL)</div>',
-                    unsafe_allow_html=True)
+        st.markdown(
+            '<div class="fc-title" style="margin-top:16px;">🔻 Chi tiết Miễn giảm định mức (SPECIAL)</div>',
+            unsafe_allow_html=True,
+        )
         for red in reds:
-            wd_r = red['workday_detail']
-            if red['is_overridden']:
+            wd_r = red["workday_detail"]
+            if red["is_overridden"]:
                 weeks_blk = f"""
 <div class="fc-formula">
-  Số tuần miễn giảm (ghi đè): <span class="fc-num">{red['red_weeks']:.4f} tuần</span>
+  Số tuần miễn giảm (ghi đè): <span class="fc-num">{red["red_weeks"]:.4f} tuần</span>
 </div>"""
             else:
-                cal_r  = wd_r['calendar_days']     if wd_r else 0
-                wk_r   = wd_r['weekend_days']      if wd_r else 0
-                hl_r   = wd_r['holiday_days_count'] if wd_r else 0
-                ac_r   = wd_r['active_workdays']   if wd_r else 0
-                fw_r   = wd_r['full_weeks']         if wd_r else 0
-                rm_r   = wd_r['remainder_days']     if wd_r else 0
+                cal_r = wd_r["calendar_days"] if wd_r else 0
+                wk_r = wd_r["weekend_days"] if wd_r else 0
+                hl_r = wd_r["holiday_days_count"] if wd_r else 0
+                ac_r = wd_r["active_workdays"] if wd_r else 0
+                fw_r = wd_r["full_weeks"] if wd_r else 0
+                rm_r = wd_r["remainder_days"] if wd_r else 0
 
                 hday_r_html = ""
-                if wd_r and wd_r['holiday_days']:
+                if wd_r and wd_r["holiday_days"]:
                     grouped_r = {}
-                    for d, n in wd_r['holiday_days']:
+                    for d, n in wd_r["holiday_days"]:
                         grouped_r.setdefault(n, []).append(d)
                     rows_r = "".join(
                         f"<tr><td class='fc-hday'>{n}</td>"
-                        f"<td class='fc-hday'>{', '.join(ds[:3])}{'...' if len(ds)>3 else ''}</td>"
+                        f"<td class='fc-hday'>{', '.join(ds[:3])}{'...' if len(ds) > 3 else ''}</td>"
                         f"<td class='fc-hday'>{len(ds)} ngày</td></tr>"
                         for n, ds in grouped_r.items()
                     )
@@ -327,29 +365,33 @@ def render_formula_card(breakdown):
   − Nghỉ lễ: <span class="fc-num">{hl_r}</span><br>
   <b>= Ngày làm việc: <span class="fc-num">{ac_r}</span></b>
   = {fw_r} tuần + {rm_r} ngày dư<br>
-  <span class="fc-eq">⟹ {ac_r} ÷ 5 = <span class="fc-num">{red['red_weeks']:.4f} tuần miễn giảm</span></span>
+  <span class="fc-eq">⟹ {ac_r} ÷ 5 = <span class="fc-num">{red["red_weeks"]:.4f} tuần miễn giảm</span></span>
 </div>
 {hday_r_html}"""
 
-            st.markdown(f"""
+            st.markdown(
+                f"""
 <div class="fc-card" style="border-left:4px solid #ef4444;">
-<div style="font-weight:700;color:var(--md-on-surface);">{red['rule_name']}</div>
+<div style="font-weight:700;color:var(--md-on-surface);">{red["rule_name"]}</div>
 <div style="font-size:0.8rem;color:var(--md-on-surface-variant);margin-top:2px;">
-  Thời gian: {red['period_start']} → {red['period_end']} ·
-  Giảm GD: <b>{red['teaching_reduction_pct']:.0f}%</b> ·
-  Giảm NCKH: <b>{red['nckh_reduction_pct']:.0f}%</b>
+  Thời gian: {red["period_start"]} → {red["period_end"]} ·
+  Giảm GD: <b>{red["teaching_reduction_pct"]:.0f}%</b> ·
+  Giảm NCKH: <b>{red["nckh_reduction_pct"]:.0f}%</b>
 </div>
 {weeks_blk}
 <div class="fc-formula" style="margin-top:8px;">
-  Tác động: giảm <span class="fc-num">{red['teaching_reduction_pct']:.0f}%</span>
-  định mức GD trong <span class="fc-num">{red['red_weeks']:.4f}</span> /
-  <span class="fc-num">{red['std_weeks']:.0f}</span> tuần của năm học
+  Tác động: giảm <span class="fc-num">{red["teaching_reduction_pct"]:.0f}%</span>
+  định mức GD trong <span class="fc-num">{red["red_weeks"]:.4f}</span> /
+  <span class="fc-num">{red["std_weeks"]:.0f}</span> tuần của năm học
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+                unsafe_allow_html=True,
+            )
 
     # ── Summary row ───────────────────────────────────────────────────────────
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="fc-card" style="border-left:4px solid #059669;margin-top:16px;">
 <div class="fc-title">Tổng kết (trước quy đổi Điều 12)</div>
 <div class="fc-formula">
@@ -360,7 +402,9 @@ def render_formula_card(breakdown):
   * Số giờ miễn giảm thực tế được tính bởi engine chi tiết (xem cột "Số giờ được miễn giảm" trên bảng).
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render_metric_card(title, value, delta=None, icon=None):
@@ -376,7 +420,8 @@ def render_metric_card(title, value, delta=None, icon=None):
         icon_html = f'<span class="material-symbols-outlined" style="color: var(--md-primary-fixed-dim); font-size: 24px;">{icon}</span>'
 
     # Do not indent HTML block lines to avoid markdown code block parsing
-    st.markdown(f"""
+    st.markdown(
+        f"""
 <div class="md-card" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 0px; padding: 20px !important;">
 <div style="display: flex; align-items: baseline; justify-content: space-between;">
 <span style="color: var(--md-on-surface); font-size: 2.2rem; font-weight: 800; font-family: var(--font-family); letter-spacing: -0.02em;">{value}</span>{delta_html}
@@ -385,7 +430,9 @@ def render_metric_card(title, value, delta=None, icon=None):
 <span style="color: var(--md-on-surface-variant); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">{title}</span>{icon_html}
 </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def render_chip(label, variant="primary", icon=None):
@@ -396,7 +443,11 @@ def render_chip(label, variant="primary", icon=None):
         "amber": "md-chip-amber",
         "tertiary": "md-chip-tertiary",
     }.get(variant, "md-chip-primary")
-    icon_html = f'<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">{icon}</span>' if icon else ""
+    icon_html = (
+        f'<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">{icon}</span>'
+        if icon
+        else ""
+    )
     return f'<span class="md-chip {variant_class}">{icon_html}{label}</span>'
 
 
@@ -1071,22 +1122,22 @@ _PREMIUM_CSS = """
 </style>
 """
 
+
 def inject_premium_css():
     st.markdown(_PREMIUM_CSS, unsafe_allow_html=True)
-
-
-
 
 
 @st.cache_data(ttl=5)
 def _get_pending_batch_count():
     try:
         from database import get_connection
+
         _c = get_connection().cursor()
         _c.execute("SELECT COUNT(*) FROM import_batches WHERE status = 'pending'")
         return _c.fetchone()[0]
     except Exception:
         return 0
+
 
 @st.cache_data(ttl=60)
 def _get_sidebar_system_stats():
@@ -1097,15 +1148,19 @@ def _get_sidebar_system_stats():
     _has_excel = False
     try:
         from database import get_connection
+
         _conn_sidebar = get_connection()
         _c = _conn_sidebar.cursor()
-        _c.execute("SELECT COUNT(*) FROM teachers WHERE employment_type IN ('TEACHER','STAFF')")
+        _c.execute(
+            "SELECT COUNT(*) FROM teachers WHERE employment_type IN ('TEACHER','STAFF')"
+        )
         _teacher_count = _c.fetchone()[0]
         _c.execute("SELECT COUNT(*) FROM teachers WHERE employment_type = 'GUEST'")
         _guest_count = _c.fetchone()[0]
         _c.execute("SELECT name FROM timeframes ORDER BY start_date DESC LIMIT 1")
         _r = _c.fetchone()
-        if _r: _tf_name = _r[0]
+        if _r:
+            _tf_name = _r[0]
         _c.execute("SELECT COUNT(*) FROM session_teacher_totals")
         _has_excel = _c.fetchone()[0] > 0
         _conn_sidebar.close()
@@ -1117,7 +1172,9 @@ def _get_sidebar_system_stats():
 
 def render_sidebar(active_page="home"):
     # Build system status data (cached)
-    _db_ok, _tf_name, _teacher_count, _guest_count, _has_excel = _get_sidebar_system_stats()
+    _db_ok, _tf_name, _teacher_count, _guest_count, _has_excel = (
+        _get_sidebar_system_stats()
+    )
     _pending_batches = _get_pending_batch_count()
 
     _dot_color = "#22c55e" if _db_ok else "#ef4444"
@@ -1136,22 +1193,31 @@ def render_sidebar(active_page="home"):
         "payroll": "Payroll",
         "pheduyet": "PheDuyet",
     }
-    
+
     active_slug = _page_hrefs.get(active_page, "")
     if active_page == "home":
-        active_selector = 'section[data-testid="stSidebar"] [data-testid="stPageLink"] a[href="/"]'
+        active_selector = (
+            'section[data-testid="stSidebar"] [data-testid="stPageLink"] a[href="/"]'
+        )
     else:
-        active_selector = f'section[data-testid="stSidebar"] [data-testid="stPageLink"] a[href*="{active_slug}"]' if active_slug else ''
+        active_selector = (
+            f'section[data-testid="stSidebar"] [data-testid="stPageLink"] a[href*="{active_slug}"]'
+            if active_slug
+            else ""
+        )
 
     # Render HTML sidebar
     with st.sidebar:
         # Inject CSS (inside sidebar so it persists across page navigation)
-        st.markdown(f"""
+        st.markdown(
+            f"""
 <style>
     [data-testid="stSidebarNav"] {{
         display: none !important;
     }}
-    {active_selector and f'''
+    {
+                active_selector
+                and f'''
     {active_selector} {{
         background-color: #007855 !important;
         color: #FFFFFF !important;
@@ -1163,19 +1229,24 @@ def render_sidebar(active_page="home"):
         color: #FFFFFF !important;
         font-weight: 700 !important;
     }}
-    ''' or ''}
+    '''
+                or ""
+            }
 </style>
-""", unsafe_allow_html=True)
+""",
+            unsafe_allow_html=True,
+        )
 
         inject_premium_css()
 
         from auth import get_current_user
+
         user = get_current_user()
-        
+
         if user:
             role_labels = {
                 "admin": "Quản trị viên",
-                "head_dept": f"Trưởng {user.get('department_name') or 'Khoa'}"
+                "head_dept": f"Trưởng {user.get('department_name') or 'Khoa'}",
             }
             role_label = role_labels.get(user["role"], "Người dùng")
             identity_html = (
@@ -1184,19 +1255,20 @@ def render_sidebar(active_page="home"):
                 f'  <div style="font-weight: 700; color: #FFFFFF; font-size: 16px; letter-spacing: 0.01em;">{user["username"]}</div>'
                 f'  <div style="font-size: 12px; color: #FFC107; margin-top: 4px; font-weight: 600; display: flex; align-items: center; gap: 4px;">'
                 f'    <span class="material-symbols-outlined" style="font-size: 14px;">verified_user</span> {role_label}'
-                f'  </div>'
-                f'</div>'
+                f"  </div>"
+                f"</div>"
             )
         else:
             identity_html = (
                 '<div style="margin-top: 16px; padding: 14px 16px; background: linear-gradient(135deg, #fef2f2, #fee2e2); border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);">'
                 '  <div style="font-size: 13px; color: #b91c1c; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;">'
                 '    <span class="material-symbols-outlined" style="font-size: 18px;">lock</span> Chế độ Khách (Đọc)'
-                '  </div>'
-                '</div>'
+                "  </div>"
+                "</div>"
             )
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
 <div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 16px;">
     <div style="display: flex; align-items: center; gap: 12px;">
         <div style="
@@ -1217,92 +1289,159 @@ def render_sidebar(active_page="home"):
     <div style="height: 1px; width: 100%; background: linear-gradient(90deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%); margin-top: 20px;"></div>
     {identity_html}
 </div>
-""", unsafe_allow_html=True)
+""",
+            unsafe_allow_html=True,
+        )
 
         # ---- GLOBAL TIMEFRAME SELECTOR ----
         from database import get_cached_timeframes
+
         df_tf = get_cached_timeframes()
         if not df_tf.empty:
-            tf_options = {f"{row['name']}": int(row['id']) for _, row in df_tf.iterrows()}
-            
+            tf_options = {
+                f"{row['name']}": int(row["id"]) for _, row in df_tf.iterrows()
+            }
+
             # Init global state if missing
-            if 'global_tf_id' not in st.session_state or st.session_state['global_tf_id'] not in tf_options.values():
-                st.session_state['global_tf_id'] = int(df_tf.iloc[0]['id'])
+            if (
+                "global_tf_id" not in st.session_state
+                or st.session_state["global_tf_id"] not in tf_options.values()
+            ):
+                st.session_state["global_tf_id"] = int(df_tf.iloc[0]["id"])
 
-            current_val = st.session_state['global_tf_id']
-            current_key = next((k for k, v in tf_options.items() if v == current_val), list(tf_options.keys())[0])
+            current_val = st.session_state["global_tf_id"]
+            current_key = next(
+                (k for k, v in tf_options.items() if v == current_val),
+                list(tf_options.keys())[0],
+            )
 
-            selected_key = st.selectbox("Năm học (Toàn cục):", options=list(tf_options.keys()), index=list(tf_options.keys()).index(current_key), key="global_tf_selector")
-            
+            selected_key = st.selectbox(
+                "Năm học (Toàn cục):",
+                options=list(tf_options.keys()),
+                index=list(tf_options.keys()).index(current_key),
+                key="global_tf_selector",
+            )
+
             # Display weeks used below the dropdown
             selected_tf_id = tf_options[selected_key]
             try:
                 from database import ThreadLocalConnectionProxy
+
                 with ThreadLocalConnectionProxy() as conn_sb:
                     cur = conn_sb.cursor()
-                    cur.execute("SELECT start_date, end_date FROM timeframes WHERE id = ?", (selected_tf_id,))
+                    cur.execute(
+                        "SELECT start_date, end_date FROM timeframes WHERE id = ?",
+                        (selected_tf_id,),
+                    )
                     tf_info = cur.fetchone()
                     if tf_info:
                         start_str, end_str = tf_info
-                        cur.execute("SELECT start_date, end_date FROM academic_holidays WHERE timeframe_id = ?", (selected_tf_id,))
-                        
+                        cur.execute(
+                            "SELECT start_date, end_date FROM academic_holidays WHERE timeframe_id = ?",
+                            (selected_tf_id,),
+                        )
+
                         import pandas as pd
                         from calculations import calculate_t04_weeks
+
                         s_dt = pd.to_datetime(start_str)
                         e_dt = pd.to_datetime(end_str)
-                        
+
                         holidays_list = []
                         for r in cur.fetchall():
-                            holidays_list.append((pd.to_datetime(r[0]), pd.to_datetime(r[1])))
-                            
+                            holidays_list.append(
+                                (pd.to_datetime(r[0]), pd.to_datetime(r[1]))
+                            )
+
                         weeks_used = calculate_t04_weeks(s_dt, e_dt, holidays_list)
-                        st.markdown(f'<div style="font-size: 12px; color: #FFC107; margin-top: -8px; margin-bottom: 12px; font-weight: 600;">📅 Thực tế: {weeks_used:.1f} tuần dạy học</div>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div style="font-size: 12px; color: #FFC107; margin-top: -8px; margin-bottom: 12px; font-weight: 600;">📅 Thực tế: {weeks_used:.1f} tuần dạy học</div>',
+                            unsafe_allow_html=True,
+                        )
             except Exception as e:
                 # Log to stderr for system administrators
                 import sys
+
                 print(f"Error calculating weeks in sidebar: {e}", file=sys.stderr)
-            
+
             if tf_options[selected_key] != current_val:
-                st.session_state['global_tf_id'] = tf_options[selected_key]
+                st.session_state["global_tf_id"] = tf_options[selected_key]
                 st.rerun()
-            
-            st.markdown('<div style="margin-bottom: 4px;"></div>', unsafe_allow_html=True)
+
+            st.markdown(
+                '<div style="margin-bottom: 4px;"></div>', unsafe_allow_html=True
+            )
         # -----------------------------------
 
         st.page_link("app.py", label="Trang chủ", icon=":material/home:")
-        st.page_link("pages/1_Dashboard.py", label="Bảng điều khiển", icon=":material/dashboard:")
-        st.page_link("pages/2_QuanLyCanBo.py", label="Quản lý Cán bộ", icon=":material/groups:")
-        st.page_link("pages/3_NhatKyHoatDong.py", label="Nhật ký Hoạt động", icon=":material/edit_note:")
-        
+        st.page_link(
+            "pages/1_Dashboard.py", label="Bảng điều khiển", icon=":material/dashboard:"
+        )
+        st.page_link(
+            "pages/2_QuanLyCanBo.py", label="Quản lý Cán bộ", icon=":material/groups:"
+        )
+        st.page_link(
+            "pages/3_NhatKyHoatDong.py",
+            label="Nhật ký Hoạt động",
+            icon=":material/edit_note:",
+        )
+
         # Role-based menu links
         role = user["role"] if user else None
         if role in ["admin", "head_dept"]:
-            st.page_link("pages/4_CaiDatHeThong.py", label="Cài đặt Hệ thống", icon=":material/settings:")
+            st.page_link(
+                "pages/4_CaiDatHeThong.py",
+                label="Cài đặt Hệ thống",
+                icon=":material/settings:",
+            )
         if role == "admin":
-            st.page_link("pages/6_Payroll.py", label="Quản lý Lương TT11", icon=":material/payments:")
+            st.page_link(
+                "pages/6_Payroll.py",
+                label="Quản lý Lương TT11",
+                icon=":material/payments:",
+            )
             if _pending_batches:
                 _pc1, _pc2 = st.columns([1, 0.12])
                 with _pc1:
-                    st.page_link("pages/7_PheDuyet.py", label="Phê duyệt Dữ liệu", icon=":material/fact_check:", use_container_width=True)
+                    st.page_link(
+                        "pages/7_PheDuyet.py",
+                        label="Phê duyệt Dữ liệu",
+                        icon=":material/fact_check:",
+                        use_container_width=True,
+                    )
                 with _pc2:
-                    st.markdown(f"<div style='background:#ef4444;color:white;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px;'>{_pending_batches}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:#ef4444;color:white;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px;'>{_pending_batches}</div>",
+                        unsafe_allow_html=True,
+                    )
             else:
-                st.page_link("pages/7_PheDuyet.py", label="Phê duyệt Dữ liệu", icon=":material/fact_check:")
-            
+                st.page_link(
+                    "pages/7_PheDuyet.py",
+                    label="Phê duyệt Dữ liệu",
+                    icon=":material/fact_check:",
+                )
+
         login_label = "Thông tin tài khoản" if user else "Đăng nhập"
         st.page_link("pages/8_DangNhap.py", label=login_label, icon=":material/lock:")
 
         if user:
             from auth import logout
+
             if st.button("Đăng xuất", type="primary", use_container_width=True):
                 logout()
                 st.switch_page("pages/8_DangNhap.py")
 
-        st.markdown('<div style="margin-top:24px;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;"></div>', unsafe_allow_html=True)
-        st.page_link("pages/5_DesignSystem.py", label="Design System", icon=":material/palette:")
+        st.markdown(
+            '<div style="margin-top:24px;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;"></div>',
+            unsafe_allow_html=True,
+        )
+        st.page_link(
+            "pages/5_DesignSystem.py", label="Design System", icon=":material/palette:"
+        )
 
         # System status bar
-        st.markdown(f"""
+        st.markdown(
+            f"""
 <div style="
     margin-top: 32px;
     padding: 12px 14px;
@@ -1334,11 +1473,19 @@ def render_sidebar(active_page="home"):
         </div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+""",
+            unsafe_allow_html=True,
+        )
+
 
 def render_step_header(step_num, title, description=None):
-    desc_html = f'<div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">{description}</div>' if description else ""
-    st.markdown(f"""
+    desc_html = (
+        f'<div style="color: var(--md-on-surface-variant); font-size: 0.9rem; margin-top: 4px;">{description}</div>'
+        if description
+        else ""
+    )
+    st.markdown(
+        f"""
     <div style="margin-top: 24px; margin-bottom: 16px;">
         <div style="display: flex; align-items: center; gap: 8px;">
             <span style="
@@ -1357,11 +1504,17 @@ def render_step_header(step_num, title, description=None):
         </div>
         {desc_html}
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
+
 
 def render_error_report(errors):
-    errors_html = "".join([f'<li style="margin-bottom: 6px;">{err}</li>' for err in errors])
-    st.markdown(f"""
+    errors_html = "".join(
+        [f'<li style="margin-bottom: 6px;">{err}</li>' for err in errors]
+    )
+    st.markdown(
+        f"""
     <div style="
         background-color: var(--md-error-container);
         border: 1px solid var(--md-error);
@@ -1379,10 +1532,14 @@ def render_error_report(errors):
             {errors_html}
         </ul>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
+
 
 def render_success_preview(df):
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="
         background-color: var(--md-green-bg);
         border: 1px solid var(--md-green);
@@ -1397,7 +1554,9 @@ def render_success_preview(df):
             File hợp lệ! Sẵn sàng nhập {len(df)} cán bộ.
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_diff_viewer(
@@ -1406,7 +1565,7 @@ def render_diff_viewer(
     domain: str,
     batch_id: int,
     view_mode: str = "inline",
-    key_prefix: str = "diff"
+    key_prefix: str = "diff",
 ):
     """
     Render a diff comparison view using AgGrid with cell-level highlighting,
@@ -1440,18 +1599,20 @@ def render_diff_viewer(
 
     # Build summary chips
     markers = formatted_df["_diff_marker"].value_counts()
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-        <span class="md-chip md-chip-green">🆕 Mới: {markers.get('NEW', 0)}</span>
-        <span class="md-chip md-chip-amber">🟡 Cập nhật: {markers.get('UPDATE', 0)}</span>
-        <span class="md-chip md-chip-red">🔴 Xóa: {markers.get('DELETE', 0)}</span>
-        <span class="md-chip">⚪ Bỏ qua: {markers.get('SKIP', 0)}</span>
+        <span class="md-chip md-chip-green">🆕 Mới: {markers.get("NEW", 0)}</span>
+        <span class="md-chip md-chip-amber">🟡 Cập nhật: {markers.get("UPDATE", 0)}</span>
+        <span class="md-chip md-chip-red">🔴 Xóa: {markers.get("DELETE", 0)}</span>
+        <span class="md-chip">⚪ Bỏ qua: {markers.get("SKIP", 0)}</span>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Display columns (exclude internal ones)
-    display_cols = [c for c in formatted_df.columns
-                    if not c.startswith("_")]
+    display_cols = [c for c in formatted_df.columns if not c.startswith("_")]
     try:
         _render_aggrid_diff(formatted_df, display_cols, batch_id, view_mode, key_prefix)
     except Exception:
@@ -1488,19 +1649,13 @@ def _render_aggrid_diff(formatted_df, display_cols, batch_id, view_mode, key_pre
 
     for col in display_df.columns:
         gb.configure_column(
-            col,
-            cellStyle=cell_style_js,
-            wrapText=False,
-            autoHeight=False
+            col, cellStyle=cell_style_js, wrapText=False, autoHeight=False
         )
 
     # Add diff marker column with status chip
     if "_diff_marker_display" in formatted_df.columns:
         gb.configure_column(
-            "_diff_marker_display",
-            headerName="Trạng thái",
-            width=140,
-            pinned="left"
+            "_diff_marker_display", headerName="Trạng thái", width=140, pinned="left"
         )
 
     gb.configure_grid_options(
@@ -1512,10 +1667,7 @@ def _render_aggrid_diff(formatted_df, display_cols, batch_id, view_mode, key_pre
         ensureDomOrder=True,
     )
 
-    gb.configure_selection(
-        selection_mode="multiple",
-        use_checkbox=False
-    )
+    gb.configure_selection(selection_mode="multiple", use_checkbox=False)
 
     grid_options = gb.build()
 
@@ -1537,18 +1689,65 @@ def _render_aggrid_diff(formatted_df, display_cols, batch_id, view_mode, key_pre
 def _render_fallback_diff(staging_df, domain):
     """Fallback renderer using native st.dataframe when AgGrid is unavailable."""
     config_map = {
-        "teachers": {"cols": ["row_num", "teacher_name", "department", "title", "diff_marker", "diff_detail"],
-                     "rename": {"row_num": "Dòng", "teacher_name": "Họ tên", "department": "Đơn vị",
-                                "title": "Chức danh", "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}},
-        "activities": {"cols": ["row_num", "teacher_name", "activity_type_name", "diff_marker", "diff_detail"],
-                       "rename": {"row_num": "Dòng", "teacher_name": "Mã GV", "activity_type_name": "Hoạt động",
-                                  "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}},
-        "schedule": {"cols": ["row_num", "teacher_name", "subject_name", "diff_marker", "diff_detail"],
-                     "rename": {"row_num": "Dòng", "teacher_name": "Họ tên", "subject_name": "Môn",
-                                "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}},
-        "aggregate_totals": {"cols": ["row_num", "teacher_name", "diff_marker", "diff_detail"],
-                             "rename": {"row_num": "Dòng", "teacher_name": "Mã GV",
-                                        "diff_marker": "Trạng thái", "diff_detail": "Chi tiết"}}
+        "teachers": {
+            "cols": [
+                "row_num",
+                "teacher_name",
+                "department",
+                "title",
+                "diff_marker",
+                "diff_detail",
+            ],
+            "rename": {
+                "row_num": "Dòng",
+                "teacher_name": "Họ tên",
+                "department": "Đơn vị",
+                "title": "Chức danh",
+                "diff_marker": "Trạng thái",
+                "diff_detail": "Chi tiết",
+            },
+        },
+        "activities": {
+            "cols": [
+                "row_num",
+                "teacher_name",
+                "activity_type_name",
+                "diff_marker",
+                "diff_detail",
+            ],
+            "rename": {
+                "row_num": "Dòng",
+                "teacher_name": "Mã GV",
+                "activity_type_name": "Hoạt động",
+                "diff_marker": "Trạng thái",
+                "diff_detail": "Chi tiết",
+            },
+        },
+        "schedule": {
+            "cols": [
+                "row_num",
+                "teacher_name",
+                "subject_name",
+                "diff_marker",
+                "diff_detail",
+            ],
+            "rename": {
+                "row_num": "Dòng",
+                "teacher_name": "Họ tên",
+                "subject_name": "Môn",
+                "diff_marker": "Trạng thái",
+                "diff_detail": "Chi tiết",
+            },
+        },
+        "aggregate_totals": {
+            "cols": ["row_num", "teacher_name", "diff_marker", "diff_detail"],
+            "rename": {
+                "row_num": "Dòng",
+                "teacher_name": "Mã GV",
+                "diff_marker": "Trạng thái",
+                "diff_detail": "Chi tiết",
+            },
+        },
     }
     config = config_map.get(domain, config_map["teachers"])
     available = [c for c in config["cols"] if c in staging_df.columns]

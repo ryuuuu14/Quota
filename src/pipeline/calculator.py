@@ -2,15 +2,16 @@ import pandas as pd
 from database import get_connection
 
 LOOKUP_TABLE = {
-    "LT":               [(0, 40, 1.0), (41, 60, 1.2), (61, 80, 1.4), (81, float("inf"), 1.5)],
-    "TH":               [(0, 40, 1.0), (41, 55, 1.2), (56, 70, 1.4), (71, float("inf"), 1.5)],
-    "NN_CNTT":          [(0, 25, 1.0), (26, 40, 1.2), (41, 60, 1.4), (61, float("inf"), 1.5)],
-    "THẠC SĨ":          [(0, 50, 1.3), (51, float("inf"), 1.5)],
-    "TIẾN SĨ":          [(0, float("inf"), 2.0)],
-    "LLCT TRUNG CẤP":   [(0, 50, 1.0), (51, float("inf"), 1.2)],
-    "LLCT CAO CẤP":     [(0, 50, 1.3), (51, float("inf"), 1.5)],
-    "BỒI DƯỠNG":        [(0, float("inf"), 1.0)],
+    "LT": [(0, 40, 1.0), (41, 60, 1.2), (61, 80, 1.4), (81, float("inf"), 1.5)],
+    "TH": [(0, 40, 1.0), (41, 55, 1.2), (56, 70, 1.4), (71, float("inf"), 1.5)],
+    "NN_CNTT": [(0, 25, 1.0), (26, 40, 1.2), (41, 60, 1.4), (61, float("inf"), 1.5)],
+    "THẠC SĨ": [(0, 50, 1.3), (51, float("inf"), 1.5)],
+    "TIẾN SĨ": [(0, float("inf"), 2.0)],
+    "LLCT TRUNG CẤP": [(0, 50, 1.0), (51, float("inf"), 1.2)],
+    "LLCT CAO CẤP": [(0, 50, 1.3), (51, float("inf"), 1.5)],
+    "BỒI DƯỠNG": [(0, float("inf"), 1.0)],
 }
+
 
 def lookup_he_so_loai(loai, si_so):
     loai = loai.strip().upper()
@@ -22,6 +23,7 @@ def lookup_he_so_loai(loai, si_so):
         elif lo <= si_so <= hi:
             return hs
     return 1.0
+
 
 def calculate_rows(df):
     df = df.copy()
@@ -35,6 +37,7 @@ def calculate_rows(df):
     )
     return df
 
+
 def aggregate_by_teacher(df_calculated):
     return (
         df_calculated.groupby("teacher_id")
@@ -47,6 +50,7 @@ def aggregate_by_teacher(df_calculated):
         .reset_index()
     )
 
+
 def calculate_preview(timeframe_id, df_calculated, conn=None):
     from calculations import calculate_teacher_metrics
 
@@ -57,13 +61,15 @@ def calculate_preview(timeframe_id, df_calculated, conn=None):
 
     session_rows = []
     for _, r in agg.iterrows():
-        session_rows.append({
-            "teacher_id": int(r["teacher_id"]),
-            "giang_day_truc_tiep": float(r["tong_tiet_thuc_day"]),
-            "hdcm_bd": 0.0,
-            "nckh_total": 0.0,
-            "nvk_total": 0.0,
-        })
+        session_rows.append(
+            {
+                "teacher_id": int(r["teacher_id"]),
+                "giang_day_truc_tiep": float(r["tong_tiet_thuc_day"]),
+                "hdcm_bd": 0.0,
+                "nckh_total": 0.0,
+                "nvk_total": 0.0,
+            }
+        )
     df_session = pd.DataFrame(session_rows)
 
     df_metrics = calculate_teacher_metrics(
@@ -71,5 +77,7 @@ def calculate_preview(timeframe_id, df_calculated, conn=None):
         df_session_override=df_session,
     )
 
-    df_result = pd.merge(df_metrics, agg, left_on="id", right_on="teacher_id", how="left")
+    df_result = pd.merge(
+        df_metrics, agg, left_on="id", right_on="teacher_id", how="left"
+    )
     return df_result

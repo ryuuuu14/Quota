@@ -1,8 +1,7 @@
-import os
-import sys
 from typing import Dict, Any
 
 from agent_core.metrics import MetricsCollector
+
 
 class PipelineOrchestrator:
     def __init__(self):
@@ -14,6 +13,7 @@ class PipelineOrchestrator:
         print(f"[*] Starting Research Pipeline for task: {task}...")
         try:
             from research_pipeline import run_research_pipeline
+
             research_result = run_research_pipeline(query=task)
         except Exception as e:
             print(f"[!] Research Pipeline failed: {e}")
@@ -21,10 +21,11 @@ class PipelineOrchestrator:
 
         # 2. Run Dev / UI Design Pipeline
         proposal = research_result.get("proposal", "")
-        print(f"[*] Starting Dev / UI Design Pipeline with proposal context...")
+        print("[*] Starting Dev / UI Design Pipeline with proposal context...")
         dev_result = {}
         try:
             from pipeline import pipeline_app
+
             initial_state = {
                 "prompt": f"Task: {task}\nProposal context: {proposal}",
                 "style_guide": "",
@@ -33,7 +34,7 @@ class PipelineOrchestrator:
                 "qa_feedback": "",
                 "review_passed": True,
                 "review_feedback": "",
-                "retry_count": 0
+                "retry_count": 0,
             }
             dev_result = pipeline_app.invoke(initial_state)
         except Exception as e:
@@ -41,13 +42,15 @@ class PipelineOrchestrator:
             dev_result = {"code": "", "error": str(e)}
 
         # 3. Run Debug Pipeline (if playground or verification requires it)
-        print(f"[*] Starting Debug / UI verification checks...")
+        print("[*] Starting Debug / UI verification checks...")
         debug_result = {}
         try:
-            from debug_pipeline import run_debug_pipeline
             # Run debug_pipeline checks on the generated code path
             # (In a real run, this might start Streamlit, capture screenshots, and critics it)
-            debug_result = {"status": "skipped", "message": "UI verification run completed successfully (simulated/skipped in dry-run)"}
+            debug_result = {
+                "status": "skipped",
+                "message": "UI verification run completed successfully (simulated/skipped in dry-run)",
+            }
         except Exception as e:
             print(f"[!] Debug Pipeline failed: {e}")
             debug_result = {"error": str(e)}
@@ -59,8 +62,9 @@ class PipelineOrchestrator:
             "research": research_result,
             "dev": dev_result,
             "debug": debug_result,
-            "metrics": report
+            "metrics": report,
         }
+
 
 if __name__ == "__main__":
     orchestrator = PipelineOrchestrator()

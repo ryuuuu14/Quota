@@ -1,6 +1,5 @@
 import functools
 import logging
-import os
 from pathlib import Path
 from typing import List, Dict, Optional, Union, Literal
 
@@ -43,8 +42,10 @@ def match_columns_v2(
     expected_columns: List[str],
     required_columns: Optional[List[str]] = None,
     template_mapping: Optional[Dict[str, str]] = None,
-    template_mode: Literal["override", "fill_gaps", "merge_confidence", "separate"] = "merge_confidence",
-    api_version: int = 2
+    template_mode: Literal[
+        "override", "fill_gaps", "merge_confidence", "separate"
+    ] = "merge_confidence",
+    api_version: int = 2,
 ) -> MatchResult:
     registry = _get_registry()
     if registry is None:
@@ -55,7 +56,7 @@ def match_columns_v2(
             missing_required=[],
             synonym_config_hash="",
             api_version=api_version,
-            error="Synonym registry not loaded"
+            error="Synonym registry not loaded",
         )
 
     matcher = CompositeMatcher(registry, registry.matcher_config.model_dump())
@@ -64,23 +65,26 @@ def match_columns_v2(
         expected_columns=expected_columns,
         required_columns=required_columns,
         template_mapping=template_mapping,
-        template_mode=template_mode
+        template_mode=template_mode,
     )
 
 
 def match_columns_v1(
-    excel_headers: List[str],
-    expected_columns: List[str]
+    excel_headers: List[str], expected_columns: List[str]
 ) -> Dict[str, Optional[str]]:
     result = match_columns_v2(excel_headers, expected_columns)
     return result.to_legacy_dict()
 
 
-def suggest_mappings(excel_headers: List[str], expected_columns: List[str]) -> Dict[str, Optional[str]]:
+def suggest_mappings(
+    excel_headers: List[str], expected_columns: List[str]
+) -> Dict[str, Optional[str]]:
     return match_columns_v1(excel_headers, expected_columns)
 
 
-def fuzzy_match_columns(excel_headers: List[str], expected_columns: List[str]) -> Dict[str, Optional[str]]:
+def fuzzy_match_columns(
+    excel_headers: List[str], expected_columns: List[str]
+) -> Dict[str, Optional[str]]:
     return match_columns_v1(excel_headers, expected_columns)
 
 
@@ -91,7 +95,7 @@ def _cached_match_v2(
     required_tuple: tuple,
     template_tuple: tuple,
     template_mode: str,
-    api_version: int
+    api_version: int,
 ) -> MatchResult:
     return match_columns_v2(
         excel_headers=list(headers_tuple),
@@ -99,7 +103,7 @@ def _cached_match_v2(
         required_columns=list(required_tuple) if required_tuple else None,
         template_mapping=dict(template_tuple) if template_tuple else None,
         template_mode=template_mode,
-        api_version=api_version
+        api_version=api_version,
     )
 
 
@@ -108,9 +112,11 @@ def match_columns(
     expected_columns: List[str],
     required_columns: Optional[List[str]] = None,
     template_mapping: Optional[Dict[str, str]] = None,
-    template_mode: Literal["override", "fill_gaps", "merge_confidence", "separate"] = "merge_confidence",
+    template_mode: Literal[
+        "override", "fill_gaps", "merge_confidence", "separate"
+    ] = "merge_confidence",
     return_format: Literal["legacy", "structured"] = "legacy",
-    api_version: int = 2
+    api_version: int = 2,
 ) -> Union[Dict[str, Optional[str]], MatchResult]:
     if return_format == "legacy":
         return match_columns_v1(excel_headers, expected_columns)
@@ -126,7 +132,7 @@ def match_columns(
         required_tuple,
         template_tuple,
         template_mode,
-        api_version
+        api_version,
     )
 
 
@@ -136,6 +142,7 @@ def audit_synonyms(db_connection=None) -> Dict:
         return {"error": "Registry not loaded", "drift": True}
 
     from database import get_connection
+
     if db_connection is None:
         conn = get_connection()
     else:
@@ -143,34 +150,64 @@ def audit_synonyms(db_connection=None) -> Dict:
 
     try:
         import pandas as pd
+
         df_activities = pd.read_sql_query("SELECT * FROM activity_types", conn)
         df_timeframes = pd.read_sql_query("SELECT * FROM timeframes", conn)
 
         required_activity_cols = [
-            "Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng",
-            "Cấp lớp", "Loại lớp", "Số học viên", "Cấp đề tài",
-            "Tác giả chính", "Giảng dạy tiếng nước ngoài", "Ghi chú"
+            "Mã GV",
+            "Tên loại hoạt động",
+            "Ngày thực hiện",
+            "Số lượng",
+            "Cấp lớp",
+            "Loại lớp",
+            "Số học viên",
+            "Cấp đề tài",
+            "Tác giả chính",
+            "Giảng dạy tiếng nước ngoài",
+            "Ghi chú",
         ]
         required_aggregate_cols = [
-            "Mã GV", "Tổng GC thực hiện", "NCKH thực hiện",
-            "Số giờ miễn giảm", "Định mức GC", "Ghi chú"
+            "Mã GV",
+            "Tổng GC thực hiện",
+            "NCKH thực hiện",
+            "Số giờ miễn giảm",
+            "Định mức GC",
+            "Ghi chú",
         ]
         expected_teacher_cols = [
-            "Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng",
-            "Học hàm học vị", "Cấp bậc quân hàm", "Chức danh", 
-            "Chức vụ", "Ngày bổ nhiệm chức vụ", "Ngày bổ nhiệm chức danh", "Đơn vị"
+            "Mã GV",
+            "Họ tên",
+            "Tổ bộ môn",
+            "Nữ",
+            "Loại hợp đồng",
+            "Học hàm học vị",
+            "Cấp bậc quân hàm",
+            "Chức danh",
+            "Chức vụ",
+            "Ngày bổ nhiệm chức vụ",
+            "Ngày bổ nhiệm chức danh",
+            "Đơn vị",
         ]
         expected_schedule_cols = [
-            "Mã GV (Khóa)", "Họ tên (Khóa)", "Chức danh (Khóa)", "Đơn vị (Khóa)",
-            "Tên môn học", "Loại", "Nhóm", "Sỉ số", "Tiết quy đổi",
-            "Hệ số tín chỉ", "Ghi chú"
+            "Mã GV (Khóa)",
+            "Họ tên (Khóa)",
+            "Chức danh (Khóa)",
+            "Đơn vị (Khóa)",
+            "Tên môn học",
+            "Loại",
+            "Nhóm",
+            "Sỉ số",
+            "Tiết quy đổi",
+            "Hệ số tín chỉ",
+            "Ghi chú",
         ]
 
         all_expected = set(
-            required_activity_cols + 
-            required_aggregate_cols + 
-            expected_teacher_cols + 
-            expected_schedule_cols
+            required_activity_cols
+            + required_aggregate_cols
+            + expected_teacher_cols
+            + expected_schedule_cols
         )
         synonym_keys = set(registry.expected_columns)
 
@@ -182,7 +219,7 @@ def audit_synonyms(db_connection=None) -> Dict:
             "missing_in_synonyms": sorted(missing_in_synonyms),
             "extra_in_synonyms": sorted(extra_in_synonyms),
             "synonym_config_hash": registry.config_hash,
-            "total_synonym_groups": len(synonym_keys)
+            "total_synonym_groups": len(synonym_keys),
         }
     finally:
         if db_connection is None:
@@ -192,8 +229,9 @@ def audit_synonyms(db_connection=None) -> Dict:
 if __name__ == "__main__":
     import sys
     import json
+
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 

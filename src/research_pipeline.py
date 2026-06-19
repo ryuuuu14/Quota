@@ -3,6 +3,7 @@ Research → Brainstorm → Validation Pipeline (LangGraph)
 Domain: TT108 Quota Management System
 Graph: Research (parallel regulation/rules/code/db) → Research Merge → Brainstorm → Validate (parallel syntax/tests/rules) → Validate Merge → Router
 """
+
 import os
 import re
 import sys
@@ -49,20 +50,22 @@ class ResearchState(TypedDict):
 
 # ─── Research Nodes (Parallel Fan-out) ──────────────────────────────────────────
 
+
 def research_regulation_node(state: ResearchState) -> dict:
     query = state.get("query", "")
     chunks = []
     if os.path.exists(REGULATION_FILE):
         text = tools.read_file(REGULATION_FILE, 20000)
-        paragraphs = re.split(r'\n###\s+', text)
+        paragraphs = re.split(r"\n###\s+", text)
         relevant = [
-            p for p in paragraphs
+            p
+            for p in paragraphs
             if any(kw in p.lower() for kw in query.lower().split())
         ]
         chunks = relevant[:5] if relevant else paragraphs[:3]
     return {
         "regulation_chunks": chunks,
-        "logs": [f"[Research Regulation] Found {len(chunks)} relevant chunks."]
+        "logs": [f"[Research Regulation] Found {len(chunks)} relevant chunks."],
     }
 
 
@@ -72,7 +75,7 @@ def research_rules_node(state: ResearchState) -> dict:
         rules = tools.read_file(RULES_LOGIC_FILE, 5000)
     return {
         "rules_context": rules,
-        "logs": [f"[Research Rules] Rules logic context loaded ({len(rules)} chars)."]
+        "logs": [f"[Research Rules] Rules logic context loaded ({len(rules)} chars)."],
     }
 
 
@@ -86,7 +89,7 @@ def research_code_node(state: ResearchState) -> dict:
                 code.append(f"## Search: '{kw}'\n{result}")
     return {
         "code_snippets": code,
-        "logs": [f"[Research Code] Performed code grep. Found {len(code)} matches."]
+        "logs": [f"[Research Code] Performed code grep. Found {len(code)} matches."],
     }
 
 
@@ -94,11 +97,15 @@ def research_db_node(state: ResearchState) -> dict:
     query = state.get("query", "")
     db_info = []
     if any(kw in query.lower() for kw in ["db", "database", "sql"]):
-        tables = tools.inspect_db("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = tools.inspect_db(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        )
         db_info.append(f"Tables:\n{tables}")
     return {
         "db_inspections": db_info,
-        "logs": [f"[Research DB] Database inspection complete. Found {len(db_info)} items."]
+        "logs": [
+            f"[Research DB] Database inspection complete. Found {len(db_info)} items."
+        ],
     }
 
 
@@ -122,14 +129,19 @@ def research_merge_node(state: ResearchState) -> dict:
         summary.append("\n=== RULES ===")
         summary.append(rules[:2000])
 
-    research_summary = "\n".join(summary) if summary else f"No relevant findings for '{state.get('query')}'"
+    research_summary = (
+        "\n".join(summary)
+        if summary
+        else f"No relevant findings for '{state.get('query')}'"
+    )
     return {
         "research_summary": research_summary,
-        "logs": ["[Research Merge] Consolidated research details into summary."]
+        "logs": ["[Research Merge] Consolidated research details into summary."],
     }
 
 
 # ─── Brainstorm Node ─────────────────────────────────────────────────────────
+
 
 def brainstorm_node(state: ResearchState) -> dict:
     print("Brainstorming proposal using LLM...")
@@ -147,18 +159,21 @@ def brainstorm_node(state: ResearchState) -> dict:
         user_prompt=user_prompt,
         complexity="planning",
         pipeline_name="research_pipeline",
-        agent_name="brainstormer"
+        agent_name="brainstormer",
     )
-    
+
     new_iterations = state.get("iterations", 0) + 1
     return {
         "proposal": proposal,
         "iterations": new_iterations,
-        "logs": [f"[Brainstorm] Generated proposal via Gemini (Attempt {new_iterations})."]
+        "logs": [
+            f"[Brainstorm] Generated proposal via Gemini (Attempt {new_iterations})."
+        ],
     }
 
 
 # ─── Validation Nodes (Parallel Fan-out) ──────────────────────────────────────
+
 
 def validate_syntax_node(state: ResearchState) -> dict:
     calculations_file = os.path.join(SRC_DIR, "calculations.py")
@@ -169,7 +184,7 @@ def validate_syntax_node(state: ResearchState) -> dict:
             syntax_error = f"SYNTAX ERROR in calculations.py: {res['error']}"
     return {
         "syntax_error": syntax_error,
-        "logs": ["[Validate Syntax] Calculations syntax check complete."]
+        "logs": ["[Validate Syntax] Calculations syntax check complete."],
     }
 
 
@@ -185,7 +200,9 @@ def validate_tests_node(state: ResearchState) -> dict:
     return {
         "test_output": test_output,
         "test_exit_code": test_exit_code,
-        "logs": [f"[Validate Tests] Compliance tests run complete (Exit: {test_exit_code})."]
+        "logs": [
+            f"[Validate Tests] Compliance tests run complete (Exit: {test_exit_code})."
+        ],
     }
 
 
@@ -200,7 +217,7 @@ def validate_rules_node(state: ResearchState) -> dict:
             rules_warning = f"WARNING: rules_logic.md lacks coverage for: {missing}"
     return {
         "rules_warning": rules_warning,
-        "logs": ["[Validate Rules] Rules logic coverage verified."]
+        "logs": ["[Validate Rules] Rules logic coverage verified."],
     }
 
 
@@ -208,29 +225,31 @@ def validate_merge_node(state: ResearchState) -> dict:
     feedback_parts = []
     if state.get("syntax_error"):
         feedback_parts.append(state["syntax_error"])
-    
+
     test_exit = state.get("test_exit_code", 0)
     if test_exit != 0:
         feedback_parts.append(f"TESTS FAILED (exit {test_exit})")
         test_output = state.get("test_output", "")
         fail_lines = [
-            l for l in test_output.split("\n")
+            l
+            for l in test_output.split("\n")
             if "FAILED" in l or "ERROR" in l or "AssertionError" in l
         ]
         if fail_lines:
             feedback_parts.extend(fail_lines[:5])
-            
+
     if state.get("rules_warning"):
         feedback_parts.append(state["rules_warning"])
 
     validation_feedback = "\n".join(feedback_parts) if feedback_parts else None
     return {
         "validation_feedback": validation_feedback,
-        "logs": ["[Validate Merge] Validation feedback aggregated."]
+        "logs": ["[Validate Merge] Validation feedback aggregated."],
     }
 
 
 # ─── Router and Graph ─────────────────────────────────────────────────────────
+
 
 def router_condition(state: ResearchState) -> Literal["retry", "abort", "approve"]:
     iteration = state.get("iterations", 0)
@@ -245,16 +264,16 @@ def router_condition(state: ResearchState) -> Literal["retry", "abort", "approve
 
 def build_research_pipeline():
     workflow = StateGraph(ResearchState)
-    
+
     # Add Nodes
     workflow.add_node("research_regulation", research_regulation_node)
     workflow.add_node("research_rules", research_rules_node)
     workflow.add_node("research_code", research_code_node)
     workflow.add_node("research_db", research_db_node)
     workflow.add_node("research_merge", research_merge_node)
-    
+
     workflow.add_node("brainstorm", brainstorm_node)
-    
+
     workflow.add_node("validate_syntax", validate_syntax_node)
     workflow.add_node("validate_tests", validate_tests_node)
     workflow.add_node("validate_rules", validate_rules_node)
@@ -267,26 +286,26 @@ def build_research_pipeline():
     workflow.add_edge(START, "research_rules")
     workflow.add_edge(START, "research_code")
     workflow.add_edge(START, "research_db")
-    
+
     # Connect research outputs to merge
     workflow.add_edge("research_regulation", "research_merge")
     workflow.add_edge("research_rules", "research_merge")
     workflow.add_edge("research_code", "research_merge")
     workflow.add_edge("research_db", "research_merge")
-    
+
     # Brainstorm follows merge
     workflow.add_edge("research_merge", "brainstorm")
-    
+
     # Validate Branching from Brainstorm
     workflow.add_edge("brainstorm", "validate_syntax")
     workflow.add_edge("brainstorm", "validate_tests")
     workflow.add_edge("brainstorm", "validate_rules")
-    
+
     # Connect validate outputs to merge
     workflow.add_edge("validate_syntax", "validate_merge")
     workflow.add_edge("validate_tests", "validate_merge")
     workflow.add_edge("validate_rules", "validate_merge")
-    
+
     # Conditional route after merge
     workflow.add_conditional_edges(
         "validate_merge",
@@ -326,7 +345,11 @@ def run_research_pipeline(
 
     status = "approved"
     if result.get("validation_feedback"):
-        status = "aborted" if result.get("iterations", 0) >= MAX_ITERATIONS else "needs_review"
+        status = (
+            "aborted"
+            if result.get("iterations", 0) >= MAX_ITERATIONS
+            else "needs_review"
+        )
 
     logs = result.get("logs", [])
     return {
@@ -344,35 +367,40 @@ def run_research_pipeline(
 
 if __name__ == "__main__":
     import sys
+
     sys.stdout.reconfigure(encoding="utf-8")
 
-    q = sys.argv[1] if len(sys.argv) > 1 else "GC reduction calculation for teachers on maternity leave"
+    q = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "GC reduction calculation for teachers on maternity leave"
+    )
 
     t0 = time.time()
     out = run_research_pipeline(query=q)
     elapsed = time.time() - t0
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"QUERY:       {out['query']}")
     print(f"STATUS:      {out['status']}")
     print(f"ITERATIONS:  {out['iterations']}")
     print(f"TIME:        {elapsed:.1f}s")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print()
 
     print("--- RESEARCH SUMMARY (first 500 chars) ---")
-    print(out['research_summary'][:500])
+    print(out["research_summary"][:500])
     print()
 
     print("--- PROPOSAL (first 500 chars) ---")
-    print(out['proposal'][:500])
+    print(out["proposal"][:500])
     print()
 
-    if out['validation_feedback']:
+    if out["validation_feedback"]:
         print("--- VALIDATION FEEDBACK ---")
-        print(out['validation_feedback'][:500])
+        print(out["validation_feedback"][:500])
         print()
 
     print("--- LOGS ---")
-    for log in out['logs']:
+    for log in out["logs"]:
         print(f"  {log}")

@@ -15,7 +15,6 @@ Flow:
     5. Report final result
 """
 
-import os
 import sys
 import argparse
 import time
@@ -63,17 +62,20 @@ def run_pipeline(task: str, max_iterations: int = 3) -> dict:
     print_header(f"{APP_NAME} — Starting")
     print(f"  Task:       {task}")
     print(f"  Iterations: {max_iterations}")
-    print(f"\n  Running... (graph will pause at each checkpoint)")
+    print("\n  Running... (graph will pause at each checkpoint)")
 
     # --- Initial run ---
     current_state = initial
     is_resume = False
+    last_input = None
 
     while True:
         try:
             if is_resume:
                 # Resume from interrupt
-                for s in graph.stream(Command(resume=last_input), thread, stream_mode="values"):
+                for s in graph.stream(
+                    Command(resume=last_input), thread, stream_mode="values"
+                ):
                     current_state = s
             else:
                 # First run
@@ -127,18 +129,18 @@ def run_pipeline(task: str, max_iterations: int = 3) -> dict:
             print(f"  Iterations: {current_state.get('iteration', 0)}")
             plan = current_state.get("plan", "")
             if plan:
-                print(f"\n  Plan:")
+                print("\n  Plan:")
                 for line in plan.strip().split("\n")[:10]:
                     print(f"    {line}")
                 if plan.count("\n") > 10:
                     print(f"    ... ({plan.count(chr(10)) - 10} more lines)")
             build = current_state.get("build_summary", "")
             if build and build[:100] != plan[:100]:
-                print(f"\n  Build summary:")
+                print("\n  Build summary:")
                 for line in build.strip().split("\n")[:6]:
                     print(f"    {line}")
         elif final == "ABORTED":
-            print(f"  Pipeline was cancelled by user.")
+            print("  Pipeline was cancelled by user.")
         else:
             print(f"  Pipeline ended with status: {final}")
 
@@ -155,16 +157,18 @@ def main():
     )
     parser.add_argument("task", nargs="?", help="Description of the development task")
     parser.add_argument(
-        "--iterations", "-i", type=int, default=3,
-        help="Maximum build iterations (default: 3)"
+        "--iterations",
+        "-i",
+        type=int,
+        default=3,
+        help="Maximum build iterations (default: 3)",
     )
+    parser.add_argument("--list-tasks", action="store_true", help="Show example tasks")
     parser.add_argument(
-        "--list-tasks", action="store_true",
-        help="Show example tasks"
-    )
-    parser.add_argument(
-        "--interactive", "-t", action="store_true",
-        help="Interactive mode: prompt for task"
+        "--interactive",
+        "-t",
+        action="store_true",
+        help="Interactive mode: prompt for task",
     )
 
     args = parser.parse_args()
@@ -180,7 +184,7 @@ def main():
             "Lock 3_NhatKyHoatDong.py when session data exists from upload",
         ]
         for i, ex in enumerate(examples, 1):
-            print(f"  {i}. python -m src.dev_pipeline \"{ex}\"")
+            print(f'  {i}. python -m src.dev_pipeline "{ex}"')
         return
 
     task = args.task

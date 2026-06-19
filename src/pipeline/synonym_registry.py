@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from .models import MatcherConfig
 
@@ -60,18 +60,22 @@ class SynonymRegistry:
         self._normalized_synonyms = {}
         for expected, synonyms in self._synonyms.items():
             norm_expected = self.normalize(expected)
-            self._normalized_synonyms[norm_expected] = [(self.normalize(s), expected) for s in synonyms]
+            self._normalized_synonyms[norm_expected] = [
+                (self.normalize(s), expected) for s in synonyms
+            ]
 
         canonical_yaml = yaml.dump(
             {entry.expected: entry.synonyms for entry in config.synonyms},
             sort_keys=True,
-            allow_unicode=True
+            allow_unicode=True,
         )
         self._config_hash = hashlib.sha256(canonical_yaml.encode()).hexdigest()
 
         self._load_matcher_config()
 
-        logger.info(f"Loaded {len(self._synonyms)} synonym groups, config hash: {self._config_hash[:8]}")
+        logger.info(
+            f"Loaded {len(self._synonyms)} synonym groups, config hash: {self._config_hash[:8]}"
+        )
 
     def _load_matcher_config(self) -> None:
         config_dir = self.config_path.parent
@@ -102,7 +106,9 @@ class SynonymRegistry:
         if not s:
             return ""
         s = str(s).lower().strip()
-        s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+        s = "".join(
+            c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+        )
         return s.replace("_", " ").replace("-", " ")
 
     def get_synonyms_for(self, expected: str) -> List[str]:

@@ -5,24 +5,23 @@ Annotated[list[str], operator.add] reducer for the 'logs' field.
 """
 
 import os
-import sys
-from datetime import datetime
 
 from langgraph.types import interrupt
 
 from .state import DevState
-from .prompts import PLAN_SYSTEM_PROMPT, BUILD_SYSTEM_PROMPT, TEST_SYSTEM_PROMPT, VALIDATE_SYSTEM_PROMPT
-from .tools import call_llm, run_tests, read_file, write_file, edit_file, glob_files, grep_files, check_syntax
+from .prompts import PLAN_SYSTEM_PROMPT, BUILD_SYSTEM_PROMPT, VALIDATE_SYSTEM_PROMPT
+from .tools import call_llm, run_tests, read_file
 
 # __file__ is agents.py at .../src/dev_pipeline/agents.py
 # dev_pipeline is inside src/, so workspace root = grandparent of dev_pipeline's parent
-A_DIR = os.path.dirname(os.path.abspath(__file__))          # .../src/dev_pipeline
-SRC_DIR = os.path.dirname(A_DIR)                             # .../src
-WORKSPACE_ROOT = os.path.dirname(SRC_DIR)                    # .../Quota
+A_DIR = os.path.dirname(os.path.abspath(__file__))  # .../src/dev_pipeline
+SRC_DIR = os.path.dirname(A_DIR)  # .../src
+WORKSPACE_ROOT = os.path.dirname(SRC_DIR)  # .../Quota
 PROJECT_ROOT = WORKSPACE_ROOT
 
 
 # ─── Plan Agent ──────────────────────────────────────────────────────────────
+
 
 def plan_node(state: DevState) -> dict:
     """Analyze task and produce implementation plan. Interrupt for human review."""
@@ -48,19 +47,21 @@ def plan_node(state: DevState) -> dict:
     log.append(f"[Plan] Plan generated ({len(plan)} chars)")
 
     # ── HUMAN IN LOOP ──
-    user_input = interrupt({
-        "stage": "plan",
-        "content": plan,
-        "prompt": (
-            "\n╔══════════════════════════════════════════════════════════╗\n"
-            "║  PLAN REVIEW — Enter:                                  ║\n"
-            "║  'approve' to continue                                 ║\n"
-            "║  'abort' to cancel                                     ║\n"
-            "║  <any text> as revision feedback for re-planning       ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n"
-            "> "
-        ),
-    })
+    user_input = interrupt(
+        {
+            "stage": "plan",
+            "content": plan,
+            "prompt": (
+                "\n╔══════════════════════════════════════════════════════════╗\n"
+                "║  PLAN REVIEW — Enter:                                  ║\n"
+                "║  'approve' to continue                                 ║\n"
+                "║  'abort' to cancel                                     ║\n"
+                "║  <any text> as revision feedback for re-planning       ║\n"
+                "╚══════════════════════════════════════════════════════════╝\n"
+                "> "
+            ),
+        }
+    )
 
     decision = user_input.strip().lower() if isinstance(user_input, str) else ""
 
@@ -69,17 +70,25 @@ def plan_node(state: DevState) -> dict:
         return {"plan": plan, "plan_approved": True, "logs": log}
     elif decision == "abort":
         log.append("[Plan] Aborted by human")
-        return {"plan": plan, "plan_approved": False, "final_result": "ABORTED", "logs": log}
+        return {
+            "plan": plan,
+            "plan_approved": False,
+            "final_result": "ABORTED",
+            "logs": log,
+        }
     else:
         log.append(f"[Plan] Revision requested: {user_input[:80]}...")
         return {
-            "plan": plan, "plan_approved": False,
-            "plan_feedback": user_input, "logs": log,
+            "plan": plan,
+            "plan_approved": False,
+            "plan_feedback": user_input,
+            "logs": log,
             "iteration": 0,
         }
 
 
 # ─── Build Agent ─────────────────────────────────────────────────────────────
+
 
 def build_node(state: DevState) -> dict:
     """Implement the plan by reading and writing files."""
@@ -93,7 +102,12 @@ def build_node(state: DevState) -> dict:
 
     # Read key files for context
     existing_files = {}
-    for f in ["src/app.py", "src/database.py", "src/calculations.py", "src/components.py"]:
+    for f in [
+        "src/app.py",
+        "src/database.py",
+        "src/calculations.py",
+        "src/components.py",
+    ]:
         fpath = os.path.join(PROJECT_ROOT, f)
         if os.path.exists(fpath):
             existing_files[f] = read_file(fpath)[:2000]
@@ -123,6 +137,7 @@ def build_node(state: DevState) -> dict:
 
 # ─── Test Agent ──────────────────────────────────────────────────────────────
 
+
 def test_node(state: DevState) -> dict:
     """Run test suites and report results. Interrupt for human review."""
     log = []
@@ -135,19 +150,21 @@ def test_node(state: DevState) -> dict:
     summary = results["summary"]
     output = results["output"]
 
-    user_input = interrupt({
-        "stage": "test",
-        "content": f"=== TEST RESULTS ===\n{summary}\n\n{output[-1200:]}",
-        "prompt": (
-            "\n╔══════════════════════════════════════════════════════════╗\n"
-            "║  TEST REVIEW — Enter:                                   ║\n"
-            "║  'approve' to continue to validation                    ║\n"
-            "║  'abort' to cancel                                      ║\n"
-            "║  <any text> as fix instructions for rebuild             ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n"
-            "> "
-        ),
-    })
+    user_input = interrupt(
+        {
+            "stage": "test",
+            "content": f"=== TEST RESULTS ===\n{summary}\n\n{output[-1200:]}",
+            "prompt": (
+                "\n╔══════════════════════════════════════════════════════════╗\n"
+                "║  TEST REVIEW — Enter:                                   ║\n"
+                "║  'approve' to continue to validation                    ║\n"
+                "║  'abort' to cancel                                      ║\n"
+                "║  <any text> as fix instructions for rebuild             ║\n"
+                "╚══════════════════════════════════════════════════════════╝\n"
+                "> "
+            ),
+        }
+    )
 
     decision = user_input.strip().lower() if isinstance(user_input, str) else ""
     passed = results["passed"]
@@ -158,15 +175,18 @@ def test_node(state: DevState) -> dict:
     elif decision == "abort":
         log.append("[Test] Aborted by human")
         return {
-            "test_output": output, "test_passed": passed,
-            "final_result": "ABORTED", "logs": log,
+            "test_output": output,
+            "test_passed": passed,
+            "final_result": "ABORTED",
+            "logs": log,
         }
     else:
         log.append(f"[Test] Fix requested: {user_input[:80]}...")
         if state.get("iteration", 0) >= state.get("max_iterations", 3):
             log.append("[Test] Max iterations reached, aborting")
             return {
-                "test_output": output, "test_passed": False,
+                "test_output": output,
+                "test_passed": False,
                 "final_result": f"MAX ITERATIONS REACHED ({state.get('iteration', 0)})",
                 "logs": log,
             }
@@ -174,12 +194,15 @@ def test_node(state: DevState) -> dict:
         if not results["passed"] and results["failures"]:
             fix_ctx += "\n\nTest failures:\n" + "\n".join(results["failures"])
         return {
-            "test_output": output, "test_passed": False,
-            "error_context": fix_ctx, "logs": log,
+            "test_output": output,
+            "test_passed": False,
+            "error_context": fix_ctx,
+            "logs": log,
         }
 
 
 # ─── Validate Agent ──────────────────────────────────────────────────────────
+
 
 def validate_node(state: DevState) -> dict:
     """Review code quality. Interrupt for human final approval."""
@@ -201,7 +224,9 @@ def validate_node(state: DevState) -> dict:
         try:
             with open(f, "r", encoding="utf-8") as fh:
                 content = fh.read()
-            file_samples.append(f"=== {os.path.relpath(f, PROJECT_ROOT)} ===\n{content[:1500]}")
+            file_samples.append(
+                f"=== {os.path.relpath(f, PROJECT_ROOT)} ===\n{content[:1500]}"
+            )
         except Exception:
             pass
 
@@ -217,44 +242,53 @@ def validate_node(state: DevState) -> dict:
     log.append(f"[Validate] Quality report: {len(report)} chars")
 
     # ── HUMAN IN LOOP ──
-    user_input = interrupt({
-        "stage": "validate",
-        "content": report,
-        "prompt": (
-            "\n╔══════════════════════════════════════════════════════════╗\n"
-            "║  VALIDATION REVIEW — Enter:                             ║\n"
-            "║  'approve' to finish                                    ║\n"
-            "║  'abort' to cancel                                      ║\n"
-            "║  <any text> as fix instructions for rebuild             ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n"
-            "> "
-        ),
-    })
+    user_input = interrupt(
+        {
+            "stage": "validate",
+            "content": report,
+            "prompt": (
+                "\n╔══════════════════════════════════════════════════════════╗\n"
+                "║  VALIDATION REVIEW — Enter:                             ║\n"
+                "║  'approve' to finish                                    ║\n"
+                "║  'abort' to cancel                                      ║\n"
+                "║  <any text> as fix instructions for rebuild             ║\n"
+                "╚══════════════════════════════════════════════════════════╝\n"
+                "> "
+            ),
+        }
+    )
 
     decision = user_input.strip().lower() if isinstance(user_input, str) else ""
 
     if decision == "approve":
         log.append("[Validate] Approved by human")
         return {
-            "validation_report": report.strip(), "validation_passed": True,
-            "final_result": "APPROVED", "logs": log,
+            "validation_report": report.strip(),
+            "validation_passed": True,
+            "final_result": "APPROVED",
+            "logs": log,
         }
     elif decision == "abort":
         log.append("[Validate] Aborted by human")
         return {
-            "validation_report": report, "validation_passed": False,
-            "final_result": "ABORTED", "logs": log,
+            "validation_report": report,
+            "validation_passed": False,
+            "final_result": "ABORTED",
+            "logs": log,
         }
     else:
         log.append(f"[Validate] Fix requested: {user_input[:80]}...")
         if state.get("iteration", 0) >= state.get("max_iterations", 3):
             log.append("[Validate] Max iterations reached, aborting")
             return {
-                "validation_report": report, "validation_passed": False,
+                "validation_report": report,
+                "validation_passed": False,
                 "final_result": f"MAX ITERATIONS ({state.get('iteration', 0)})",
                 "logs": log,
             }
         return {
-            "validation_report": report, "validation_passed": False,
-            "error_context": user_input, "logs": log,
+            "validation_report": report,
+            "validation_passed": False,
+            "error_context": user_input,
+            "logs": log,
         }

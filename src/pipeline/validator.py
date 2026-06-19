@@ -1,6 +1,7 @@
 import pandas as pd
 from datetime import datetime
 
+
 def safe_float(val):
     if pd.isna(val) or val is None:
         return None
@@ -15,11 +16,13 @@ def safe_float(val):
     except ValueError:
         return None
 
+
 def parse_bool(val) -> bool:
     if pd.isna(val) or val is None:
         return False
     val_str = str(val).strip().lower()
     return val_str in ("có", "yes", "true", "1", "1.0", "y")
+
 
 def is_empty_cell(val) -> bool:
     if pd.isna(val) or val is None:
@@ -29,6 +32,7 @@ def is_empty_cell(val) -> bool:
         return True
     return False
 
+
 def validate_teachers_data(df: pd.DataFrame, conn) -> list:
     """
     Validates teacher records and returns a list of error strings per row.
@@ -36,24 +40,35 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
     """
     errors = []
     cursor = conn.cursor()
-    
+
     # Pre-fetch lookup tables for validation
     cursor.execute("SELECT rank_name FROM police_ranks")
     valid_ranks = {r["rank_name"].strip().lower() for r in cursor.fetchall()}
-    
+
     cursor.execute("SELECT name FROM departments")
     valid_depts = {d["name"].strip().lower() for d in cursor.fetchall()}
-    
+
     cursor.execute("SELECT name FROM titles")
     valid_titles = {t["name"].strip().lower() for t in cursor.fetchall()}
 
     expected_cols = [
-        "Mã GV", "Họ tên", "Tổ bộ môn", "Nữ", "Loại hợp đồng",
-        "Học hàm học vị", "Cấp bậc quân hàm", "Chức danh", 
-        "Chức vụ", "Ngày bổ nhiệm chức vụ", "Ngày bổ nhiệm chức danh", "Đơn vị",
-        "Thời gian đi học", "Thời gian đi thực tế", "Thời gian nghỉ có phép"
+        "Mã GV",
+        "Họ tên",
+        "Tổ bộ môn",
+        "Nữ",
+        "Loại hợp đồng",
+        "Học hàm học vị",
+        "Cấp bậc quân hàm",
+        "Chức danh",
+        "Chức vụ",
+        "Ngày bổ nhiệm chức vụ",
+        "Ngày bổ nhiệm chức danh",
+        "Đơn vị",
+        "Thời gian đi học",
+        "Thời gian đi thực tế",
+        "Thời gian nghỉ có phép",
     ]
-    
+
     # Check required columns
     required_cols = ["Mã GV", "Họ tên", "Đơn vị"]
     for col in required_cols:
@@ -87,39 +102,49 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
         return True
 
     for idx, row in df.iterrows():
-        row_num = idx + 5 # standard row start in templates
-        
+        row_num = idx + 5  # standard row start in templates
+
         # Name
         name = row["Họ tên"]
         if is_empty_cell(name):
             errors.append((idx, row_num, "Họ tên không được để trống."))
-            
+
         # TODO: Tổ bộ môn — currently unresolved, should be auto-derived from department.
         # See 2_QuanLyCanBo.py import flow for the department→subject_group mapping fix.
         # Skipping validation — values pass through without error.
-        
+
         # TODO: Loại hợp đồng — currently unresolved, teaching title vs employment type
         # needs a design decision. Skipping validation for now.
-            
+
         # Police rank (optional)
         if "Cấp bậc quân hàm" in df.columns:
             rank = row["Cấp bậc quân hàm"]
             if not is_empty_cell(rank):
                 if str(rank).strip().lower() not in valid_ranks:
-                    errors.append((idx, row_num, f"Cấp bậc quân hàm '{rank}' không tồn tại trong hệ thống."))
-                
+                    errors.append(
+                        (
+                            idx,
+                            row_num,
+                            f"Cấp bậc quân hàm '{rank}' không tồn tại trong hệ thống.",
+                        )
+                    )
+
         # Dept
         dept = row["Đơn vị"]
         if is_empty_cell(dept):
             errors.append((idx, row_num, "Đơn vị không được để trống."))
         elif str(dept).strip().lower() not in valid_depts:
-            errors.append((idx, row_num, f"Đơn vị '{dept}' không tồn tại trong hệ thống."))
-            
+            errors.append(
+                (idx, row_num, f"Đơn vị '{dept}' không tồn tại trong hệ thống.")
+            )
+
         # Title
         title = row["Chức danh"]
         if not is_empty_cell(title):
             if str(title).strip().lower() not in valid_titles:
-                errors.append((idx, row_num, f"Chức danh '{title}' không tồn tại trong hệ thống."))
+                errors.append(
+                    (idx, row_num, f"Chức danh '{title}' không tồn tại trong hệ thống.")
+                )
 
         # Appointment Date (Role)
         app_date_role = row.get("Ngày bổ nhiệm chức vụ")
@@ -127,7 +152,13 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
             try:
                 pd.to_datetime(app_date_role)
             except Exception:
-                errors.append((idx, row_num, f"Ngày bổ nhiệm chức vụ '{app_date_role}' không đúng định dạng YYYY-MM-DD."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        f"Ngày bổ nhiệm chức vụ '{app_date_role}' không đúng định dạng YYYY-MM-DD.",
+                    )
+                )
 
         # Appointment Date (Title)
         app_date_title = row.get("Ngày bổ nhiệm chức danh")
@@ -135,16 +166,30 @@ def validate_teachers_data(df: pd.DataFrame, conn) -> list:
             try:
                 pd.to_datetime(app_date_title)
             except Exception:
-                errors.append((idx, row_num, f"Ngày bổ nhiệm chức danh '{app_date_title}' không đúng định dạng YYYY-MM-DD."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        f"Ngày bổ nhiệm chức danh '{app_date_title}' không đúng định dạng YYYY-MM-DD.",
+                    )
+                )
 
         # Date range fields
-        for field, label in [("Thời gian đi học", "Thời gian đi học"), 
-                             ("Thời gian đi thực tế", "Thời gian đi thực tế"), 
-                             ("Thời gian nghỉ có phép", "Thời gian nghỉ có phép")]:
+        for field, label in [
+            ("Thời gian đi học", "Thời gian đi học"),
+            ("Thời gian đi thực tế", "Thời gian đi thực tế"),
+            ("Thời gian nghỉ có phép", "Thời gian nghỉ có phép"),
+        ]:
             val = row.get(field)
             if not is_empty_cell(val):
                 if not validate_date_range(val):
-                    errors.append((idx, row_num, f"Trường '{label}' '{val}' không đúng định dạng (Ví dụ: 04/08/2025 - 28/09/2025 hoặc 04/08/2025)."))
+                    errors.append(
+                        (
+                            idx,
+                            row_num,
+                            f"Trường '{label}' '{val}' không đúng định dạng (Ví dụ: 04/08/2025 - 28/09/2025 hoặc 04/08/2025).",
+                        )
+                    )
 
     return errors
 
@@ -155,25 +200,39 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
     """
     errors = []
     cursor = conn.cursor()
-    
+
     # Pre-fetch check data
     cursor.execute("SELECT id FROM teachers")
     valid_teacher_ids = {str(t["id"]) for t in cursor.fetchall()}
 
-    cursor.execute("SELECT name, is_teaching_activity, is_nckh_activity FROM activity_types")
+    cursor.execute(
+        "SELECT name, is_teaching_activity, is_nckh_activity FROM activity_types"
+    )
     act_type_map = {
         row["name"]: (bool(row["is_teaching_activity"]), bool(row["is_nckh_activity"]))
         for row in cursor.fetchall()
     }
 
-    VALID_CAP_LOP = ["Đại học", "Thạc sĩ", "Tiến sĩ", "LLCT Trung cấp", "LLCT Cao cấp", "Bồi dưỡng"]
-    VALID_LOAI_LOP = ["Lý thuyết", "Thực hành", "Ngoại ngữ/CNTT", "Thảo luận", "Bài tập", "Xêmina"]
+    VALID_CAP_LOP = [
+        "Đại học",
+        "Thạc sĩ",
+        "Tiến sĩ",
+        "LLCT Trung cấp",
+        "LLCT Cao cấp",
+        "Bồi dưỡng",
+    ]
+    VALID_LOAI_LOP = [
+        "Lý thuyết",
+        "Thực hành",
+        "Ngoại ngữ/CNTT",
+        "Thảo luận",
+        "Bài tập",
+        "Xêmina",
+    ]
     VALID_CAP_DE_TAI = ["Quốc gia", "Bộ/Tỉnh", "Cơ sở", "Trường"]
 
-    expected_cols = [
-        "Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng"
-    ]
-    
+    expected_cols = ["Mã GV", "Tên loại hoạt động", "Ngày thực hiện", "Số lượng"]
+
     for col in expected_cols:
         if col not in df.columns:
             return [(0, 0, f"Thiếu cột bắt buộc: {col}")]
@@ -182,7 +241,7 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
         # Because we read multiple sheets, row index might not map directly to row + 5
         # but we do our best.
         row_num = idx + 5
-        
+
         t_id_raw = row.get("Mã GV")
         if is_empty_cell(t_id_raw):
             errors.append((idx, row_num, "Mã GV không được để trống."))
@@ -190,7 +249,9 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
             try:
                 t_id = str(int(float(str(t_id_raw).strip())))
                 if t_id not in valid_teacher_ids:
-                    errors.append((idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống."))
+                    errors.append(
+                        (idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống.")
+                    )
             except ValueError:
                 errors.append((idx, row_num, f"Mã GV '{t_id_raw}' không hợp lệ."))
 
@@ -202,7 +263,13 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
         else:
             act_meta = act_type_map.get(act_type)
             if not act_meta:
-                errors.append((idx, row_num, f"Tên loại hoạt động '{act_type}' không tồn tại trong hệ thống."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        f"Tên loại hoạt động '{act_type}' không tồn tại trong hệ thống.",
+                    )
+                )
             else:
                 is_teaching, is_nckh = act_meta
 
@@ -214,7 +281,13 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
                 if not isinstance(log_date, datetime):
                     pd.to_datetime(log_date)
             except Exception:
-                errors.append((idx, row_num, f"Ngày thực hiện '{log_date}' không đúng định dạng YYYY-MM-DD."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        f"Ngày thực hiện '{log_date}' không đúng định dạng YYYY-MM-DD.",
+                    )
+                )
 
         qty_raw = row.get("Số lượng")
         if is_empty_cell(qty_raw):
@@ -222,34 +295,62 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
         else:
             qty = safe_float(qty_raw)
             if qty is None or qty <= 0:
-                errors.append((idx, row_num, f"Số lượng '{qty_raw}' phải là số dương lớn hơn 0."))
+                errors.append(
+                    (idx, row_num, f"Số lượng '{qty_raw}' phải là số dương lớn hơn 0.")
+                )
 
         # Extra validation based on category
         if is_teaching:
             cap_lop = row.get("Cấp lớp")
             if is_empty_cell(cap_lop):
-                errors.append((idx, row_num, "Cấp lớp không được để trống với hoạt động Giảng dạy."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        "Cấp lớp không được để trống với hoạt động Giảng dạy.",
+                    )
+                )
             elif str(cap_lop).strip() not in VALID_CAP_LOP:
                 errors.append((idx, row_num, f"Cấp lớp '{cap_lop}' không hợp lệ."))
 
             loai_lop = row.get("Loại lớp")
             if is_empty_cell(loai_lop):
-                errors.append((idx, row_num, "Loại lớp không được để trống với hoạt động Giảng dạy."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        "Loại lớp không được để trống với hoạt động Giảng dạy.",
+                    )
+                )
             elif str(loai_lop).strip() not in VALID_LOAI_LOP:
                 errors.append((idx, row_num, f"Loại lớp '{loai_lop}' không hợp lệ."))
 
             sv_raw = row.get("Số học viên")
             if is_empty_cell(sv_raw):
-                errors.append((idx, row_num, "Số học viên không được để trống với hoạt động Giảng dạy."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        "Số học viên không được để trống với hoạt động Giảng dạy.",
+                    )
+                )
             else:
                 sv_val = safe_float(sv_raw)
                 if sv_val is None or sv_val <= 0 or not sv_val.is_integer():
-                    errors.append((idx, row_num, f"Số học viên '{sv_raw}' phải là số nguyên dương."))
+                    errors.append(
+                        (
+                            idx,
+                            row_num,
+                            f"Số học viên '{sv_raw}' phải là số nguyên dương.",
+                        )
+                    )
 
         if is_nckh:
             cap_dt = row.get("Cấp đề tài")
             if is_empty_cell(cap_dt):
-                errors.append((idx, row_num, "Cấp đề tài không được để trống với hoạt động NCKH."))
+                errors.append(
+                    (idx, row_num, "Cấp đề tài không được để trống với hoạt động NCKH.")
+                )
             elif str(cap_dt).strip() not in VALID_CAP_DE_TAI:
                 errors.append((idx, row_num, f"Cấp đề tài '{cap_dt}' không hợp lệ."))
 
@@ -262,31 +363,40 @@ def validate_schedule_data(df: pd.DataFrame, conn) -> list:
     """
     errors = []
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT id FROM teachers")
     valid_ids = {t["id"] for t in cursor.fetchall()}
 
     expected_cols = [
-        "Mã GV (Khóa)", "Họ tên (Khóa)", "Chức danh (Khóa)", "Đơn vị (Khóa)",
-        "Tên môn học", "Loại", "Nhóm", "Sỉ số", "Tiết quy đổi",
-        "Hệ số tín chỉ", "Ghi chú"
+        "Mã GV (Khóa)",
+        "Họ tên (Khóa)",
+        "Chức danh (Khóa)",
+        "Đơn vị (Khóa)",
+        "Tên môn học",
+        "Loại",
+        "Nhóm",
+        "Sỉ số",
+        "Tiết quy đổi",
+        "Hệ số tín chỉ",
+        "Ghi chú",
     ]
-    
+
     for col in expected_cols:
         if col not in df.columns:
             return [(0, 0, f"Thiếu cột bắt buộc: {col}")]
 
     from pipeline.templates import ALLOWED_LOAI
+
     allowed_loai_set = {l.upper() for l in ALLOWED_LOAI}
 
     for idx, row in df.iterrows():
         row_num = idx + 5
-        
+
         t_id_raw = row["Mã GV (Khóa)"]
         if is_empty_cell(t_id_raw):
             errors.append((idx, row_num, "Mã GV không được để trống."))
             continue
-            
+
         try:
             t_id = int(float(t_id_raw))
         except Exception:
@@ -306,7 +416,13 @@ def validate_schedule_data(df: pd.DataFrame, conn) -> list:
         else:
             loai = str(loai_raw).strip().upper()
             if loai not in allowed_loai_set:
-                errors.append((idx, row_num, f"Loại '{loai_raw}' không hợp lệ. Cho phép: {', '.join(ALLOWED_LOAI)}."))
+                errors.append(
+                    (
+                        idx,
+                        row_num,
+                        f"Loại '{loai_raw}' không hợp lệ. Cho phép: {', '.join(ALLOWED_LOAI)}.",
+                    )
+                )
 
         si_so_raw = row["Sỉ số"]
         if is_empty_cell(si_so_raw):
@@ -314,7 +430,9 @@ def validate_schedule_data(df: pd.DataFrame, conn) -> list:
         else:
             si_so = safe_float(si_so_raw)
             if si_so is None or si_so < 0 or not si_so.is_integer():
-                errors.append((idx, row_num, f"Sỉ số '{si_so_raw}' phải là số nguyên không âm."))
+                errors.append(
+                    (idx, row_num, f"Sỉ số '{si_so_raw}' phải là số nguyên không âm.")
+                )
 
         tqđ_raw = row["Tiết quy đổi"]
         if is_empty_cell(tqđ_raw):
@@ -322,7 +440,9 @@ def validate_schedule_data(df: pd.DataFrame, conn) -> list:
         else:
             tqđ = safe_float(tqđ_raw)
             if tqđ is None or tqđ < 0:
-                errors.append((idx, row_num, f"Tiết quy đổi '{tqđ_raw}' phải là số không âm."))
+                errors.append(
+                    (idx, row_num, f"Tiết quy đổi '{tqđ_raw}' phải là số không âm.")
+                )
 
         hstc_raw = row["Hệ số tín chỉ"]
         if is_empty_cell(hstc_raw):
@@ -342,21 +462,25 @@ def validate_aggregate_totals_data(df: pd.DataFrame, conn) -> list:
     """
     errors = []
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT id FROM teachers")
     valid_teacher_ids = {str(t["id"]) for t in cursor.fetchall()}
 
     expected_cols = [
-        "Mã GV", "Tổng GC thực hiện", "NCKH thực hiện", "Số giờ miễn giảm", "Định mức GC"
+        "Mã GV",
+        "Tổng GC thực hiện",
+        "NCKH thực hiện",
+        "Số giờ miễn giảm",
+        "Định mức GC",
     ]
-    
+
     for col in expected_cols:
         if col not in df.columns:
             return [(0, 0, f"Thiếu cột bắt buộc: {col}")]
 
     for idx, row in df.iterrows():
-        row_num = idx + 2 # typically row index + 2 in simple spreadsheets
-        
+        row_num = idx + 2  # typically row index + 2 in simple spreadsheets
+
         t_id_raw = row["Mã GV"]
         if is_empty_cell(t_id_raw):
             errors.append((idx, row_num, "Mã GV không được để trống."))
@@ -364,7 +488,9 @@ def validate_aggregate_totals_data(df: pd.DataFrame, conn) -> list:
             try:
                 t_id = str(int(float(str(t_id_raw).strip())))
                 if t_id not in valid_teacher_ids:
-                    errors.append((idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống."))
+                    errors.append(
+                        (idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống.")
+                    )
             except ValueError:
                 errors.append((idx, row_num, f"Mã GV '{t_id_raw}' không hợp lệ."))
 
@@ -373,7 +499,7 @@ def validate_aggregate_totals_data(df: pd.DataFrame, conn) -> list:
             ("Tổng GC thực hiện", "Tổng GC thực hiện"),
             ("NCKH thực hiện", "NCKH thực hiện"),
             ("Số giờ miễn giảm", "Số giờ miễn giảm"),
-            ("Định mức GC", "Định mức GC")
+            ("Định mức GC", "Định mức GC"),
         ]:
             val_raw = row[col]
             if is_empty_cell(val_raw):
@@ -381,6 +507,8 @@ def validate_aggregate_totals_data(df: pd.DataFrame, conn) -> list:
             else:
                 val = safe_float(val_raw)
                 if val is None or val < 0:
-                    errors.append((idx, row_num, f"{label} '{val_raw}' phải là số không âm."))
+                    errors.append(
+                        (idx, row_num, f"{label} '{val_raw}' phải là số không âm.")
+                    )
 
     return errors

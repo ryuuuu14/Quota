@@ -1,51 +1,104 @@
 import json
 import pandas as pd
 
-from pipeline.differ import VALID_DOMAINS
 
 # Display column definitions per domain — maps DB column → friendly header
 DISPLAY_CONFIG = {
     "teachers": {
         "key_cols": ["teacher_name", "department"],
-        "display_cols": ["row_num", "teacher_id", "teacher_name", "department", "title", "role", "employment_type", "subject_group"],
+        "display_cols": [
+            "row_num",
+            "teacher_id",
+            "teacher_name",
+            "department",
+            "title",
+            "role",
+            "employment_type",
+            "subject_group",
+        ],
         "rename": {
-            "row_num": "Dòng", "teacher_id": "Mã GV", "teacher_name": "Họ tên", "department": "Đơn vị",
-            "title": "Chức danh", "role": "Chức vụ", "employment_type": "Loại HĐ", "subject_group": "Tổ môn"
-        }
+            "row_num": "Dòng",
+            "teacher_id": "Mã GV",
+            "teacher_name": "Họ tên",
+            "department": "Đơn vị",
+            "title": "Chức danh",
+            "role": "Chức vụ",
+            "employment_type": "Loại HĐ",
+            "subject_group": "Tổ môn",
+        },
     },
     "activities": {
         "key_cols": ["teacher_name", "activity_type_name", "log_date", "quantity"],
-        "display_cols": ["row_num", "teacher_name", "activity_type_name", "log_date", "quantity", "timeframe_name"],
+        "display_cols": [
+            "row_num",
+            "teacher_name",
+            "activity_type_name",
+            "log_date",
+            "quantity",
+            "timeframe_name",
+        ],
         "rename": {
-            "row_num": "Dòng", "teacher_name": "Mã GV", "activity_type_name": "Hoạt động",
-            "log_date": "Ngày", "quantity": "Số lượng", "timeframe_name": "Năm học"
-        }
+            "row_num": "Dòng",
+            "teacher_name": "Mã GV",
+            "activity_type_name": "Hoạt động",
+            "log_date": "Ngày",
+            "quantity": "Số lượng",
+            "timeframe_name": "Năm học",
+        },
     },
     "schedule": {
         "key_cols": ["teacher_name", "subject_name", "loai", "nhom"],
-        "display_cols": ["row_num", "teacher_name", "subject_name", "loai", "nhom", "si_so", "tiet_quy_doi", "he_so_tin_chi"],
+        "display_cols": [
+            "row_num",
+            "teacher_name",
+            "subject_name",
+            "loai",
+            "nhom",
+            "si_so",
+            "tiet_quy_doi",
+            "he_so_tin_chi",
+        ],
         "rename": {
-            "row_num": "Dòng", "teacher_name": "Họ tên", "subject_name": "Tên môn", "loai": "Loại",
-            "nhom": "Nhóm", "si_so": "Sỉ số", "tiet_quy_doi": "Tiết QĐ", "he_so_tin_chi": "HS TC"
-        }
+            "row_num": "Dòng",
+            "teacher_name": "Họ tên",
+            "subject_name": "Tên môn",
+            "loai": "Loại",
+            "nhom": "Nhóm",
+            "si_so": "Sỉ số",
+            "tiet_quy_doi": "Tiết QĐ",
+            "he_so_tin_chi": "HS TC",
+        },
     },
     "aggregate_totals": {
         "key_cols": ["teacher_name"],
-        "display_cols": ["row_num", "teacher_name", "tong_gc_da_thuc_hien", "nckh_da_thuc_hien", "so_gio_duoc_mien_giam", "dinh_muc_gc_phai_thuc_hien", "timeframe_name"],
+        "display_cols": [
+            "row_num",
+            "teacher_name",
+            "tong_gc_da_thuc_hien",
+            "nckh_da_thuc_hien",
+            "so_gio_duoc_mien_giam",
+            "dinh_muc_gc_phai_thuc_hien",
+            "timeframe_name",
+        ],
         "rename": {
-            "row_num": "Dòng", "teacher_name": "Mã GV", "tong_gc_da_thuc_hien": "Tổng GC thực hiện",
-            "nckh_da_thuc_hien": "NCKH thực hiện", "so_gio_duoc_mien_giam": "Miễn giảm",
-            "dinh_muc_gc_phai_thuc_hien": "Định mức GC", "timeframe_name": "Năm học"
-        }
-    }
+            "row_num": "Dòng",
+            "teacher_name": "Mã GV",
+            "tong_gc_da_thuc_hien": "Tổng GC thực hiện",
+            "nckh_da_thuc_hien": "NCKH thực hiện",
+            "so_gio_duoc_mien_giam": "Miễn giảm",
+            "dinh_muc_gc_phai_thuc_hien": "Định mức GC",
+            "timeframe_name": "Năm học",
+        },
+    },
 }
 
 STATUS_LABELS = {
     "NEW": "🆕 Mới",
     "UPDATE": "🟡 Cập nhật",
     "DELETE": "🔴 Xóa",
-    "SKIP": "⚪ Bỏ qua"
+    "SKIP": "⚪ Bỏ qua",
 }
+
 
 def format_cell_value(val):
     """Format a single cell value for display — handles None, NaN, numbers."""
@@ -59,7 +112,10 @@ def format_cell_value(val):
         return f"{val:,.2f}"
     return str(val)
 
-def format_diff_json(diff_json_str: str, domain: str, staging_df: pd.DataFrame) -> pd.DataFrame:
+
+def format_diff_json(
+    diff_json_str: str, domain: str, staging_df: pd.DataFrame
+) -> pd.DataFrame:
     """
     Convert a raw diff_json string + staging DataFrame into a display-ready DataFrame
     with cell-level styling hints for AgGrid.
@@ -96,17 +152,27 @@ def format_diff_json(diff_json_str: str, domain: str, staging_df: pd.DataFrame) 
     staging_df["_cell_styles"] = None
 
     if not diff_json_str or diff_json_str in ("{}", "null", "None", ""):
-        staging_df["_diff_marker_display"] = staging_df["_diff_marker"].map(STATUS_LABELS)
+        staging_df["_diff_marker_display"] = staging_df["_diff_marker"].map(
+            STATUS_LABELS
+        )
         return _apply_display_columns(staging_df, config)
 
     try:
-        diff_data = json.loads(diff_json_str) if isinstance(diff_json_str, str) else diff_json_str
+        diff_data = (
+            json.loads(diff_json_str)
+            if isinstance(diff_json_str, str)
+            else diff_json_str
+        )
     except (json.JSONDecodeError, TypeError):
-        staging_df["_diff_marker_display"] = staging_df["_diff_marker"].map(STATUS_LABELS)
+        staging_df["_diff_marker_display"] = staging_df["_diff_marker"].map(
+            STATUS_LABELS
+        )
         return _apply_display_columns(staging_df, config)
 
     if not isinstance(diff_data, dict) or "diffs" not in diff_data:
-        staging_df["_diff_marker_display"] = staging_df["_diff_marker"].map(STATUS_LABELS)
+        staging_df["_diff_marker_display"] = staging_df["_diff_marker"].map(
+            STATUS_LABELS
+        )
         return _apply_display_columns(staging_df, config)
 
     key_cols = config["key_cols"]
@@ -129,9 +195,17 @@ def format_diff_json(diff_json_str: str, domain: str, staging_df: pd.DataFrame) 
         cell_styles = {}
 
         if marker == "NEW":
-            cell_styles = {col: "added" for col in config["display_cols"] if col in staging_df.columns}
+            cell_styles = {
+                col: "added"
+                for col in config["display_cols"]
+                if col in staging_df.columns
+            }
         elif marker == "DELETE":
-            cell_styles = {col: "removed" for col in config["display_cols"] if col in staging_df.columns}
+            cell_styles = {
+                col: "removed"
+                for col in config["display_cols"]
+                if col in staging_df.columns
+            }
         elif marker == "UPDATE":
             for field, change in changes.items():
                 stylized_col = field
@@ -155,18 +229,26 @@ def _apply_display_columns(staging_df: pd.DataFrame, config: dict) -> pd.DataFra
 
     result["_diff_marker"] = staging_df["_diff_marker"].values
     result["_diff_detail"] = staging_df.get("diff_detail", "")
-    result["_diff_marker_display"] = staging_df.get("_diff_marker_display", staging_df["_diff_marker"])
+    result["_diff_marker_display"] = staging_df.get(
+        "_diff_marker_display", staging_df["_diff_marker"]
+    )
     result["_cell_styles"] = staging_df.get("_cell_styles", None)
 
     return result
 
 
-def build_diff_detail_text(staging_df: pd.DataFrame, diff_json_str: str, domain: str) -> pd.Series:
+def build_diff_detail_text(
+    staging_df: pd.DataFrame, diff_json_str: str, domain: str
+) -> pd.Series:
     """
     Build a human-readable _diff_detail string from diff_json for rows that lack it.
     """
     try:
-        diff_data = json.loads(diff_json_str) if isinstance(diff_json_str, str) else diff_json_str
+        diff_data = (
+            json.loads(diff_json_str)
+            if isinstance(diff_json_str, str)
+            else diff_json_str
+        )
     except (json.JSONDecodeError, TypeError):
         return staging_df.get("diff_detail", pd.Series([""] * len(staging_df)))
 

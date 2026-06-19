@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Set
 from dataclasses import dataclass
 
-from ..models import MappingResult, Alternative, MatchType
+from ..models import Alternative, MatchType
 from ..synonym_registry import SynonymRegistry
 
 
@@ -28,11 +28,13 @@ class MatcherStrategy(ABC):
         expected_column: str,
         norm_expected: str,
         available_headers: Dict[str, str],
-        used_headers: Set[str]
+        used_headers: Set[str],
     ) -> Optional[MatchCandidate]:
         pass
 
-    def _make_alternative(self, header: str, confidence: int, match_type: MatchType) -> Alternative:
+    def _make_alternative(
+        self, header: str, confidence: int, match_type: MatchType
+    ) -> Alternative:
         return Alternative(header=header, confidence=confidence, match_type=match_type)
 
     def _make_candidate(
@@ -42,7 +44,7 @@ class MatcherStrategy(ABC):
         mtype: MatchType,
         confidence: int,
         reason: str,
-        alternatives: List[Alternative]
+        alternatives: List[Alternative],
     ) -> Optional[MatchCandidate]:
         if matched is None:
             return None
@@ -52,5 +54,5 @@ class MatcherStrategy(ABC):
             match_type=mtype,
             confidence=confidence,
             reason=reason,
-            alternatives=alternatives
+            alternatives=alternatives,
         )

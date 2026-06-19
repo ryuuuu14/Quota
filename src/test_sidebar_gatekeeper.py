@@ -1,12 +1,14 @@
 import os
 
+
 def test_sidebar_has_phe_duyet():
     components_path = os.path.join(os.path.dirname(__file__), "components.py")
     with open(components_path, "r", encoding="utf-8") as f:
         content = f.read()
-    
+
     assert "pages/7_PheDuyet.py" in content
     assert "Phê duyệt Dữ liệu" in content
+
 
 def test_pages_gatekeeper():
     # Verify that CaiDatHeThong, PheDuyet, and Payroll have require_role checks
@@ -14,7 +16,8 @@ def test_pages_gatekeeper():
         page_path = os.path.join(os.path.dirname(__file__), "pages", page_name)
         with open(page_path, "r", encoding="utf-8") as f:
             content = f.read()
-        assert 'require_role' in content or 'session_state' in content
+        assert "require_role" in content or "session_state" in content
+
 
 def test_login_page_exists():
     login_path = os.path.join(os.path.dirname(__file__), "pages", "8_DangNhap.py")

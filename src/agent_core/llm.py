@@ -1,7 +1,7 @@
 import os
 import time
 import hashlib
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from google import genai
 from google.genai import types
 from langchain_openai import ChatOpenAI
@@ -14,9 +14,11 @@ from agent_core.cost import CostController
 _LLM_CACHE: Dict[str, Any] = {}
 _MAX_CACHE_SIZE = 100
 
+
 def _get_cache_key(system_prompt: str, user_prompt: str, model: str) -> str:
     combined = f"{system_prompt}|||{user_prompt}|||{model}"
     return hashlib.md5(combined.encode("utf-8")).hexdigest()
+
 
 def _add_to_cache(key: str, val: Any):
     global _LLM_CACHE
@@ -25,6 +27,7 @@ def _add_to_cache(key: str, val: Any):
         first_key = next(iter(_LLM_CACHE))
         _LLM_CACHE.pop(first_key)
     _LLM_CACHE[key] = val
+
 
 class GeminiPool:
     _client: Optional[genai.Client] = None
@@ -39,17 +42,19 @@ class GeminiPool:
         return cls._client
 
     @classmethod
-    def call(cls, 
-             system_prompt: str, 
-             user_prompt: str, 
-             complexity: str = "default", 
-             pipeline_name: str = "unknown",
-             agent_name: str = "unknown",
-             model_override: Optional[str] = None,
-             use_cache: bool = True) -> str:
-        
+    def call(
+        cls,
+        system_prompt: str,
+        user_prompt: str,
+        complexity: str = "default",
+        pipeline_name: str = "unknown",
+        agent_name: str = "unknown",
+        model_override: Optional[str] = None,
+        use_cache: bool = True,
+    ) -> str:
+
         start_time = time.time()
-        
+
         # 1. Select Model
         if model_override:
             model = model_override
@@ -68,7 +73,7 @@ class GeminiPool:
                 tokens_in=0,
                 tokens_out=0,
                 model_used=model,
-                cache_hit=True
+                cache_hit=True,
             )
             return cached_res
 
@@ -78,24 +83,25 @@ class GeminiPool:
             if model != "gemini-2.0-flash":
                 model = "gemini-2.0-flash"
             else:
-                return cls._openai_fallback(system_prompt, user_prompt, pipeline_name, agent_name, start_time)
+                return cls._openai_fallback(
+                    system_prompt, user_prompt, pipeline_name, agent_name, start_time
+                )
 
         # 4. Attempt API call
         try:
             client = cls.get_client()
             cls._cost.record_call(model)
-            
+
             response = client.models.generate_content(
                 model=model,
                 contents=user_prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=0.0
-                )
+                    system_instruction=system_prompt, temperature=0.0
+                ),
             )
-            
+
             res_text = response.text or ""
-            
+
             # Simple token estimation since response.usage_metadata is not always populated or accurate in mock/free SDK calls
             tokens_in = len(system_prompt.split()) + len(user_prompt.split())
             tokens_out = len(res_text.split())
@@ -111,39 +117,50 @@ class GeminiPool:
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 model_used=model,
-                cache_hit=False
+                cache_hit=False,
             )
-            
+
             if use_cache:
                 _add_to_cache(cache_key, res_text)
             return res_text
 
         except Exception as gemini_err:
             # Fallback to OpenAI
-            print(f"[Gemini Pool Warning] Gemini call failed: {gemini_err}. Attempting OpenAI fallback...")
-            return cls._openai_fallback(system_prompt, user_prompt, pipeline_name, agent_name, start_time)
+            print(
+                f"[Gemini Pool Warning] Gemini call failed: {gemini_err}. Attempting OpenAI fallback..."
+            )
+            return cls._openai_fallback(
+                system_prompt, user_prompt, pipeline_name, agent_name, start_time
+            )
 
     @classmethod
-    def _openai_fallback(cls, system_prompt: str, user_prompt: str, pipeline_name: str, agent_name: str, start_time: float) -> str:
+    def _openai_fallback(
+        cls,
+        system_prompt: str,
+        user_prompt: str,
+        pipeline_name: str,
+        agent_name: str,
+        start_time: float,
+    ) -> str:
         try:
             # Check OpenAI env API key
             if not os.environ.get("OPENAI_API_KEY"):
                 raise ValueError("OPENAI_API_KEY environment variable not set.")
-                
+
             model = "gpt-4o"
             cls._cost.record_call(model)
             llm = ChatOpenAI(model=model, temperature=0)
-            
+
             messages = [
                 SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
+                HumanMessage(content=user_prompt),
             ]
             response = llm.invoke(messages)
             res_text = response.content or ""
-            
+
             tokens_in = len(system_prompt.split()) + len(user_prompt.split())
             tokens_out = len(res_text.split())
-            
+
             duration_ms = (time.time() - start_time) * 1000
             cls._metrics.log_call(
                 agent_name=agent_name,
@@ -152,11 +169,13 @@ class GeminiPool:
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 model_used=model,
-                cache_hit=False
+                cache_hit=False,
             )
             return res_text
         except Exception as openai_err:
-            print(f"[Gemini Pool Error] OpenAI fallback failed: {openai_err}. Falling back to mock output...")
+            print(
+                f"[Gemini Pool Error] OpenAI fallback failed: {openai_err}. Falling back to mock output..."
+            )
             # Ultimate mock fallback
             res_text = _mock_llm(system_prompt, user_prompt)
             duration_ms = (time.time() - start_time) * 1000
@@ -167,9 +186,10 @@ class GeminiPool:
                 tokens_in=0,
                 tokens_out=0,
                 model_used="mock-model",
-                cache_hit=False
+                cache_hit=False,
             )
             return res_text
+
 
 def _mock_llm(system_prompt: str, user_prompt: str) -> str:
     """Produce plausible mock output so the graph structure is testable."""
@@ -194,7 +214,7 @@ def _mock_llm(system_prompt: str, user_prompt: str) -> str:
 
 **Risks:** Ensure atomic COMMIT/ROLLBACK on upload"""
     elif "BUILD" in system_prompt or "Implement" in system_prompt:
-        return f"""## Build Summary
+        return """## Build Summary
 
 **Created:**
 - src/bulk_import/__init__.py
@@ -207,7 +227,11 @@ def _mock_llm(system_prompt: str, user_prompt: str) -> str:
 - src/calculations.py — added totals check before activity_logs aggregation (15 lines)
 
 All files follow project conventions: absolute DB_PATH, Vietnamese labels, MD3 theme, parameterized queries."""
-    elif "TEST" in system_prompt or "test" in system_prompt.lower() or "Run" in system_prompt:
+    elif (
+        "TEST" in system_prompt
+        or "test" in system_prompt.lower()
+        or "Run" in system_prompt
+    ):
         return ""
     elif "VALIDATE" in system_prompt or "review" in system_prompt.lower():
         return """## Validation Report
@@ -226,4 +250,3 @@ Details:
 
 No issues found."""
     return f"[Mock LLM] Processing task: {task[:100]}..."
-

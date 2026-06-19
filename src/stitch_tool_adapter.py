@@ -1,16 +1,15 @@
 """Adapter for bridging Stitch MCP tool output to the pipeline."""
+
 import json
 import os
 
 _RESULTS_FILE = os.path.join(os.path.dirname(__file__), ".stitch_results.json")
 
 
-def edit_screens_blocking(
-    project_id: str, screen_ids: list, prompt: str
-) -> str:
+def edit_screens_blocking(project_id: str, screen_ids: list, prompt: str) -> str:
     """Reads pre-computed Stitch results cached by the agent."""
     if not os.path.exists(_RESULTS_FILE):
-        return f"# ADAPTER_NO_RESULTS: run Stitch tools first to populate cache"
+        return "# ADAPTER_NO_RESULTS: run Stitch tools first to populate cache"
 
     with open(_RESULTS_FILE, encoding="utf-8") as f:
         results = json.load(f)
@@ -28,9 +27,7 @@ def edit_screens_blocking(
     return f"# ADAPTER_NO_MATCH: no cached result for {key}"
 
 
-def cache_stitch_result(
-    project_id: str, screen_ids: list, prompt: str, html: str
-):
+def cache_stitch_result(project_id: str, screen_ids: list, prompt: str, html: str):
     """Saves a Stitch result for the pipeline to consume."""
     results = {}
     if os.path.exists(_RESULTS_FILE):

@@ -2,10 +2,10 @@
 Local Multi-Agent Debugging Pipeline
 Sandbox Runner (Playwright + Chrome) -> Telemetry Critic (Hybrid) -> Router
 """
+
 from typing import TypedDict, List, Optional
 import base64
 import json
-import os
 import re
 
 from langgraph.graph import StateGraph, END
@@ -16,9 +16,9 @@ STREAMLIT_URL = "http://localhost:8501"
 
 PAGE_ROUTES = [
     ("Dashboard", "/"),
-    ("Teacher",    "/2_QuanLyCanBo"),
-    ("Activity",   "/3_NhatKyHoatDong"),
-    ("Settings",   "/4_CaiDatHeThong"),
+    ("Teacher", "/2_QuanLyCanBo"),
+    ("Activity", "/3_NhatKyHoatDong"),
+    ("Settings", "/4_CaiDatHeThong"),
 ]
 
 _ERROR_PATTERNS = [
@@ -59,9 +59,12 @@ def _run_pages(browser, base_url: str) -> tuple:
 
     page.on("console", lambda msg: all_logs.append(f"[{msg.type}] {msg.text}"))
     page.on("pageerror", lambda err: all_logs.append(f"[PAGE_ERROR] {err}"))
-    page.on("requestfailed", lambda req: all_errors.append(
-        f"{req.url}: {req.failure.error_text if req.failure else 'unknown'}"
-    ))
+    page.on(
+        "requestfailed",
+        lambda req: all_errors.append(
+            f"{req.url}: {req.failure.error_text if req.failure else 'unknown'}"
+        ),
+    )
 
     page.goto(base_url, wait_until="load", timeout=15000)
     page.wait_for_timeout(1500)
@@ -70,7 +73,7 @@ def _run_pages(browser, base_url: str) -> tuple:
     # Streamlit multipage auto-sidebar uses filename without prefix
     # Target elements inside stPageLink to click the visible custom links instead of hidden default links
     nav_selectors = [
-        ("Teacher",  'div[data-testid="stPageLink"] a[href*="QuanLyCanBo"]'),
+        ("Teacher", 'div[data-testid="stPageLink"] a[href*="QuanLyCanBo"]'),
         ("Activity", 'div[data-testid="stPageLink"] a[href*="NhatKyHoatDong"]'),
         ("Settings", 'div[data-testid="stPageLink"] a[href*="CaiDatHeThong"]'),
     ]
@@ -92,7 +95,9 @@ def _run_pages(browser, base_url: str) -> tuple:
 
     last_screenshot = page.screenshot(full_page=True)
     try:
-        last_ax = json.dumps(page.accessibility.snapshot(), indent=2, ensure_ascii=False)
+        last_ax = json.dumps(
+            page.accessibility.snapshot(), indent=2, ensure_ascii=False
+        )
     except Exception:
         last_ax = "{}"
 
@@ -145,7 +150,9 @@ def _local_console_check(console_logs: List[str]) -> Optional[str]:
 
 def _local_network_check(network_errors: List[str]) -> Optional[str]:
     if network_errors:
-        return f"Network failures ({len(network_errors)}):\n" + "\n".join(network_errors[:5])
+        return f"Network failures ({len(network_errors)}):\n" + "\n".join(
+            network_errors[:5]
+        )
     return None
 
 
@@ -164,30 +171,37 @@ def _local_a11y_check(ax_tree: str, is_streamlit: bool = True) -> Optional[str]:
     return None
 
 
-def _run_gemini_vision(screenshot_b64: str, console_logs: List[str],
-                       network_errors: List[str], ax_tree: str) -> Optional[str]:
+def _run_gemini_vision(
+    screenshot_b64: str,
+    console_logs: List[str],
+    network_errors: List[str],
+    ax_tree: str,
+) -> Optional[str]:
     import time
+
     try:
         from agent_core.llm import GeminiPool
         from google.genai.types import Part
-        
+
         # Check budget limits
         if GeminiPool._cost.over_budget("gemini-2.0-flash"):
             print("[Debug Pipeline] Over budget, skipping vision check")
             return None
-            
+
         client = GeminiPool.get_client()
         GeminiPool._cost.record_call("gemini-2.0-flash")
-        
+
         log_summary = "\n".join(console_logs[-20:]) if console_logs else "(empty)"
         net_summary = "\n".join(network_errors[-10:]) if network_errors else "(empty)"
-        
+
         start_time = time.time()
-        
+
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[
-                Part.from_bytes(data=base64.b64decode(screenshot_b64), mime_type="image/png"),
+                Part.from_bytes(
+                    data=base64.b64decode(screenshot_b64), mime_type="image/png"
+                ),
                 f"You are a UI debugger. Examine this screenshot and telemetry.\n\n"
                 f"Console Logs (last 20):\n{log_summary}\n\n"
                 f"Network Errors:\n{net_summary}\n\n"
@@ -197,7 +211,7 @@ def _run_gemini_vision(screenshot_b64: str, console_logs: List[str],
             ],
         )
         text = response.text.strip()
-        
+
         duration_ms = (time.time() - start_time) * 1000
         GeminiPool._metrics.log_call(
             agent_name="telemetry_critic",
@@ -205,14 +219,20 @@ def _run_gemini_vision(screenshot_b64: str, console_logs: List[str],
             duration_ms=duration_ms,
             tokens_in=0,
             tokens_out=len(text.split()),
-            model_used="gemini-2.0-flash"
+            model_used="gemini-2.0-flash",
         )
-        
+
         if "VERDICT: FAILED" in text:
-            report = text.split("DEBUG_REPORT:", 1)[1].strip() if "DEBUG_REPORT:" in text else text
+            report = (
+                text.split("DEBUG_REPORT:", 1)[1].strip()
+                if "DEBUG_REPORT:" in text
+                else text
+            )
             return f"Gemini Vision: {report[:300]}"
     except Exception as e:
-        print(f"[Debug Pipeline Vision Warning] Vision call failed or not configured: {e}")
+        print(
+            f"[Debug Pipeline Vision Warning] Vision call failed or not configured: {e}"
+        )
         pass
     return None
 
@@ -234,7 +254,9 @@ def execute_critic_consensus(state: UIState) -> dict:
         return {"feedback_payload": feedback}
 
     if screenshot_b64:
-        vision_feedback = _run_gemini_vision(screenshot_b64, console_logs, network_errors, ax_tree)
+        vision_feedback = _run_gemini_vision(
+            screenshot_b64, console_logs, network_errors, ax_tree
+        )
         if vision_feedback:
             return {"feedback_payload": vision_feedback}
 
@@ -291,11 +313,12 @@ def run_debug_pipeline(target_url: str = STREAMLIT_URL) -> dict:
 
 if __name__ == "__main__":
     import sys
+
     sys.stdout.reconfigure(encoding="utf-8")
     out = run_debug_pipeline()
     print(f"Verdict:       {out['verdict']}")
     print(f"Iterations:    {out['test_run_count']}")
     print(f"Console logs:  {len(out['console_logs'])} events")
     print(f"Network errs:  {len(out['network_errors'])} errors")
-    if out['feedback']:
+    if out["feedback"]:
         print(f"Feedback: {out['feedback'][:200]}")

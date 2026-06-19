@@ -1,15 +1,14 @@
 import streamlit as st
 import os
-import textwrap
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-os.environ.setdefault('DB_PATH', os.path.join(_project_root, 'data', 'database.sqlite'))
+os.environ.setdefault("DB_PATH", os.path.join(_project_root, "data", "database.sqlite"))
 
 from database import init_db, seed_initial_data, get_connection
 from components import render_sidebar
 
 # Auto-initialize once per session (CREATE IF NOT EXISTS + seeding is idempotent)
-if 'db_initialized' not in st.session_state:
+if "db_initialized" not in st.session_state:
     init_db()
     st.session_state.db_initialized = True
 
@@ -25,14 +24,18 @@ if _tf_count == 0:
 
 if _act_count == 0:
     import sys
+
     sys.path.insert(0, os.path.dirname(__file__))
     import seed_activities
+
     seed_activities.run()
 
 if _red_count == 0:
     import sys
+
     sys.path.insert(0, os.path.dirname(__file__))
     import seed_reductions
+
     seed_reductions.run()
 
 _conn2 = get_connection()
@@ -41,18 +44,21 @@ _conn2.close()
 
 if _teacher_count < 5:
     import sys
+
     sys.path.insert(0, os.path.dirname(__file__))
     import seed_teachers
+
     seed_teachers.run()
 
 
 st.set_page_config(
     page_title="Hệ thống Quản lý Chế độ Làm việc T04",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 from auth import get_current_user
+
 _gate_user = get_current_user()
 if not _gate_user:
     st.switch_page("pages/8_DangNhap.py")
@@ -61,7 +67,8 @@ if not _gate_user:
 render_sidebar("home")
 
 # ── Welcome page ──
-st.markdown("""
+st.markdown(
+    """
 <div style="
 background: linear-gradient(135deg, rgba(128, 0, 32, 0.08), rgba(0, 103, 71, 0.04));
 padding: 32px;
@@ -169,11 +176,16 @@ Nguyên tắc cốt lõi của Quy định T04:
 <li><strong>Bù trừ nghĩa vụ giảng dạy và nghiên cứu khoa học:</strong> Giờ giảng dạy thừa có thể quy đổi sang giờ nghiên cứu khoa học, và ngược lại giờ nghiên cứu khoa học thừa có thể dùng để bù đắp cho giờ giảng dạy còn thiếu, giúp nhà giáo hoàn thành tổng nghĩa vụ công tác trong năm học.</li>
 </ul>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Regulation Viewer ──
 with st.expander("📄 Xem Quy định chế độ làm việc T04 (Toàn văn)", expanded=False):
-    reg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Quy định chế độ làm việc đối với nhà giáo (Bản chuẩn toàn văn).md")
+    reg_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "Quy định chế độ làm việc đối với nhà giáo (Bản chuẩn toàn văn).md",
+    )
     if os.path.exists(reg_path):
         with open(reg_path, "r", encoding="utf-8") as f:
             st.markdown(f.read())
