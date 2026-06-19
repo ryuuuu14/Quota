@@ -1293,7 +1293,12 @@ with tab2:
 
             with st.form("add_teacher_form"):
                 col1, col2 = st.columns(2)
-                name = col1.text_input("Họ và tên")
+                teacher_id_val = col1.text_input(
+                    "Mã nhà giáo (Mã GV)",
+                    placeholder="Để trống để tự động sinh",
+                    help="Nhập số nguyên dương duy nhất làm Mã nhà giáo, hoặc để trống để hệ thống tự động cấp phát ID tăng dần.",
+                )
+                name = col2.text_input("Họ và tên")
                 subject_group = col1.selectbox(
                     "Khối môn học", ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"]
                 )
@@ -1301,7 +1306,7 @@ with tab2:
 
                 initial_title = col1.selectbox("Chức danh ban đầu", options=titles_list)
                 initial_dept = col2.selectbox("Đơn vị công tác", options=depts_list)
-                initial_role = col2.selectbox("Chức vụ ban đầu", options=roles_list)
+                initial_role = col1.selectbox("Chức vụ ban đầu", options=roles_list)
                 start_date = col2.date_input(
                     "Ngày bắt đầu công tác", value=date.today()
                 )
@@ -1319,24 +1324,62 @@ with tab2:
                     else:
                         cursor = conn.cursor()
                         is_guest = st.session_state.create_emp_type == "GUEST"
+
+                        # Parse and validate teacher_id_val
+                        teacher_id_clean = None
+                        if teacher_id_val.strip():
+                            try:
+                                teacher_id_clean = int(teacher_id_val.strip())
+                                if teacher_id_clean <= 0:
+                                    raise ValueError()
+                            except ValueError:
+                                st.error("Mã nhà giáo (Mã GV) phải là số nguyên dương.")
+                                st.stop()
+
+                            # Check duplicate in teachers
+                            cursor.execute("SELECT id FROM teachers WHERE id = ?", (teacher_id_clean,))
+                            if cursor.fetchone():
+                                st.error(f"Mã nhà giáo (Mã GV) {teacher_id_clean} đã tồn tại trong hệ thống. Vui lòng chọn ID khác.")
+                                st.stop()
+
                         if is_admin:
-                            cursor.execute(
-                                """
-                                INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                                (
-                                    name.strip(),
-                                    subject_group,
-                                    int(is_female),
-                                    st.session_state.create_emp_type,
-                                    create_guest_rank if is_guest else None,
-                                    create_salary if is_guest else computed_annual,
-                                    create_police_rank_id if not is_guest else None,
-                                    create_coefficient if not is_guest else None,
-                                ),
-                            )
-                            new_teacher_id = cursor.lastrowid
+                            if teacher_id_clean is not None:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO teachers (id, name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                    (
+                                        teacher_id_clean,
+                                        name.strip(),
+                                        subject_group,
+                                        int(is_female),
+                                        st.session_state.create_emp_type,
+                                        create_guest_rank if is_guest else None,
+                                        create_salary if is_guest else computed_annual,
+                                        create_police_rank_id if not is_guest else None,
+                                        create_coefficient if not is_guest else None,
+                                    ),
+                                )
+                                new_teacher_id = teacher_id_clean
+                            else:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                    (
+                                        name.strip(),
+                                        subject_group,
+                                        int(is_female),
+                                        st.session_state.create_emp_type,
+                                        create_guest_rank if is_guest else None,
+                                        create_salary if is_guest else computed_annual,
+                                        create_police_rank_id if not is_guest else None,
+                                        create_coefficient if not is_guest else None,
+                                    ),
+                                )
+                                new_teacher_id = cursor.lastrowid
 
                             cursor.execute(
                                 """
@@ -1410,7 +1453,7 @@ with tab2:
                                     initial_role
                                     if initial_role != "Không có"
                                     else None,
-                                    None,
+                                    teacher_id_clean,
                                 ),
                             )
                             conn.commit()

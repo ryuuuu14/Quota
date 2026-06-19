@@ -627,3 +627,13 @@
 {"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 1.3468265533447266, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
 {"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 2.7894973754882812, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
 {"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 1.1997222900390625, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 150.0, "tokens_in": 10, "tokens_out": 20, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 0.9236335754394531, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6842613220214844, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 1.802206039428711, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 1.1875629425048828, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 150.0, "tokens_in": 10, "tokens_out": 20, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "test_agent", "pipeline_name": "test_pipeline", "duration_ms": 0.7081031799316406, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6840229034423828, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 1.9519329071044922, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}
+{"agent_name": "brainstormer", "pipeline_name": "research_pipeline", "duration_ms": 0.6301403045654297, "tokens_in": 0, "tokens_out": 0, "model_used": "mock-model", "cache_hit": false}

@@ -368,23 +368,44 @@ def show_batch_detail(batch_id: int):
                         for _, r in staging_df.iterrows():
                             marker = r["diff_marker"]
                             if marker == "NEW":
-                                cursor.execute(
-                                    """
-                                    INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                    (
-                                        r["teacher_name"],
-                                        r["subject_group"],
-                                        r["is_female"],
-                                        r["employment_type"],
-                                        r["guest_rank"],
-                                        r["total_12m_salary"],
-                                        r["police_rank_id"],
-                                        r["salary_coefficient"],
-                                    ),
-                                )
-                                new_id = cursor.lastrowid
+                                t_id_val = int(r["teacher_id"]) if pd.notna(r.get("teacher_id")) and str(r.get("teacher_id")).strip() else None
+                                if t_id_val is not None:
+                                    cursor.execute(
+                                        """
+                                        INSERT INTO teachers (id, name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """,
+                                        (
+                                            t_id_val,
+                                            r["teacher_name"],
+                                            r["subject_group"],
+                                            r["is_female"],
+                                            r["employment_type"],
+                                            r["guest_rank"],
+                                            r["total_12m_salary"],
+                                            r["police_rank_id"],
+                                            r["salary_coefficient"],
+                                        ),
+                                    )
+                                    new_id = t_id_val
+                                else:
+                                    cursor.execute(
+                                        """
+                                        INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                    """,
+                                        (
+                                            r["teacher_name"],
+                                            r["subject_group"],
+                                            r["is_female"],
+                                            r["employment_type"],
+                                            r["guest_rank"],
+                                            r["total_12m_salary"],
+                                            r["police_rank_id"],
+                                            r["salary_coefficient"],
+                                        ),
+                                    )
+                                    new_id = cursor.lastrowid
 
                                 title_s_dt = (
                                     r["title_start_date"]

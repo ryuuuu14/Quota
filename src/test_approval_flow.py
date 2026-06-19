@@ -30,8 +30,8 @@ def test_approval_workflow_teachers(tmp_path):
         """
         INSERT INTO staging_teachers (
             batch_id, row_num, teacher_name, department, title, employment_type,
-            guest_rank, total_12m_salary, police_rank_id, salary_coefficient, is_female, subject_group, diff_marker, diff_detail
-        ) VALUES (?, 1, 'Nguyễn Văn New', 'Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học', 'Giảng viên', 'TEACHER', NULL, 20000000.0, NULL, 4.4, 0, 'Tự nhiên/Kỹ thuật', 'NEW', 'Cán bộ mới')
+            guest_rank, total_12m_salary, police_rank_id, salary_coefficient, is_female, subject_group, diff_marker, diff_detail, teacher_id
+        ) VALUES (?, 1, 'Nguyễn Văn New', 'Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học', 'Giảng viên', 'TEACHER', NULL, 20000000.0, NULL, 4.4, 0, 'Tự nhiên/Kỹ thuật', 'NEW', 'Cán bộ mới', 9999)
     """,
         (batch_id,),
     )
@@ -66,23 +66,44 @@ def test_approval_workflow_teachers(tmp_path):
     for r in staging_rows:
         marker = r["diff_marker"]
         if marker == "NEW":
-            cursor.execute(
-                """
-                INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    r["teacher_name"],
-                    r["subject_group"],
-                    r["is_female"],
-                    r["employment_type"],
-                    r["guest_rank"],
-                    r["total_12m_salary"],
-                    r["police_rank_id"],
-                    r["salary_coefficient"],
-                ),
-            )
-            new_id = cursor.lastrowid
+            t_id_val = int(r["teacher_id"]) if "teacher_id" in r.keys() and r["teacher_id"] is not None else None
+            if t_id_val is not None:
+                cursor.execute(
+                    """
+                    INSERT INTO teachers (id, name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        t_id_val,
+                        r["teacher_name"],
+                        r["subject_group"],
+                        r["is_female"],
+                        r["employment_type"],
+                        r["guest_rank"],
+                        r["total_12m_salary"],
+                        r["police_rank_id"],
+                        r["salary_coefficient"],
+                    ),
+                )
+                new_id = t_id_val
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        r["teacher_name"],
+                        r["subject_group"],
+                        r["is_female"],
+                        r["employment_type"],
+                        r["guest_rank"],
+                        r["total_12m_salary"],
+                        r["police_rank_id"],
+                        r["salary_coefficient"],
+                    ),
+                )
+                new_id = cursor.lastrowid
 
             cursor.execute(
                 """
@@ -168,6 +189,7 @@ def test_approval_workflow_teachers(tmp_path):
     cursor.execute("SELECT * FROM teachers WHERE name = 'Nguyễn Văn New'")
     new_gv = cursor.fetchone()
     assert new_gv is not None
+    assert new_gv["id"] == 9999
     assert float(new_gv["salary_coefficient"]) == 4.4
 
     # Verify title updated to "Giáo sư" for Nguyễn Văn A
