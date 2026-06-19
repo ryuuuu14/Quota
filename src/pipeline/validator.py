@@ -202,8 +202,10 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
     cursor = conn.cursor()
 
     # Pre-fetch check data
-    cursor.execute("SELECT id FROM teachers")
-    valid_teacher_ids = {str(t["id"]) for t in cursor.fetchall()}
+    cursor.execute("SELECT id, teacher_code FROM teachers")
+    rows = cursor.fetchall()
+    valid_teacher_ids = {str(t["id"]) for t in rows}
+    valid_teacher_ids.update({str(t["teacher_code"]).strip() for t in rows if t["teacher_code"]})
 
     cursor.execute(
         "SELECT name, is_teaching_activity, is_nckh_activity FROM activity_types"
@@ -246,14 +248,11 @@ def validate_activities_data(df: pd.DataFrame, conn) -> list:
         if is_empty_cell(t_id_raw):
             errors.append((idx, row_num, "Mã GV không được để trống."))
         else:
-            try:
-                t_id = str(int(float(str(t_id_raw).strip())))
-                if t_id not in valid_teacher_ids:
-                    errors.append(
-                        (idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống.")
-                    )
-            except ValueError:
-                errors.append((idx, row_num, f"Mã GV '{t_id_raw}' không hợp lệ."))
+            t_id = str(t_id_raw).strip()
+            if t_id not in valid_teacher_ids:
+                errors.append(
+                    (idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống.")
+                )
 
         act_type = row.get("Tên loại hoạt động")
         is_teaching = False
@@ -364,8 +363,10 @@ def validate_schedule_data(df: pd.DataFrame, conn) -> list:
     errors = []
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM teachers")
-    valid_ids = {t["id"] for t in cursor.fetchall()}
+    cursor.execute("SELECT id, teacher_code FROM teachers")
+    rows = cursor.fetchall()
+    valid_ids = {str(t["id"]) for t in rows}
+    valid_ids.update({str(t["teacher_code"]).strip() for t in rows if t["teacher_code"]})
 
     expected_cols = [
         "Mã GV (Khóa)",
@@ -397,14 +398,10 @@ def validate_schedule_data(df: pd.DataFrame, conn) -> list:
             errors.append((idx, row_num, "Mã GV không được để trống."))
             continue
 
-        try:
-            t_id = int(float(t_id_raw))
-        except Exception:
-            errors.append((idx, row_num, f"Mã GV '{t_id_raw}' phải là số nguyên."))
-            continue
+        t_id = str(t_id_raw).strip()
 
         if t_id not in valid_ids:
-            errors.append((idx, row_num, f"Mã GV {t_id} không tồn tại trong hệ thống."))
+            errors.append((idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống."))
 
         sub = row["Tên môn học"]
         if is_empty_cell(sub):
@@ -463,8 +460,10 @@ def validate_aggregate_totals_data(df: pd.DataFrame, conn) -> list:
     errors = []
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM teachers")
-    valid_teacher_ids = {str(t["id"]) for t in cursor.fetchall()}
+    cursor.execute("SELECT id, teacher_code FROM teachers")
+    rows = cursor.fetchall()
+    valid_teacher_ids = {str(t["id"]) for t in rows}
+    valid_teacher_ids.update({str(t["teacher_code"]).strip() for t in rows if t["teacher_code"]})
 
     expected_cols = [
         "Mã GV",
@@ -485,14 +484,11 @@ def validate_aggregate_totals_data(df: pd.DataFrame, conn) -> list:
         if is_empty_cell(t_id_raw):
             errors.append((idx, row_num, "Mã GV không được để trống."))
         else:
-            try:
-                t_id = str(int(float(str(t_id_raw).strip())))
-                if t_id not in valid_teacher_ids:
-                    errors.append(
-                        (idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống.")
-                    )
-            except ValueError:
-                errors.append((idx, row_num, f"Mã GV '{t_id_raw}' không hợp lệ."))
+            t_id = str(t_id_raw).strip()
+            if t_id not in valid_teacher_ids:
+                errors.append(
+                    (idx, row_num, f"Mã GV '{t_id}' không tồn tại trong hệ thống.")
+                )
 
         # Numeric validations
         for col, label in [

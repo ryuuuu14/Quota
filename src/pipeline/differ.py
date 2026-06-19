@@ -184,7 +184,7 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
 
     # Load all production teachers
     cursor.execute("""
-        SELECT t.id, t.name, t.subject_group, t.is_female, t.employment_type, t.guest_rank,
+        SELECT t.id, t.teacher_code, t.name, t.subject_group, t.is_female, t.employment_type, t.guest_rank,
                (SELECT rank_name FROM police_ranks WHERE id = t.police_rank_id) as police_rank,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title,
                (SELECT start_date FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title_start_date,
@@ -195,8 +195,11 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
     """)
     prod_rows = [dict(r) for r in cursor.fetchall()]
 
-    # Map by ID
-    prod_map_id = {r["id"]: r for r in prod_rows}
+    # Map by ID and teacher_code
+    prod_map_id = {str(r["id"]): r for r in prod_rows}
+    for r in prod_rows:
+        if r["teacher_code"]:
+            prod_map_id[str(r["teacher_code"]).strip()] = r
     # Map by name + department for natural key lookup (fallback)
     # Use list-per-key to detect collisions (duplicate name+dept)
     prod_map = {}
@@ -228,7 +231,7 @@ def diff_teachers(df: pd.DataFrame, conn) -> pd.DataFrame:
         prod = None
         t_id = None
         try:
-            t_id = int(float(str(row.get("Mã GV", ""))))
+            t_id = str(row.get("Mã GV", "")).strip()
         except Exception:
             pass
         if t_id is not None and t_id in prod_map_id:
@@ -367,7 +370,7 @@ def diff_activities(df: pd.DataFrame, conn, timeframe_name: str) -> pd.DataFrame
 
     for idx, row in df.iterrows():
         try:
-            t_id = str(int(float(str(row["Mã GV"]).strip())))
+            t_id = str(row["Mã GV"]).strip()
         except Exception:
             t_id = ""
 
@@ -421,7 +424,7 @@ def diff_schedule(df: pd.DataFrame, conn, timeframe_id) -> pd.DataFrame:
     df["diff_detail"] = ""
 
     for idx, row in df.iterrows():
-        t_id = int(float(row["Mã GV (Khóa)"]))
+        t_id = str(row["Mã GV (Khóa)"]).strip()
         sub = str(row["Tên môn học"]).strip()
         loai = str(row["Loại"]).strip().upper()
         nhom = str(row["Nhóm"] or "").strip()
@@ -485,9 +488,12 @@ def diff_aggregate_totals(df: pd.DataFrame, conn, timeframe_name: str) -> pd.Dat
     exist_map = {r["teacher_id"]: dict(r) for r in exist_rows}
 
     # Fetch teachers to match name/id
-    cursor.execute("SELECT id, name FROM teachers")
+    cursor.execute("SELECT id, teacher_code, name FROM teachers")
     t_rows = cursor.fetchall()
     t_map_id = {str(row["id"]): row["id"] for row in t_rows}
+    for row in t_rows:
+        if row["teacher_code"]:
+            t_map_id[str(row["teacher_code"]).strip()] = row["id"]
     t_map_name = {row["name"].strip().lower(): row["id"] for row in t_rows}
 
     df["diff_marker"] = "NEW"
@@ -495,10 +501,7 @@ def diff_aggregate_totals(df: pd.DataFrame, conn, timeframe_name: str) -> pd.Dat
 
     for idx, row in df.iterrows():
         teacher_raw = str(row["Mã GV"]).strip()
-        try:
-            t_id_str = str(int(float(teacher_raw)))
-        except ValueError:
-            t_id_str = teacher_raw
+        t_id_str = teacher_raw
 
         t_id = t_map_id.get(t_id_str)
         if not t_id:

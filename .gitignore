@@ -1,0 +1,13 @@
+# Database (SQLite + WAL mode companion files)
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+data/database.sqlite-wal

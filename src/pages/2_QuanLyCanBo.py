@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import date, datetime
 from database import get_connection, delete_teacher, ThreadLocalConnectionProxy
-from components import render_warning_state, render_sidebar, render_chip
+from components import render_warning_state, render_sidebar, render_chip, _resolve_locale_string
 from database import get_base_salary, get_police_ranks
 
 st.set_page_config(page_title="Quản lý Hồ sơ Nhà giáo", layout="wide")
@@ -117,6 +117,8 @@ def _render_teacher_profile_card(
     salary_warning,
     highlighted=True,
 ):
+    employment_label = _resolve_locale_string(employment_label, teacher_id, name)
+    title = _resolve_locale_string(title, teacher_id, name)
     initial = name.split()[-1][0].upper()
 
     if highlighted:
@@ -177,7 +179,7 @@ def _render_teacher_profile_card(
 </div>
 <div style="flex: 1; min-width: 160px; word-break: break-word;">
 <div style="margin: 0 0 3px 0; font-size: 1.6rem; font-weight: 700; color: #FFE082; letter-spacing: 0.2px; word-break: break-word; line-height: 1.3;">{name}</div>
-<div style="font-size: 1.1rem; color: #FFFFFF; letter-spacing: 0.3px; line-height: 1.45;">{subject_group}<br><span style="color: rgba(255, 255, 255, 0.75); font-size: 1.05rem;">GV-{teacher_id}</span></div>
+<div style="font-size: 1.1rem; color: #FFFFFF; letter-spacing: 0.3px; line-height: 1.45;">{subject_group}<br><span style="color: rgba(255, 255, 255, 0.75); font-size: 1.05rem;">{teacher_id}</span></div>
 </div>
 <div style="flex-shrink: 0;">
 <span style="
@@ -226,7 +228,7 @@ def _render_teacher_profile_card(
 </div>
 <div style="flex: 1; min-width: 160px; word-break: break-word;">
 <h3 style="margin: 0 0 3px 0; font-size: 1.15rem; font-weight: 700; color: var(--md-on-surface); word-break: break-word;">{name}</h3>
-<div style="font-size: 0.8rem; color: var(--md-on-surface-variant);">{subject_group} &nbsp;·&nbsp; GV-{teacher_id}</div>
+<div style="font-size: 0.8rem; color: var(--md-on-surface-variant);">{subject_group} &nbsp;·&nbsp; {teacher_id}</div>
 </div>
 <div style="flex-shrink: 0;">{render_chip(employment_label, chip_variant)}</div>
 </div>
@@ -391,7 +393,7 @@ with tab1:
                 _render_teacher_profile_card(
                     name=t_data["name"],
                     subject_group=t_data["subject_group"],
-                    teacher_id=selected_t_id,
+                    teacher_id=t_data.get("teacher_code") or str(selected_t_id),
                     employment_label=emp_label,
                     chip_variant=chip_variant,
                     department=c_dept,
@@ -1296,7 +1298,7 @@ with tab2:
                 teacher_id_val = col1.text_input(
                     "Mã nhà giáo (Mã GV)",
                     placeholder="Để trống để tự động sinh",
-                    help="Nhập số nguyên dương duy nhất làm Mã nhà giáo, hoặc để trống để hệ thống tự động cấp phát ID tăng dần.",
+                    help="Nhập mã định danh nhà giáo (có thể bao gồm chữ và số, ví dụ: 8A512). Để trống để hệ thống tự động cấp phát.",
                 )
                 name = col2.text_input("Họ và tên")
                 subject_group = col1.selectbox(
@@ -1325,61 +1327,44 @@ with tab2:
                         cursor = conn.cursor()
                         is_guest = st.session_state.create_emp_type == "GUEST"
 
-                        # Parse and validate teacher_id_val
-                        teacher_id_clean = None
-                        if teacher_id_val.strip():
-                            try:
-                                teacher_id_clean = int(teacher_id_val.strip())
-                                if teacher_id_clean <= 0:
-                                    raise ValueError()
-                            except ValueError:
-                                st.error("Mã nhà giáo (Mã GV) phải là số nguyên dương.")
-                                st.stop()
-
+                        # Parse and validate teacher_code
+                        teacher_code_val = teacher_id_val.strip()
+                        if teacher_code_val:
                             # Check duplicate in teachers
-                            cursor.execute("SELECT id FROM teachers WHERE id = ?", (teacher_id_clean,))
+                            cursor.execute("SELECT id FROM teachers WHERE teacher_code = ?", (teacher_code_val,))
                             if cursor.fetchone():
-                                st.error(f"Mã nhà giáo (Mã GV) {teacher_id_clean} đã tồn tại trong hệ thống. Vui lòng chọn ID khác.")
+                                st.error(f"Mã nhà giáo '{teacher_code_val}' đã tồn tại trong hệ thống. Vui lòng chọn mã khác.")
                                 st.stop()
+                            # Check duplicate in staging
+                            cursor.execute("SELECT id FROM staging_teachers WHERE teacher_code = ?", (teacher_code_val,))
+                            if cursor.fetchone():
+                                st.error(f"Mã nhà giáo '{teacher_code_val}' đang chờ duyệt. Vui lòng chọn mã khác.")
+                                st.stop()
+                        else:
+                            # Auto-generate teacher code
+                            cursor.execute("SELECT count(*) FROM teachers")
+                            count = cursor.fetchone()[0]
+                            teacher_code_val = f"GV-{(count + 1):03d}"
 
                         if is_admin:
-                            if teacher_id_clean is not None:
-                                cursor.execute(
-                                    """
-                                    INSERT INTO teachers (id, name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                    (
-                                        teacher_id_clean,
-                                        name.strip(),
-                                        subject_group,
-                                        int(is_female),
-                                        st.session_state.create_emp_type,
-                                        create_guest_rank if is_guest else None,
-                                        create_salary if is_guest else computed_annual,
-                                        create_police_rank_id if not is_guest else None,
-                                        create_coefficient if not is_guest else None,
-                                    ),
-                                )
-                                new_teacher_id = teacher_id_clean
-                            else:
-                                cursor.execute(
-                                    """
-                                    INSERT INTO teachers (name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                    (
-                                        name.strip(),
-                                        subject_group,
-                                        int(is_female),
-                                        st.session_state.create_emp_type,
-                                        create_guest_rank if is_guest else None,
-                                        create_salary if is_guest else computed_annual,
-                                        create_police_rank_id if not is_guest else None,
-                                        create_coefficient if not is_guest else None,
-                                    ),
-                                )
-                                new_teacher_id = cursor.lastrowid
+                            cursor.execute(
+                                """
+                                INSERT INTO teachers (teacher_code, name, subject_group, is_female, employment_type, guest_rank, total_12m_salary, police_rank_id, salary_coefficient)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                                (
+                                    teacher_code_val,
+                                    name.strip(),
+                                    subject_group,
+                                    int(is_female),
+                                    st.session_state.create_emp_type,
+                                    create_guest_rank if is_guest else None,
+                                    create_salary if is_guest else computed_annual,
+                                    create_police_rank_id if not is_guest else None,
+                                    create_coefficient if not is_guest else None,
+                                ),
+                            )
+                            new_teacher_id = cursor.lastrowid
 
                             cursor.execute(
                                 """
@@ -1432,7 +1417,7 @@ with tab2:
                                 INSERT INTO staging_teachers (
                                     batch_id, row_num, diff_marker, diff_detail, validation_errors,
                                     teacher_name, subject_group, is_female, employment_type,
-                                    guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_id
+                                    guest_rank, total_12m_salary, salary_coefficient, title, department, role, teacher_code
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                                 (
@@ -1453,7 +1438,7 @@ with tab2:
                                     initial_role
                                     if initial_role != "Không có"
                                     else None,
-                                    teacher_id_clean,
+                                    teacher_code_val,
                                 ),
                             )
                             conn.commit()

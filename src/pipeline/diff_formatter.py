@@ -8,7 +8,7 @@ DISPLAY_CONFIG = {
         "key_cols": ["teacher_name", "department"],
         "display_cols": [
             "row_num",
-            "teacher_id",
+            "teacher_code",
             "teacher_name",
             "department",
             "title",
@@ -18,7 +18,7 @@ DISPLAY_CONFIG = {
         ],
         "rename": {
             "row_num": "Dòng",
-            "teacher_id": "Mã GV",
+            "teacher_code": "Mã GV",
             "teacher_name": "Họ tên",
             "department": "Đơn vị",
             "title": "Chức danh",

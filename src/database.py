@@ -135,6 +135,34 @@ def init_db():
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS staging_teachers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id INTEGER NOT NULL,
+        row_num INTEGER NOT NULL,
+        diff_marker TEXT NOT NULL,
+        diff_detail TEXT,
+        validation_errors TEXT,
+        
+        teacher_name TEXT,
+        subject_group TEXT,
+        is_female BOOLEAN,
+        employment_type TEXT,
+        guest_rank TEXT,
+        total_12m_salary REAL,
+        salary_coefficient REAL,
+        
+        title TEXT,
+        department TEXT,
+        role TEXT,
+        
+        teacher_id INTEGER,
+        teacher_code TEXT,
+        
+        FOREIGN KEY(batch_id) REFERENCES import_batches(id)
+    )
+    """)
+    
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS academic_holidays (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timeframe_id INTEGER NOT NULL,
@@ -146,6 +174,24 @@ def init_db():
     """)
 
     # Run migrations for existing database
+    try:
+        cursor.execute("ALTER TABLE teachers ADD COLUMN teacher_code TEXT")
+        cursor.execute("UPDATE teachers SET teacher_code = CAST(id AS TEXT) WHERE teacher_code IS NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    # Ensure unique index exists (idempotent)
+    try:
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_teacher_code ON teachers(teacher_code)")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN teacher_code TEXT")
+    except sqlite3.OperationalError:
+        pass
+
     try:
         cursor.execute(
             "ALTER TABLE teacher_role_history ADD COLUMN actual_weeks_override REAL"

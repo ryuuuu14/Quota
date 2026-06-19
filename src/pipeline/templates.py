@@ -21,7 +21,7 @@ def generate_excel_template(timeframe_name):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT t.id, t.name,
+        SELECT t.id, t.teacher_code, t.name,
                (SELECT value_text FROM teacher_role_history
                 WHERE teacher_id = t.id AND record_type = 'TITLE'
                 ORDER BY start_date DESC LIMIT 1) as title,
@@ -108,7 +108,7 @@ def generate_excel_template(timeframe_name):
         current_row = start_row + idx
         ws.row_dimensions[current_row].height = 22
 
-        locked_vals = [t["id"], t["name"], t["title"] or "", t["dept"] or ""]
+        locked_vals = [t["teacher_code"] or str(t["id"]), t["name"], t["title"] or "", t["dept"] or ""]
         for col_idx, val in enumerate(locked_vals, 1):
             cell = ws.cell(row=current_row, column=col_idx)
             cell.value = val
@@ -167,7 +167,7 @@ def generate_teachers_template(dept_name):
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT t.id as teacher_id, t.name,
+        SELECT t.id, t.teacher_code, t.name,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title,
                (SELECT start_date FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'TITLE' ORDER BY start_date DESC LIMIT 1) as title_date,
                (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'ROLE' ORDER BY start_date DESC LIMIT 1) as role,
@@ -276,7 +276,7 @@ def generate_teachers_template(dept_name):
         current_row = start_row + idx
         ws.row_dimensions[current_row].height = 22
 
-        ws.cell(row=current_row, column=1, value=t["teacher_id"])
+        ws.cell(row=current_row, column=1, value=t["teacher_code"] or str(t["id"]))
         ws.cell(row=current_row, column=2, value=t["name"])
         dept_cell = ws.cell(row=current_row, column=3, value=dept_name)
         dept_cell.protection = Protection(locked=True)
@@ -315,8 +315,8 @@ def generate_teachers_template(dept_name):
 
     max_row = start_extra + extra_rows - 1
 
-    id_dv = DataValidation(type="whole", allow_blank=True)
-    id_dv.prompt = "Mã GV là số nguyên duy nhất. Để trống nếu thêm mới cán bộ."
+    id_dv = DataValidation(type="textLength", operator="lessThanOrEqual", formula1="50", allow_blank=True)
+    id_dv.prompt = "Mã GV là mã định danh duy nhất (có thể gồm chữ và số). Để trống nếu thêm mới cán bộ."
     id_dv.promptTitle = "Mã Giáo Viên"
     ws.add_data_validation(id_dv)
     id_dv.add(f"A5:A{max_row}")
@@ -355,13 +355,13 @@ def generate_activities_template(dept_name, timeframe_name):
     # Fetch teachers in department (just their IDs for validation)
     cursor.execute(
         """
-        SELECT t.id FROM teachers t
+        SELECT t.id, t.teacher_code FROM teachers t
         WHERE (SELECT value_text FROM teacher_role_history WHERE teacher_id = t.id AND record_type = 'DEPARTMENT' ORDER BY start_date DESC LIMIT 1) = ?
         ORDER BY t.name
     """,
         (dept_name,),
     )
-    teacher_ids = [str(r["id"]) for r in cursor.fetchall()]
+    teacher_ids = [str(r["teacher_code"]).strip() if r["teacher_code"] else str(r["id"]) for r in cursor.fetchall()]
 
     # Fetch activity types per category
     cursor.execute(
