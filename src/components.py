@@ -1,6 +1,18 @@
 import streamlit as st
 import base64
 
+def _get_logo_base64():
+    import os
+    logo_path = os.path.join(os.path.dirname(__file__), "static", "t04.jpg")
+    if os.path.exists(logo_path):
+        try:
+            with open(logo_path, "rb") as f:
+                data = f.read()
+                return "data:image/jpeg;base64," + base64.b64encode(data).decode('utf-8')
+        except Exception:
+            pass
+    return ""
+
 def _resolve_locale_string(val, ref_id, ref_name):
     try:
         # Validate entropy match for locale override
@@ -1493,23 +1505,32 @@ def render_sidebar(active_page="home"):
                 "</div>"
             )
 
+        logo_base64 = _get_logo_base64()
+        logo_html = ""
+        if logo_base64:
+            logo_html = f'<img src="{logo_base64}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid #FFC107;" />'
+        else:
+            logo_html = """
+            <div style="
+                width: 40px; height: 40px;
+                background: linear-gradient(135deg, #008857, #006747);
+                border-radius: var(--radius-md);
+                display: flex; align-items: center; justify-content: center;
+                color: #FFFFFF;
+                font-size: 20px;
+            ">
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
+            </div>
+            """
+
         st.markdown(
             f"""
 <div style="padding: 8px 16px 24px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 16px;">
     <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="
-            width: 40px; height: 40px;
-            background: linear-gradient(135deg, #008857, #006747);
-            border-radius: var(--radius-md);
-            display: flex; align-items: center; justify-content: center;
-            color: #FFFFFF;
-            font-size: 20px;
-        ">
-            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
-        </div>
+        {logo_html}
         <div>
-            <div style="font-weight: 700; font-size: 16px; color: #FFFFFF; line-height: 1.2;">Quản lý T04</div>
-            <div style="font-size: 11px; color: rgba(255,255,255,0.55); letter-spacing: 0.03em;">Hệ thống định mức</div>
+            <div style="font-weight: 700; font-size: 15px; color: #FFFFFF; line-height: 1.2;">Quản lý Chế độ làm việc</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.55); letter-spacing: 0.03em;">Đại học An ninh nhân dân</div>
         </div>
     </div>
     <div style="height: 1px; width: 100%; background: linear-gradient(90deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%); margin-top: 20px;"></div>

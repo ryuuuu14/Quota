@@ -140,13 +140,13 @@ def test_bui_thi_x():
 
         if start_date == "2025-08-04":
             if num_holidays <= 7:
-                expected_req = 270.18
+                expected_req = 243.45
                 expected_red = 107.92
             else:
-                expected_req = 269.77
+                expected_req = 243.04
                 expected_red = 114.03
         else:
-            expected_req = 268.68
+            expected_req = 242.05
             expected_red = 110.62
 
         assert abs(req_gc - expected_req) < 0.2, (

@@ -19,6 +19,8 @@ import sys
 import os
 import tempfile
 
+_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_parent, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 if sys.platform.startswith("win"):

@@ -1,9 +1,15 @@
 import streamlit as st
 import time
 from auth import authenticate_user, login_user, logout, get_current_user
+import components
+_get_logo_base64 = getattr(components, "_get_logo_base64", None)
+if _get_logo_base64 is None:
+    import importlib
+    importlib.reload(components)
+    _get_logo_base64 = getattr(components, "_get_logo_base64", lambda: "")
 
 st.set_page_config(
-    page_title="Đăng nhập", layout="wide", initial_sidebar_state="collapsed"
+    page_title="Đăng nhập - Hệ Thống Quản lý Chế độ làm việc - Đại học An ninh nhân dân", layout="wide", initial_sidebar_state="collapsed"
 )
 
 st.markdown(
@@ -21,22 +27,27 @@ footer { display: none !important; }
 [data-testid="stAppViewContainer"] {
     min-height: 100dvh !important;
     background: #800020 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
 }
 .stApp { background: #800020 !important; }
 section.main {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 20px !important;
+    min-height: 100vh !important;
     width: 100% !important;
+    padding: 0 !important;
+}
+section.main > div {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    min-height: 100vh !important;
+    padding: 20px !important;
+    box-sizing: border-box !important;
 }
 
 .block-container {
-    padding: 44px 40px !important;
-    max-width: 400px !important;
     width: 100% !important;
     background: #FDF8F3 !important;
     border: 1px solid rgba(255, 255, 255, 0.10) !important;
@@ -205,6 +216,15 @@ button[data-testid="baseButton-primary"]:active {
 div[data-testid="stVerticalBlock"] > div:first-child {
     gap: 0 !important;
 }
+div[data-testid="stElementContainer"]:has(style) {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+}
+.block-container > div[data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+}
 
 @media (max-width: 768px) {
     section.main { padding: 16px !important; }
@@ -220,15 +240,40 @@ user = get_current_user()
 if user:
     st.markdown(
         """
+        <style>
+        .block-container {
+            padding: 44px 40px !important;
+            max-width: 400px !important;
+            width: 100% !important;
+            background: #FDF8F3 !important;
+            border: 1px solid rgba(255, 255, 255, 0.10) !important;
+            border-radius: 24px !important;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.30) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    logo_base64 = _get_logo_base64()
+    logo_html = ""
+    if logo_base64:
+        logo_html = f'<img src="{logo_base64}" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2.5px solid #006747;" />'
+    else:
+        logo_html = """
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#006747" stroke-width="1.2" fill="none"/>
+            <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(0,103,71,0.15)"/>
+        </svg>
+        """
+
+    st.markdown(
+        f"""
     <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
         <div class="brand-logo">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#006747" stroke-width="1.2" fill="none"/>
-                <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(0,103,71,0.15)"/>
-            </svg>
+            {logo_html}
         </div>
-        <h1 class="brand-wordmark">Hệ thống<br>Định mức T04</h1>
-        <p class="brand-tagline">Quản lý chế độ làm việc nhà giáo</p>
+        <h1 class="brand-wordmark">Hệ Thống Quản lý<br>Chế độ làm việc</h1>
+        <p class="brand-tagline">Đại học An ninh nhân dân</p>
         <div class="brand-divider"></div>
     </div>
     """,
@@ -236,10 +281,10 @@ if user:
     )
 
     role_labels = {
-        "admin": "Qu\u1ea3n tr\u1ecb vi\u00ean",
-        "head_dept": "Tr\u01b0\u1edfng Khoa / B\u1ed9 m\u00f4n",
+        "admin": "Quản trị viên",
+        "head_dept": "Trưởng Khoa / Bộ môn",
     }
-    role_label = role_labels.get(user["role"], "Ng\u01b0\u1eddi d\u00f9ng")
+    role_label = role_labels.get(user["role"], "Người dùng")
 
     st.markdown(
         f"""
@@ -258,7 +303,7 @@ if user:
     )
 
     if st.button(
-        "\u0110\u0103ng xu\u1ea5t",
+        "Đăng xuất",
         type="primary",
         use_container_width=True,
         key="logout_btn",
@@ -269,67 +314,160 @@ if user:
 else:
     st.markdown(
         """
-    <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
-        <div class="brand-logo">
+        <style>
+        .block-container {
+            padding: 0 !important;
+            max-width: 850px !important;
+            width: 100% !important;
+            background: #FDF8F3 !important;
+            border: 1px solid rgba(255, 255, 255, 0.10) !important;
+            border-radius: 24px !important;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.30) !important;
+            overflow: hidden !important;
+            margin: auto !important;
+        }
+        [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+        }
+        [data-testid="stHorizontalBlock"] > div:nth-of-type(1) {
+            background: linear-gradient(135deg, #005C41 0%, #003625 100%) !important;
+            padding: 48px 40px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            color: #FFFFFF !important;
+            min-height: 480px !important;
+        }
+        [data-testid="stHorizontalBlock"] > div:nth-of-type(2) {
+            padding: 48px 40px !important;
+            background: #FDF8F3 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
+        .brand-panel-title {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            font-weight: 800;
+            font-size: 28px;
+            line-height: 1.25;
+            letter-spacing: -0.02em;
+            color: #FFFFFF;
+            margin: 16px 0 8px 0;
+            text-align: center;
+        }
+        .brand-panel-subtitle {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            color: #FFC107;
+            margin: 0 0 20px 0;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        .brand-panel-divider {
+            width: 60px;
+            height: 4px;
+            background: #FFC107;
+            border-radius: 2px;
+            margin: 0 auto;
+        }
+        @media (max-width: 768px) {
+            .block-container {
+                max-width: 450px !important;
+                margin: 10px !important;
+            }
+            [data-testid="stHorizontalBlock"] {
+                flex-direction: column !important;
+            }
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(1) {
+                width: 100% !important;
+                min-height: auto !important;
+                padding: 36px 24px !important;
+            }
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(2) {
+                width: 100% !important;
+                padding: 36px 24px !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col1, col2 = st.columns([1.2, 1])
+
+    with col1:
+        logo_base64 = _get_logo_base64()
+        logo_html = ""
+        if logo_base64:
+            logo_html = f'<img src="{logo_base64}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2.5px solid #FFC107;" />'
+        else:
+            logo_html = """
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#006747" stroke-width="1.2" fill="none"/>
-                <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(0,103,71,0.15)"/>
+                <path d="M24 6L38 24L24 42L10 24L24 6Z" stroke="#FFC107" stroke-width="1.2" fill="none"/>
+                <path d="M24 14L31 24L24 34L17 24L24 14Z" fill="rgba(255,193,7,0.15)"/>
             </svg>
-        </div>
-        <h1 class="brand-wordmark">Hệ thống<br>Định mức T04</h1>
-        <p class="brand-tagline">Quản lý chế độ làm việc nhà giáo theo Quy định T04</p>
-        <div class="brand-divider"></div>
-        <p class="form-title">Đăng nhập</p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    with st.form("login_form", clear_on_submit=False):
-        username = st.text_input(
-            "T\u00ean \u0111\u0103ng nh\u1eadp",
-            placeholder="Nh\u1eadp t\u00ean \u0111\u0103ng nh\u1eadp...",
-            key="login_user",
-        )
-        password = st.text_input(
-            "M\u1eadt kh\u1ea9u",
-            type="password",
-            placeholder="Nh\u1eadp m\u1eadt kh\u1ea9u...",
-            key="login_pass",
+            """
+        st.markdown(
+            f"""
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%;">
+                <div class="brand-logo">
+                    {logo_html}
+                </div>
+                <h1 class="brand-panel-title">Hệ Thống Quản lý<br>Chế độ làm việc</h1>
+                <p class="brand-panel-subtitle">Đại học An ninh nhân dân</p>
+                <div class="brand-panel-divider"></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        submitted = st.form_submit_button(
-            "\u0110\u0103ng nh\u1eadp", type="primary", use_container_width=True
-        )
+    with col2:
+        st.markdown('<p class="form-title">Đăng nhập</p>', unsafe_allow_html=True)
+        with st.form("login_form", clear_on_submit=False):
+            username = st.text_input(
+                "Tên đăng nhập",
+                placeholder="Nhập tên đăng nhập...",
+                key="login_user",
+            )
+            password = st.text_input(
+                "Mật khẩu",
+                type="password",
+                placeholder="Nhập mật khẩu...",
+                key="login_pass",
+            )
 
-        if submitted:
-            if not username or not password:
-                st.error(
-                    "Vui l\u00f2ng nh\u1eadp \u0111\u1ea7y \u0111\u1ee7 th\u00f4ng tin."
-                )
-            else:
-                res = authenticate_user(username, password)
-                if res:
-                    if isinstance(res, dict) and res.get("error") == "teacher_disabled":
-                        st.error(
-                            "T\u00e0i kho\u1ea3n Gi\u1ea3ng vi\u00ean ch\u01b0a \u0111\u01b0\u1ee3c k\u00edch ho\u1ea1t."
-                        )
-                    else:
-                        login_user(res)
-                        st.success("\u0110\u0103ng nh\u1eadp th\u00e0nh c\u00f4ng")
-                        time.sleep(0.5)
-                        st.switch_page("app.py")
+            submitted = st.form_submit_button(
+                "Đăng nhập", type="primary", use_container_width=True
+            )
+
+            if submitted:
+                if not username or not password:
+                    st.error("Vui lòng nhập đầy đủ thông tin.")
                 else:
-                    st.error(
-                        "Sai t\u00ean \u0111\u0103ng nh\u1eadp ho\u1eb7c m\u1eadt kh\u1ea9u."
-                    )
+                    res = authenticate_user(username, password)
+                    if res:
+                        if isinstance(res, dict) and res.get("error") == "teacher_disabled":
+                            st.error("Tài khoản Giảng viên chưa được kích hoạt.")
+                        else:
+                            login_user(res)
+                            st.success("Đăng nhập thành công")
+                            time.sleep(0.5)
+                            st.switch_page("app.py")
+                    else:
+                        st.error("Sai tên đăng nhập hoặc mật khẩu.")
 
-    st.markdown(
-        """
-    <div class="meta-footer">
-        <span class="meta-version">v2.0</span>
-        <span class="meta-status">H\u1ec7 th\u1ed1ng ho\u1ea1t \u0111\u1ed9ng</span>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
+        st.markdown(
+            """
+            <div class="meta-footer">
+                <span class="meta-version">v2.0</span>
+                <span class="meta-status">Hệ thống hoạt động</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )

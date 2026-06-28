@@ -16,6 +16,8 @@ if sys.platform.startswith("win"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_parent, "src"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from calculations import calculate_activity_hours

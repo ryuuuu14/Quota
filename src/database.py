@@ -26,7 +26,7 @@ def get_connection():
     _db_dir = os.path.dirname(path)
     if not os.path.exists(_db_dir):
         os.makedirs(_db_dir, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.row_factory = sqlite3.Row
@@ -1061,22 +1061,24 @@ def _count_working_days(start_date, end_date, holidays):
 
 def delete_teacher(teacher_id):
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "DELETE FROM session_teacher_totals WHERE teacher_id = ?", (teacher_id,)
-    )
-    cursor.execute("DELETE FROM activity_logs WHERE teacher_id = ?", (teacher_id,))
-    cursor.execute(
-        "DELETE FROM teacher_role_history WHERE teacher_id = ?", (teacher_id,)
-    )
-    cursor.execute(
-        "DELETE FROM teacher_rank_history WHERE teacher_id = ?", (teacher_id,)
-    )
-    cursor.execute("DELETE FROM manual_conversions WHERE teacher_id = ?", (teacher_id,))
-    cursor.execute("DELETE FROM payroll_records WHERE teacher_id = ?", (teacher_id,))
-    cursor.execute("DELETE FROM teachers WHERE id = ?", (teacher_id,))
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM session_teacher_totals WHERE teacher_id = ?", (teacher_id,)
+            )
+            cursor.execute("DELETE FROM activity_logs WHERE teacher_id = ?", (teacher_id,))
+            cursor.execute(
+                "DELETE FROM teacher_role_history WHERE teacher_id = ?", (teacher_id,)
+            )
+            cursor.execute(
+                "DELETE FROM teacher_rank_history WHERE teacher_id = ?", (teacher_id,)
+            )
+            cursor.execute("DELETE FROM manual_conversions WHERE teacher_id = ?", (teacher_id,))
+            cursor.execute("DELETE FROM payroll_records WHERE teacher_id = ?", (teacher_id,))
+            cursor.execute("DELETE FROM teachers WHERE id = ?", (teacher_id,))
+    finally:
+        conn.close()
 
 
 def delete_timeframe(timeframe_id, conn=None):
@@ -1086,34 +1088,61 @@ def delete_timeframe(timeframe_id, conn=None):
     else:
         should_close = False
 
-    cursor = conn.cursor()
-    cursor.execute(
-        "DELETE FROM academic_holidays WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute("DELETE FROM activity_logs WHERE timeframe_id = ?", (timeframe_id,))
-    cursor.execute(
-        "DELETE FROM payroll_records WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute(
-        "DELETE FROM manual_conversions WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute(
-        "DELETE FROM session_teacher_totals WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute(
-        "DELETE FROM bulk_teaching_assignments WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute(
-        "DELETE FROM bulk_import_files WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute(
-        "DELETE FROM teacher_calculated_totals WHERE timeframe_id = ?", (timeframe_id,)
-    )
-    cursor.execute("DELETE FROM timeframes WHERE id = ?", (timeframe_id,))
-
-    if should_close:
-        conn.commit()
-        conn.close()
+    try:
+        if should_close:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM academic_holidays WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute("DELETE FROM activity_logs WHERE timeframe_id = ?", (timeframe_id,))
+                cursor.execute(
+                    "DELETE FROM payroll_records WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute(
+                    "DELETE FROM manual_conversions WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute(
+                    "DELETE FROM session_teacher_totals WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute(
+                    "DELETE FROM bulk_teaching_assignments WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute(
+                    "DELETE FROM bulk_import_files WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute(
+                    "DELETE FROM teacher_calculated_totals WHERE timeframe_id = ?", (timeframe_id,)
+                )
+                cursor.execute("DELETE FROM timeframes WHERE id = ?", (timeframe_id,))
+        else:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM academic_holidays WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute("DELETE FROM activity_logs WHERE timeframe_id = ?", (timeframe_id,))
+            cursor.execute(
+                "DELETE FROM payroll_records WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute(
+                "DELETE FROM manual_conversions WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute(
+                "DELETE FROM session_teacher_totals WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute(
+                "DELETE FROM bulk_teaching_assignments WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute(
+                "DELETE FROM bulk_import_files WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute(
+                "DELETE FROM teacher_calculated_totals WHERE timeframe_id = ?", (timeframe_id,)
+            )
+            cursor.execute("DELETE FROM timeframes WHERE id = ?", (timeframe_id,))
+    finally:
+        if should_close:
+            conn.close()
 
     try:
         get_cached_timeframes.clear()

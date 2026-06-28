@@ -1,5 +1,10 @@
 import unittest
 import os
+import sys
+
+# Resolve imports when running standalone
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
 from database import init_db, get_connection, delete_timeframe
 
 
