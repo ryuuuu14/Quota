@@ -664,10 +664,11 @@ def run():
     count = cursor.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]
     print(f"\n  Total teachers in DB: {count}")
 
+    from database import DB_PATH
     conn.close()
     print(
         "  Done. Teacher records seeded into:",
-        os.environ.get("DB_PATH", "data/database.sqlite"),
+        DB_PATH,
     )
 
 

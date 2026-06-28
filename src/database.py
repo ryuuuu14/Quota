@@ -6,20 +6,27 @@ import streamlit as st
 # Always resolve DB relative to project root, never to CWD
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _default_db = os.path.join(_project_root, "data", "database.sqlite")
-DB_PATH = os.environ.get("DB_PATH", _default_db)
+
+def _resolve_db_path():
+    path = os.environ.get("DB_PATH", _default_db)
+    if not os.path.isabs(path):
+        path = os.path.join(_project_root, path)
+    return path
+
+DB_PATH = _resolve_db_path()
 
 # Ensure parent directory exists so no silent fallback to wrong path
-_db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+_db_dir = os.path.dirname(DB_PATH)
 if not os.path.exists(_db_dir):
     os.makedirs(_db_dir, exist_ok=True)
 
 
 def get_connection():
-    path = os.environ.get("DB_PATH", DB_PATH)
-    _db_dir = os.path.dirname(os.path.abspath(path))
+    path = _resolve_db_path()
+    _db_dir = os.path.dirname(path)
     if not os.path.exists(_db_dir):
         os.makedirs(_db_dir, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.row_factory = sqlite3.Row
@@ -83,7 +90,8 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS departments (
         name TEXT PRIMARY KEY,
-        is_teaching_dept BOOLEAN DEFAULT 1
+        is_teaching_dept BOOLEAN DEFAULT 1,
+        dept_code TEXT
     )
     """)
 
@@ -108,6 +116,16 @@ def init_db():
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS police_ranks (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        rank_name   TEXT NOT NULL UNIQUE,
+        coefficient REAL NOT NULL,
+        rank_group  TEXT NOT NULL DEFAULT 'SI_QUAN',
+        sort_order  INTEGER NOT NULL DEFAULT 0
+    )
+    """)
+
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS teachers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -115,7 +133,10 @@ def init_db():
         is_female BOOLEAN DEFAULT 0,
         employment_type TEXT DEFAULT 'TEACHER',
         guest_rank TEXT,
-        total_12m_salary REAL
+        total_12m_salary REAL,
+        police_rank_id INTEGER REFERENCES police_ranks(id),
+        salary_coefficient REAL,
+        teacher_code TEXT UNIQUE
     )
     """)
 
@@ -134,34 +155,7 @@ def init_db():
     )
     """)
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS staging_teachers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        batch_id INTEGER NOT NULL,
-        row_num INTEGER NOT NULL,
-        diff_marker TEXT NOT NULL,
-        diff_detail TEXT,
-        validation_errors TEXT,
-        
-        teacher_name TEXT,
-        subject_group TEXT,
-        is_female BOOLEAN,
-        employment_type TEXT,
-        guest_rank TEXT,
-        total_12m_salary REAL,
-        salary_coefficient REAL,
-        
-        title TEXT,
-        department TEXT,
-        role TEXT,
-        
-        teacher_id INTEGER,
-        teacher_code TEXT,
-        
-        FOREIGN KEY(batch_id) REFERENCES import_batches(id)
-    )
-    """)
-    
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS academic_holidays (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,10 +181,6 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
-    try:
-        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN teacher_code TEXT")
-    except sqlite3.OperationalError:
-        pass
 
     try:
         cursor.execute(
@@ -303,15 +293,6 @@ def init_db():
     )
     """)
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS police_ranks (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        rank_name   TEXT NOT NULL UNIQUE,
-        coefficient REAL NOT NULL,
-        rank_group  TEXT NOT NULL DEFAULT 'SI_QUAN',
-        sort_order  INTEGER NOT NULL DEFAULT 0
-    )
-    """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS session_teacher_totals (
@@ -406,7 +387,10 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        role TEXT NOT NULL DEFAULT 'teacher',
+        department_name TEXT REFERENCES departments(name),
+        teacher_id INTEGER REFERENCES teachers(id)
     )
     """)
     try:
@@ -457,7 +441,9 @@ def init_db():
         snapshot_json TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         decided_at DATETIME,
-        decided_by TEXT
+        decided_by TEXT,
+        diff_version TEXT,
+        remarks TEXT
     )
     """)
 
@@ -491,7 +477,10 @@ def init_db():
         teacher_id INTEGER,
         study_leave TEXT,
         field_trip TEXT,
-        permitted_leave TEXT
+        permitted_leave TEXT,
+        teacher_code TEXT,
+        role_start_date TEXT,
+        title_start_date TEXT
     )
     """)
     try:
@@ -520,6 +509,10 @@ def init_db():
         pass
     try:
         cursor.execute("ALTER TABLE staging_teachers ADD COLUMN permitted_leave TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE staging_teachers ADD COLUMN teacher_code TEXT")
     except Exception:
         pass
 
