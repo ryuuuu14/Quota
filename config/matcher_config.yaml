@@ -1,0 +1,16 @@
+synonyms_path: "synonyms.yaml"
+
+matchers:
+  exact:
+    enabled: true
+  synonym:
+    enabled: true
+  fuzzy:
+    enabled: true
+    engine: "rapidfuzz"
+    cutoff: 70
+    fallback_cutoff: 50
+
+features:
+  template_merge: true
+  confidence_scoring: true

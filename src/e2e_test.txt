@@ -1,0 +1,10 @@
+﻿python :   File "<string>", line 15
+At line:1 char:56
++ $env:PYTHONIOENCODING = 'utf-8'; cd F:\annd\Quota\src; python -c "
++                                                        ~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (  File "<string>", line 15:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    assert r['M├ú GV'] == 'msgv', f'Expected msgv, got {r[" M├ú GV\]}'
+                                                         ^
+SyntaxError: unterminated string literal (detected at line 15)
