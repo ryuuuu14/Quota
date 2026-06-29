@@ -20,29 +20,41 @@
 
 ---
 
-## 3. Hướng dẫn khởi chạy ứng dụng (Unified Launchers)
+## 3. Triển khai Offline qua USB (1-Click Deployment)
 
-Ứng dụng hỗ trợ hai kịch bản khởi chạy đồng nhất giúp tự động cài đặt và kiểm tra môi trường:
+Ứng dụng được thiết kế để triển khai hoàn toàn offline trên mạng LAN nội bộ. **Không cần cài đặt Python thủ công** — hệ thống tự động cài đặt và cấu hình mọi thứ.
 
-### Cách 1: Chạy trên Windows (Khuyên dùng)
-Double-click trực tiếp vào file `App.bat` ở thư mục gốc hoặc chạy lệnh sau trong cmd/PowerShell:
+### Bước 1: Chuẩn bị (chỉ làm 1 lần, trên máy có internet)
+Trên máy phát triển có kết nối internet, chạy:
+```cmd
+prepare_bundle.bat
+```
+Script này sẽ tải Python và tất cả thư viện phụ thuộc vào thư mục `vendor/` (~100 MB).
+
+### Bước 2: Sao chép qua USB
+Sao chép **toàn bộ thư mục `Quota-main/`** vào USB (bao gồm cả `vendor/`).
+
+### Bước 3: Triển khai trên máy chủ
+Trên máy chủ Windows 11 (mạng LAN), dán thư mục từ USB và double-click:
 ```cmd
 App.bat
 ```
 
-### Cách 2: Chạy trên Linux / macOS
-Cấp quyền thực thi và chạy file `App.sh` ở thư mục gốc:
-```bash
-chmod +x App.sh
-./App.sh
-```
+### Các bước tự động khi chạy lần đầu:
+1. **Cài đặt Python**: Tự động giải nén Python 3.13 từ `vendor/` vào `runtime/` (~30 giây).
+2. **Cài đặt Thư viện**: Tự động cài đặt toàn bộ thư viện từ `vendor/packages/` (offline).
+3. **Kiểm tra Cổng mạng**: Đảm bảo cổng `8501` đang rảnh.
+4. **Khởi tạo CSDL**: Tự động tạo `data/database.sqlite` và seed dữ liệu chuẩn.
+5. **Khởi chạy máy chủ**: Mở ứng dụng tại 👉 **http://localhost:8501**.
 
-### Các bước xác thực tự động của launcher:
-1. **Kiểm tra môi trường Python**: Tự động dò tìm phiên bản Python khả dụng ($\ge$ 3.8).
-2. **Kiểm tra Thư viện phụ thuộc**: Kiểm tra và hiển thị trạng thái của từng thư viện (`streamlit`, `pandas`, `openpyxl`, `bcrypt`, `st-aggrid`, v.v.).
-3. **Kiểm tra Cổng mạng**: Đảm bảo cổng chạy mặc định `8501` đang rảnh.
-4. **Khởi tạo và Seed cơ sở dữ liệu**: Tự động tạo cơ sở dữ liệu `data/database.sqlite` và chạy seed dữ liệu chuẩn nếu phát hiện CSDL trống.
-5. **Khởi chạy máy chủ**: Mở trình duyệt tại địa chỉ 👉 **http://localhost:8501**.
+> **Lưu ý**: Lần chạy thứ hai trở đi sẽ khởi động ngay lập tức (bỏ qua bước cài đặt).
+
+### Truy cập từ máy khác trên mạng LAN
+Các máy trạm trên cùng mạng LAN có thể truy cập ứng dụng bằng trình duyệt web:
+```
+http://<địa-chỉ-IP-máy-chủ>:8501
+```
+Ví dụ: `http://192.168.1.100:8501`
 
 ---
 

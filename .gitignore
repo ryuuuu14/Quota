@@ -8,6 +8,9 @@ __pycache__/
 *.py[cod]
 .env
 
+# Bundled Python runtime (extracted on target machines by install_python.bat)
+runtime/
+
 # Streamlit
 .streamlit/secrets.toml
 data/database.sqlite-wal
