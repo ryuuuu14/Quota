@@ -29,6 +29,16 @@ footer { display: none !important; }
     background: #800020 !important;
 }
 .stApp { background: #800020 !important; }
+[data-testid="stAppViewBlockContainer"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    padding: 20px !important;
+    box-sizing: border-box !important;
+}
 section.main {
     display: flex !important;
     align-items: center !important;
@@ -36,15 +46,6 @@ section.main {
     min-height: 100vh !important;
     width: 100% !important;
     padding: 0 !important;
-}
-section.main > div {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 100% !important;
-    min-height: 100vh !important;
-    padding: 20px !important;
-    box-sizing: border-box !important;
 }
 
 .block-container {
@@ -213,7 +214,7 @@ button[data-testid="baseButton-primary"]:active {
     50% { opacity: 0.35; }
 }
 
-div[data-testid="stVerticalBlock"] > div:first-child {
+div[data-testid="stVerticalBlock"]:not([data-testid="column"] div[data-testid="stVerticalBlock"]) {
     gap: 0 !important;
 }
 div[data-testid="stElementContainer"]:has(style) {
@@ -221,9 +222,6 @@ div[data-testid="stElementContainer"]:has(style) {
     margin: 0 !important;
     padding: 0 !important;
     height: 0 !important;
-}
-.block-container > div[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
 }
 
 @media (max-width: 768px) {
