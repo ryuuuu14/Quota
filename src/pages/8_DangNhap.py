@@ -9,7 +9,7 @@ if _get_logo_base64 is None:
     _get_logo_base64 = getattr(components, "_get_logo_base64", lambda: "")
 
 st.set_page_config(
-    page_title="Đăng nhập - Hệ Thống Quản lý Chế độ làm việc - Đại học An ninh nhân dân", layout="wide", initial_sidebar_state="collapsed"
+    page_title="Đăng nhập - Hệ thống Quản lý Chế độ làm việc T04 - Đại học An ninh nhân dân", layout="wide", initial_sidebar_state="collapsed"
 )
 
 st.markdown(
@@ -34,7 +34,7 @@ footer { display: none !important; }
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    min-height: 100vh !important;
+    min-height: auto !important;
     width: 100% !important;
     padding: 20px !important;
     box-sizing: border-box !important;
@@ -270,7 +270,7 @@ if user:
         <div class="brand-logo">
             {logo_html}
         </div>
-        <h1 class="brand-wordmark">Hệ Thống Quản lý<br>Chế độ làm việc</h1>
+        <h1 class="brand-wordmark">Hệ thống Quản lý<br>Chế độ làm việc T04</h1>
         <p class="brand-tagline">Đại học An ninh nhân dân</p>
         <div class="brand-divider"></div>
     </div>
@@ -376,20 +376,113 @@ else:
         }
         @media (max-width: 768px) {
             .block-container {
-                max-width: 450px !important;
-                margin: 10px !important;
+                max-width: 380px !important;
+                width: 92% !important;
+                margin: auto !important;
+                min-height: auto !important;
             }
             [data-testid="stHorizontalBlock"] {
                 flex-direction: column !important;
+                flex-wrap: wrap !important;
+                width: 100% !important;
             }
             [data-testid="stHorizontalBlock"] > div:nth-of-type(1) {
                 width: 100% !important;
-                min-height: auto !important;
-                padding: 36px 24px !important;
+                max-width: 100% !important;
+                flex: 1 1 100% !important;
+                flex-basis: 100% !important;
+                height: 165px !important;
+                min-height: 165px !important;
+                padding: 12px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                box-sizing: border-box !important;
+            }
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(1) div[data-testid="stVerticalBlockBorderWrapper"],
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(1) div[data-testid="stVerticalBlock"],
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(1) div.element-container,
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(1) div.stMarkdown,
+            [data-testid="stHorizontalBlock"] > div:nth-of-type(1) div[data-testid="stMarkdownContainer"] {
+                width: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-sizing: border-box !important;
             }
             [data-testid="stHorizontalBlock"] > div:nth-of-type(2) {
                 width: 100% !important;
-                padding: 36px 24px !important;
+                max-width: 100% !important;
+                flex: 1 1 100% !important;
+                flex-basis: 100% !important;
+                padding: 16px 16px !important;
+                box-sizing: border-box !important;
+            }
+            .brand-logo {
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                margin: 0 auto 4px auto !important;
+                width: 40px !important;
+                height: 40px !important;
+            }
+            .brand-logo img, .brand-logo svg {
+                width: 40px !important;
+                height: 40px !important;
+                margin: 0 !important;
+                display: block !important;
+            }
+            .brand-panel-title {
+                font-size: clamp(20px, 6.5vw, 26px) !important;
+                font-weight: 800 !important;
+                color: #FFFFFF !important;
+                margin: 4px 0 0 0 !important;
+                line-height: 1.25 !important;
+                text-align: center !important;
+                width: 100% !important;
+                display: block !important;
+                white-space: nowrap !important;
+            }
+            .brand-panel-subtitle {
+                display: block !important;
+                font-size: clamp(11px, 3.5vw, 13px) !important;
+                color: #FFC107 !important;
+                margin: 2px 0 0 0 !important;
+                font-weight: 600 !important;
+                line-height: 1.2 !important;
+                text-align: center !important;
+                width: 100% !important;
+                opacity: 0.95 !important;
+                white-space: nowrap !important;
+            }
+            .brand-panel-divider {
+                display: none !important;
+            }
+            .form-title {
+                display: none !important;
+            }
+            div[data-testid="stTextInput"] {
+                margin-bottom: 4px !important;
+            }
+            div[data-testid="stTextInput"] label p {
+                font-size: 12px !important;
+            }
+            div[data-testid="stTextInput"] input {
+                height: 40px !important;
+                font-size: 14px !important;
+            }
+            .stButton > button[kind="primary"],
+            .stButton > button[data-testid="baseButton-primary"],
+            div[data-testid="stFormSubmitButton"] > button {
+                height: 40px !important;
+                font-size: 14px !important;
+            }
+            .meta-footer {
+                margin-top: 12px !important;
             }
         }
         </style>
@@ -417,7 +510,7 @@ else:
                 <div class="brand-logo">
                     {logo_html}
                 </div>
-                <h1 class="brand-panel-title">Hệ Thống Quản lý<br>Chế độ làm việc</h1>
+                <h1 class="brand-panel-title">Hệ thống Quản lý <br>Chế độ làm việc T04</h1>
                 <p class="brand-panel-subtitle">Đại học An ninh nhân dân</p>
                 <div class="brand-panel-divider"></div>
             </div>
