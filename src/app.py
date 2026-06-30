@@ -8,48 +8,8 @@ from database import init_db, seed_initial_data, get_connection
 from components import render_sidebar
 
 # Auto-initialize once per session (CREATE IF NOT EXISTS + seeding is idempotent)
-if "db_initialized" not in st.session_state:
-    init_db()
-    st.session_state.db_initialized = True
-
-# Auto-seed if DB appears empty (e.g. brand-new data/database.sqlite)
-_conn = get_connection()
-_tf_count = _conn.execute("SELECT COUNT(*) FROM timeframes").fetchone()[0]
-_act_count = _conn.execute("SELECT COUNT(*) FROM activity_types").fetchone()[0]
-_red_count = _conn.execute("SELECT COUNT(*) FROM reduction_rules").fetchone()[0]
-_conn.close()
-
-if _tf_count == 0:
-    seed_initial_data()
-
-if _act_count == 0:
-    import sys
-
-    sys.path.insert(0, os.path.dirname(__file__))
-    import seed_activities
-
-    seed_activities.run()
-
-if _red_count == 0:
-    import sys
-
-    sys.path.insert(0, os.path.dirname(__file__))
-    import seed_reductions
-
-    seed_reductions.run()
-
-_conn2 = get_connection()
-_teacher_count = _conn2.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]
-_conn2.close()
-
-if _teacher_count < 5:
-    import sys
-
-    sys.path.insert(0, os.path.dirname(__file__))
-    import seed_teachers
-
-    seed_teachers.run()
-
+from database import ensure_db_initialized
+ensure_db_initialized()
 
 st.set_page_config(
     page_title="Hệ Thống Quản lý Chế độ làm việc - Đại học An ninh nhân dân",

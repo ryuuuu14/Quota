@@ -644,6 +644,41 @@ def cleanup_old_batches():
     finally:
         conn.close()
 
+def ensure_db_initialized():
+    import streamlit as st
+    if "db_initialized" not in st.session_state:
+        init_db()
+        st.session_state.db_initialized = True
+        
+        # Auto-seed if DB appears empty (e.g. brand-new data/database.sqlite)
+        conn = get_connection()
+        tf_count = conn.execute("SELECT COUNT(*) FROM timeframes").fetchone()[0]
+        act_count = conn.execute("SELECT COUNT(*) FROM activity_types").fetchone()[0]
+        red_count = conn.execute("SELECT COUNT(*) FROM reduction_rules").fetchone()[0]
+        teacher_count = conn.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]
+        conn.close()
+
+        if tf_count == 0:
+            seed_initial_data()
+
+        import sys
+        src_dir = os.path.dirname(__file__)
+        if src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+
+        if act_count == 0:
+            import seed_activities
+            seed_activities.run()
+
+        if red_count == 0:
+            import seed_reductions
+            seed_reductions.run()
+
+        if teacher_count < 5:
+            import seed_teachers
+            seed_teachers.run()
+
+
 
 def seed_initial_data():
     conn = get_connection()

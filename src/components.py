@@ -1408,6 +1408,9 @@ def _get_sidebar_system_stats():
 
 
 def render_sidebar(active_page="home"):
+    from database import ensure_db_initialized
+    ensure_db_initialized()
+    
     # Build system status data (cached)
     _db_ok, _tf_name, _teacher_count, _guest_count, _has_excel = (
         _get_sidebar_system_stats()
