@@ -1076,6 +1076,9 @@ def delete_teacher(teacher_id):
             )
             cursor.execute("DELETE FROM manual_conversions WHERE teacher_id = ?", (teacher_id,))
             cursor.execute("DELETE FROM payroll_records WHERE teacher_id = ?", (teacher_id,))
+            cursor.execute("DELETE FROM bulk_teaching_assignments WHERE teacher_id = ?", (teacher_id,))
+            cursor.execute("DELETE FROM teacher_calculated_totals WHERE teacher_id = ?", (teacher_id,))
+            cursor.execute("UPDATE admin_users SET teacher_id = NULL WHERE teacher_id = ?", (teacher_id,))
             cursor.execute("DELETE FROM teachers WHERE id = ?", (teacher_id,))
     finally:
         conn.close()

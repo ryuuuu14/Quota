@@ -5,7 +5,7 @@ import sys
 # Resolve imports when running standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from database import init_db, get_connection, delete_timeframe
+from database import init_db, get_connection, delete_timeframe, delete_teacher
 
 
 class TestCascadeDelete(unittest.TestCase):
@@ -183,6 +183,102 @@ class TestCascadeDelete(unittest.TestCase):
             "SELECT COUNT(*) FROM teacher_calculated_totals WHERE timeframe_id = ?",
             (tf_id,),
         )
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+    def test_delete_teacher(self):
+        cursor = self.conn.cursor()
+
+        # 1. Create a timeframe (needed for foreign keys in some tables)
+        cursor.execute(
+            "INSERT INTO timeframes (name, start_date, end_date) VALUES ('TF Test 2', '2026-09-01', '2027-06-30')"
+        )
+        tf_id = cursor.lastrowid
+
+        # 2. Create teacher
+        cursor.execute(
+            "INSERT INTO teachers (name, subject_group, employment_type) VALUES ('Teacher Delete Test', 'MATH', 'TEACHER')"
+        )
+        teacher_id = cursor.lastrowid
+
+        # 3. Add dependent records
+        # teacher_role_history
+        cursor.execute(
+            "INSERT INTO teacher_role_history (teacher_id, record_type, start_date) VALUES (?, 'TITLE', '2026-09-01')",
+            (teacher_id,),
+        )
+        # teacher_rank_history
+        cursor.execute(
+            "INSERT INTO police_ranks (rank_name, coefficient) VALUES ('Rank Test', 5.0)"
+        )
+        rank_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO teacher_rank_history (teacher_id, police_rank_id, salary_coefficient, start_date) VALUES (?, ?, 5.0, '2026-09-01')",
+            (teacher_id, rank_id),
+        )
+        # manual_conversions
+        cursor.execute(
+            "INSERT INTO manual_conversions (teacher_id, timeframe_id, from_category, to_category, from_amount, to_amount) VALUES (?, ?, 'NCKH', 'Giảng dạy', 1.0, 1.0)",
+            (teacher_id, tf_id),
+        )
+        # payroll_records
+        cursor.execute(
+            "INSERT INTO payroll_records (teacher_id, timeframe_id, task_type, quantity, amount_vnd, log_date) VALUES (?, ?, 'TASK', 1.0, 1000.0, '2026-09-01')",
+            (teacher_id, tf_id),
+        )
+        # session_teacher_totals
+        cursor.execute(
+            "INSERT INTO session_teacher_totals (timeframe_id, teacher_id) VALUES (?, ?)",
+            (tf_id, teacher_id),
+        )
+        # bulk_teaching_assignments
+        cursor.execute(
+            "INSERT INTO bulk_teaching_assignments (timeframe_id, teacher_id, subject_name, loai, si_so, tiet_quy_doi, he_so_lop_dong, tiet_thuc_day) VALUES (?, ?, 'Subject', 'Lý thuyết', 30, 1.0, 1.0, 1.0)",
+            (tf_id, teacher_id),
+        )
+        # teacher_calculated_totals
+        cursor.execute(
+            "INSERT INTO teacher_calculated_totals (timeframe_id, teacher_id) VALUES (?, ?)",
+            (tf_id, teacher_id),
+        )
+        # admin_users
+        cursor.execute(
+            "INSERT INTO admin_users (username, password, teacher_id) VALUES ('test_teacher_user', 'password_hash', ?)",
+            (teacher_id,),
+        )
+        self.conn.commit()
+
+        # Delete teacher
+        delete_teacher(teacher_id)
+        self.conn.commit()
+
+        # Verify teacher is deleted
+        cursor.execute("SELECT COUNT(*) FROM teachers WHERE id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        # Verify all dependencies are deleted (or set to NULL for optional FKs)
+        cursor.execute("SELECT COUNT(*) FROM teacher_role_history WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        cursor.execute("SELECT COUNT(*) FROM teacher_rank_history WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        cursor.execute("SELECT COUNT(*) FROM manual_conversions WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        cursor.execute("SELECT COUNT(*) FROM payroll_records WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        cursor.execute("SELECT COUNT(*) FROM session_teacher_totals WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        cursor.execute("SELECT COUNT(*) FROM bulk_teaching_assignments WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        cursor.execute("SELECT COUNT(*) FROM teacher_calculated_totals WHERE teacher_id = ?", (teacher_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+
+        # Admin user can be either deleted or teacher_id set to NULL
+        cursor.execute("SELECT COUNT(*) FROM admin_users WHERE teacher_id = ?", (teacher_id,))
         self.assertEqual(cursor.fetchone()[0], 0)
 
 

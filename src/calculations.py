@@ -656,15 +656,26 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
 
         seg_data = []
 
-        # Determine latest title for display / fallback
+        # Determine latest title and dept for display / fallback
         latest_title_name = ""
         latest_base_gc = 0
         latest_base_nckh = 0
+        latest_dept_name = ""
+        if not dept_recs.empty:
+            latest_dept_name = dept_recs.sort_values(by="start_date").iloc[-1]["value_text"]
+
+        NATURAL_DEPTS = {
+            "Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học",
+            "Nhà giáo giảng dạy thực hành",
+            "Khoa Ngoại ngữ - Tin học",
+            "Khoa Quân sự, võ thuật, thể dục thể thao",
+        }
+
         if not title_recs.empty:
             sorted_titles = title_recs.sort_values(by="start_date")
             latest_title_name = sorted_titles.iloc[-1]["value_text"]
             if latest_title_name in titles_dict:
-                if teacher["subject_group"] == "Tự nhiên/Kỹ thuật":
+                if latest_dept_name in NATURAL_DEPTS:
                     latest_base_gc = titles_dict[latest_title_name][
                         "base_teaching_hours_natural"
                     ]
@@ -903,24 +914,13 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
             if cap_alert not in applied_reductions:
                 applied_reductions.append(cap_alert)
 
-        def get_nvk_base_min(title):
-            if title in ["Giáo sư", "Phó Giáo sư"]:
-                return 170
-            if title == "Giảng viên chính":
-                return 260
-            if title == "Giảng viên":
-                return 350
-            if title == "Trợ giảng":
-                return 740
-            return 0
-
         results.append(
             {
                 "id": tid,
                 "title_name": latest_title_name,
                 "base_gc": latest_base_gc,
                 "base_nckh": latest_base_nckh,
-                "dinh_muc_nvk_goc": get_nvk_base_min(latest_title_name),
+                "dinh_muc_nvk_goc": max(0.0, 1760.0 - (latest_base_gc * 3.0) - latest_base_nckh),
                 "dinh_muc_gc_phai_thuc_hien": total_required_gc,
                 "dinh_muc_nckh_phai_thuc_hien": max(
                     0.0, total_required_nckh - total_reduced_nckh
@@ -1384,23 +1384,6 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
     role_recs = df_hist[df_hist["record_type"] == "REDUCTION"].copy()
 
     # Latest title/dept for fallback display
-    latest_title_name = ""
-    latest_base_gc = 0
-    latest_base_nckh = 0
-    if not title_recs.empty:
-        st_titles = title_recs.sort_values("start_date")
-        latest_title_name = st_titles.iloc[-1]["value_text"]
-        if latest_title_name in titles_dict:
-            if teacher["subject_group"] == "Tự nhiên/Kỹ thuật":
-                latest_base_gc = titles_dict[latest_title_name][
-                    "base_teaching_hours_natural"
-                ]
-            else:
-                latest_base_gc = titles_dict[latest_title_name][
-                    "base_teaching_hours_social"
-                ]
-            latest_base_nckh = titles_dict[latest_title_name]["base_nckh_hours"]
-
     latest_dept = ""
     if not dept_recs.empty:
         latest_dept = dept_recs.sort_values("start_date").iloc[-1]["value_text"]
@@ -1411,6 +1394,23 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
         "Khoa Ngoại ngữ - Tin học",
         "Khoa Quân sự, võ thuật, thể dục thể thao",
     }
+
+    latest_title_name = ""
+    latest_base_gc = 0
+    latest_base_nckh = 0
+    if not title_recs.empty:
+        st_titles = title_recs.sort_values("start_date")
+        latest_title_name = st_titles.iloc[-1]["value_text"]
+        if latest_title_name in titles_dict:
+            if latest_dept in NATURAL_DEPTS:
+                latest_base_gc = titles_dict[latest_title_name][
+                    "base_teaching_hours_natural"
+                ]
+            else:
+                latest_base_gc = titles_dict[latest_title_name][
+                    "base_teaching_hours_social"
+                ]
+            latest_base_nckh = titles_dict[latest_title_name]["base_nckh_hours"]
 
     # Build segments
     segments_raw = _generate_timeline_segments(

@@ -1,0 +1,6 @@
+{
+  "extraPaths": [
+    "runtime/Lib/site-packages",
+    "src"
+  ]
+}

@@ -45,16 +45,29 @@ App.bat
 2. **Cài đặt Thư viện**: Tự động cài đặt toàn bộ thư viện từ `vendor/packages/` (offline).
 3. **Kiểm tra Cổng mạng**: Đảm bảo cổng `8501` đang rảnh.
 4. **Khởi tạo CSDL**: Tự động tạo `data/database.sqlite` và seed dữ liệu chuẩn.
-5. **Khởi chạy máy chủ**: Mở ứng dụng tại 👉 **http://localhost:8501**.
+5. **Cấu hình mạng**: Tự động mở cổng tường lửa `1111` để cho phép các máy khách truy cập.
+6. **Khởi chạy máy chủ**: Mở ứng dụng tại 👉 **http://<SERVER_IP>:1111** (Địa chỉ IP của máy chủ được tự động phát hiện và hiển thị trên cửa sổ console khi chạy).
 
-> **Lưu ý**: Lần chạy thứ hai trở đi sẽ khởi động ngay lập tức (bỏ qua bước cài đặt).
+> **Lưu ý**: Lần chạy thứ hai trở đi sẽ khởi động ngay lập tức. Cần chấp nhận hộp thoại yêu cầu quyền Administrator (UAC) ở lần chạy đầu tiên để cấu hình tường lửa cho phép các thiết bị di động truy cập.
 
-### Truy cập từ máy khác trên mạng LAN
-Các máy trạm trên cùng mạng LAN có thể truy cập ứng dụng bằng trình duyệt web:
-```
-http://<địa-chỉ-IP-máy-chủ>:8501
-```
-Ví dụ: `http://192.168.1.100:8501`
+### Cách truy cập từ thiết bị khác (Điện thoại, Máy tính khác) trong mạng LAN:
+Bạn có thể truy cập trực tiếp bằng địa chỉ IP của máy chủ (địa chỉ kết nối thống nhất):
+
+1. Đảm bảo thiết bị di động hoặc máy tính khách kết nối cùng mạng Wi-Fi/mạng LAN với máy chủ.
+2. Mở trình duyệt trên thiết bị khách và truy cập theo địa chỉ hiển thị trên màn hình console khi khởi động `App.bat`:
+   ```
+   http://<SERVER_IP>:1111
+   ```
+
+---
+
+## 4. Công cụ chẩn đoán & Giám sát (Observability)
+Hệ thống tích hợp bảng chẩn đoán lỗi mạng và nhật ký giám sát hoạt động ngoại tuyến (offline):
+
+* **Bảng chẩn đoán**: Chạy file `diagnose_network.bat` để kiểm tra trạng thái tường lửa, kiểm tra dịch vụ Streamlit đang chạy và khả năng truy cập qua IP tùy chỉnh.
+* **Nhật ký hệ thống (`data/logs/`)**:
+  * `network_setup.log`: Ghi nhận lịch sử cấu hình cổng mạng và tường lửa.
+
 
 ---
 

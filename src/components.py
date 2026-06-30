@@ -512,7 +512,7 @@ def render_formula_card(breakdown, metrics=None):
     if metrics:
         base_gc = metrics.get("base_gc", 0.0)
         reduce_gc = metrics.get("so_gio_duoc_mien_giam", 0.0)
-        req_gc = metrics.get("dinh_muc_gc_phai_thuc_hien", 0.0)
+        req_gc = max(0.0, metrics.get("dinh_muc_gc_phai_thuc_hien", 0.0) - reduce_gc)
         done_gc = metrics.get("tổng_gc_da_thuc_hien", 0.0)
         diff_gc = metrics.get("gc_vuot_thieu_sau_quy_doi", 0.0)
         status_gc_val = metrics.get("hoan_thanh_gd", "Không đạt")
@@ -526,7 +526,7 @@ def render_formula_card(breakdown, metrics=None):
 
         base_nvk = metrics.get("dinh_muc_nvk_goc", 0.0)
         reduce_nvk = metrics.get("so_gio_nvk_duoc_mien_giam", 0.0)
-        req_nvk = metrics.get("dinh_muc_nvk_phai_thuc_hien", 0.0)
+        req_nvk = max(0.0, metrics.get("dinh_muc_nvk_phai_thuc_hien", 0.0) - reduce_nvk)
         done_nvk = metrics.get("nvk_da_thuc_hien", 0.0)
         diff_nvk = metrics.get("nvk_vuot_thieu", 0.0)
         status_nvk_val = metrics.get("hoan_thanh_nvk", "Không đạt")

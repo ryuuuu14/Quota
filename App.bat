@@ -121,22 +121,42 @@ if not exist "%DB_PATH%" (
     echo Database exists: %DB_PATH%
 )
 
-rem ── 5. Check Port Availability (8501) ───────────────────────
-echo Checking Port 8501...
-%PYTHON_EXE% -c "import socket; s = socket.socket(); s.bind(('127.0.0.1', 8501)); s.close()" >nul 2>&1
+rem ── 5. Setup Network Redirection ─────────────────────────────
+echo Setting up Network Redirection (Firewall Port 1111)...
+powershell -Command "Start-Process '%PYTHON_EXE%' -ArgumentList 'src\setup_network.py' -Verb RunAs -Wait"
 if %errorlevel% neq 0 (
-    echo   WARNING: Port 8501 may already be in use.
+    echo   WARNING: Failed to apply network configuration automatically.
+    echo   Please make sure to accept the UAC administrator prompt.
+)
+
+rem ── 6. Check Port Availability (1111) ───────────────────────
+echo Checking Port 1111...
+%PYTHON_EXE% -c "import socket; s = socket.socket(); s.bind(('127.0.0.1', 1111)); s.close()" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   WARNING: Port 1111 may already be in use.
     echo   If another instance is running, close it first.
     echo   Attempting to launch anyway...
 )
-echo Port 8501 is available!
+echo Port 1111 is available!
 
 echo ==========================================================
 echo   All Checks Passed! System is 100%% Ready for Deployment.
 echo ==========================================================
 
+:: Resolve LAN IP using Python
+set "LAN_IP=127.0.0.1"
+for /f "tokens=*" %%g in ('%PYTHON_EXE% -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect((\"10.255.255.255\",1)); print(s.getsockname()[0]); s.close()" 2^>nul') do (
+    set "LAN_IP=%%g"
+)
+
 echo.
 echo   Launching Quota-main App...
-echo   LAN clients can connect at: http://^<this-machine-ip^>:8501
+echo   Unified Server URL: http://%LAN_IP%:1111
 echo.
-%PYTHON_EXE% -m streamlit run src\app.py
+%PYTHON_EXE% -m streamlit run src\app.py --server.port 1111 --server.address 0.0.0.0
+
+rem ── 7. Cleanup and Teardown on Exit ─────────────────────────
+echo.
+echo   Application closed. Cleaning up network routing...
+powershell -Command "Start-Process '%PYTHON_EXE%' -ArgumentList 'src\setup_network.py --teardown' -Verb RunAs -Wait"
+echo   Teardown complete. Restored original configuration.
