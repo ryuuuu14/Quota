@@ -286,6 +286,29 @@ def _calculate_point2_reductions(
     reduced_nvk = 0.0
     max_flat_nckh_pct = 0.0
     reductions_desc = []
+    
+    valid_leaves = []
+    for r, rule in point2_leaves:
+        r_start_full = pd.to_datetime(r["start_date"])
+        r_end_full = pd.to_datetime(r["end_date"])
+        
+        is_invalid = False
+        for seg in seg_data:
+            inter_start = max(seg["start"], r_start_full)
+            inter_end = min(seg["end"], r_end_full)
+            if inter_start <= inter_end and seg.get("title_name") == "Chưa bổ nhiệm":
+                is_invalid = True
+                break
+                
+        desc = f"{rule['name']} ({rule['rule_type']})"
+        if is_invalid:
+            desc += " [CẢNH BÁO: Không hợp lệ do chưa bổ nhiệm]"
+            reductions_desc.append(desc)
+        else:
+            valid_leaves.append((r, rule))
+            reductions_desc.append(desc)
+            
+    point2_leaves = valid_leaves
 
     for r, rule in point2_leaves:
         nckh_pct = rule["nckh_reduction_pct"]
@@ -372,10 +395,6 @@ def _calculate_point2_reductions(
             reduced_gc += red_gc
             reduced_nvk += red_nvk
 
-    for r, rule in point2_leaves:
-        desc = f"{rule['name']} ({rule['rule_type']})"
-        reductions_desc.append(desc)
-
     return reduced_gc, reduced_nvk, max_flat_nckh_pct, reductions_desc
 
 
@@ -390,6 +409,29 @@ def _calculate_point3_reductions(
     reduced_gc = 0.0
     reduced_nckh = 0.0
     reductions_desc = []
+    
+    valid_leaves = []
+    for r, rule in point3_leaves:
+        r_start = pd.to_datetime(r["start_date"])
+        r_end = pd.to_datetime(r["end_date"])
+        
+        is_invalid = False
+        for seg in seg_data:
+            inter_start = max(seg["start"], r_start)
+            inter_end = min(seg["end"], r_end)
+            if inter_start <= inter_end and seg.get("title_name") == "Chưa bổ nhiệm":
+                is_invalid = True
+                break
+                
+        desc = f"{rule['name']} ({rule['rule_type']})"
+        if is_invalid:
+            desc += " [CẢNH BÁO: Không hợp lệ do chưa bổ nhiệm]"
+            reductions_desc.append(desc)
+        else:
+            valid_leaves.append((r, rule))
+            reductions_desc.append(desc)
+            
+    point3_leaves = valid_leaves
 
     for seg in seg_data:
         seg_intervals = []
@@ -511,10 +553,6 @@ def _calculate_point3_reductions(
 
                 reduced_gc += red_gc
                 reduced_nckh += red_nckh
-
-    for r, rule in point3_leaves:
-        desc = f"{rule['name']} ({rule['rule_type']})"
-        reductions_desc.append(desc)
 
     return reduced_gc, reduced_nckh, reductions_desc
 
@@ -664,18 +702,11 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
         if not dept_recs.empty:
             latest_dept_name = dept_recs.sort_values(by="start_date").iloc[-1]["value_text"]
 
-        NATURAL_DEPTS = {
-            "Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học",
-            "Nhà giáo giảng dạy thực hành",
-            "Khoa Ngoại ngữ - Tin học",
-            "Khoa Quân sự, võ thuật, thể dục thể thao",
-        }
-
         if not title_recs.empty:
             sorted_titles = title_recs.sort_values(by="start_date")
             latest_title_name = sorted_titles.iloc[-1]["value_text"]
             if latest_title_name in titles_dict:
-                if latest_dept_name in NATURAL_DEPTS:
+                if teacher.get("subject_group") == "Tự nhiên/Kỹ thuật":
                     latest_base_gc = titles_dict[latest_title_name][
                         "base_teaching_hours_natural"
                     ]
@@ -706,7 +737,7 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
                     if not before_titles.empty:
                         title_name = before_titles.iloc[-1]["value_text"]
                     else:
-                        title_name = sorted_titles.iloc[0]["value_text"]
+                        title_name = "__NOT_APPOINTED__"
 
             # Find active DEPARTMENT
             dept_name = ""
@@ -744,18 +775,12 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
                         role_desc = f"{rule['name']} ({rule['rule_type']})"
                         break
 
-            # Departments that use the natural/technical teaching hours standard
-            # (per T04 regulations: natural sciences, techniques, foreign languages, informatics)
-            NATURAL_DEPTS = {
-                # Legacy generic names (backward compatibility)
-                "Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học",
-                "Nhà giáo giảng dạy thực hành",
-                # Official Khoa using natural/technical/FL/IT hours
-                "Khoa Ngoại ngữ - Tin học",  # K10
-                "Khoa Quân sự, võ thuật, thể dục thể thao",  # K12
-            }
-            if title_name in titles_dict:
-                if dept_name in NATURAL_DEPTS:
+            if title_name == "__NOT_APPOINTED__":
+                seg_base_gc = 0
+                seg_base_nckh = 0
+                title_name = "Chưa bổ nhiệm"
+            elif title_name in titles_dict:
+                if teacher.get("subject_group") == "Tự nhiên/Kỹ thuật":
                     seg_base_gc = titles_dict[title_name]["base_teaching_hours_natural"]
                 else:
                     seg_base_gc = titles_dict[title_name]["base_teaching_hours_social"]
@@ -922,11 +947,10 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
                 "base_nckh": latest_base_nckh,
                 "dinh_muc_nvk_goc": max(0.0, 1760.0 - (latest_base_gc * 3.0) - latest_base_nckh),
                 "dinh_muc_gc_phai_thuc_hien": total_required_gc,
-                "dinh_muc_nckh_phai_thuc_hien": max(
-                    0.0, total_required_nckh - total_reduced_nckh
-                ),
+                "dinh_muc_nckh_phai_thuc_hien": total_required_nckh,
                 "dinh_muc_nvk_phai_thuc_hien": total_required_nvk,
                 "so_gio_duoc_mien_giam": total_reduced_gc,
+                "so_gio_nckh_duoc_mien_giam": total_reduced_nckh,
                 "so_gio_nvk_duoc_mien_giam": total_reduced_nvk,
                 "applied_reductions": ", ".join(applied_reductions)
                 if applied_reductions
@@ -1058,8 +1082,8 @@ def _teacher_metrics_impl(teacher_id, timeframe_id, df_session_override):
     df_out["gc_vuot_thieu"] = df_out["tổng_gc_da_thuc_hien"] - (
         df_out["dinh_muc_gc_phai_thuc_hien"] - df_out["so_gio_duoc_mien_giam"]
     )
-    df_out["nckh_vuot_thieu"] = (
-        df_out["nckh_da_thuc_hien"] - df_out["dinh_muc_nckh_phai_thuc_hien"]
+    df_out["nckh_vuot_thieu"] = df_out["nckh_da_thuc_hien"] - (
+        df_out["dinh_muc_nckh_phai_thuc_hien"] - df_out.get("so_gio_nckh_duoc_mien_giam", 0.0)
     )
     df_out["nvk_vuot_thieu"] = df_out["nvk_da_thuc_hien"] - (
         df_out["dinh_muc_nvk_phai_thuc_hien"] - df_out["so_gio_nvk_duoc_mien_giam"]
@@ -1388,13 +1412,6 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
     if not dept_recs.empty:
         latest_dept = dept_recs.sort_values("start_date").iloc[-1]["value_text"]
 
-    NATURAL_DEPTS = {
-        "Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học",
-        "Nhà giáo giảng dạy thực hành",
-        "Khoa Ngoại ngữ - Tin học",
-        "Khoa Quân sự, võ thuật, thể dục thể thao",
-    }
-
     latest_title_name = ""
     latest_base_gc = 0
     latest_base_nckh = 0
@@ -1402,7 +1419,7 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
         st_titles = title_recs.sort_values("start_date")
         latest_title_name = st_titles.iloc[-1]["value_text"]
         if latest_title_name in titles_dict:
-            if latest_dept in NATURAL_DEPTS:
+            if teacher.get("subject_group") == "Tự nhiên/Kỹ thuật":
                 latest_base_gc = titles_dict[latest_title_name][
                     "base_teaching_hours_natural"
                 ]
@@ -1439,7 +1456,7 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
                 title_name = (
                     bt.iloc[-1]["value_text"]
                     if not bt.empty
-                    else st_t.iloc[0]["value_text"]
+                    else "__NOT_APPOINTED__"
                 )
 
         # Active dept at midpoint
@@ -1480,10 +1497,14 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
                     break
 
         # Base hours
-        if title_name in titles_dict:
+        if title_name == "__NOT_APPOINTED__":
+            seg_base_gc = 0
+            seg_base_nckh = 0
+            title_name = "Chưa bổ nhiệm"
+        elif title_name in titles_dict:
             seg_base_gc = (
                 titles_dict[title_name]["base_teaching_hours_natural"]
-                if dept_name in NATURAL_DEPTS
+                if teacher.get("subject_group") == "Tự nhiên/Kỹ thuật"
                 else titles_dict[title_name]["base_teaching_hours_social"]
             )
             seg_base_nckh = titles_dict[title_name]["base_nckh_hours"]
@@ -1590,7 +1611,7 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
                 title_name_r = (
                     bt_r.iloc[-1]["value_text"]
                     if not bt_r.empty
-                    else st_t_r.iloc[0]["value_text"]
+                    else "__NOT_APPOINTED__"
                 )
 
         # Active dept at midpoint_r
@@ -1613,7 +1634,7 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
         if title_name_r in titles_dict:
             base_gc_r = (
                 titles_dict[title_name_r]["base_teaching_hours_natural"]
-                if dept_name_r in NATURAL_DEPTS
+                if teacher.get("subject_group") == "Tự nhiên/Kỹ thuật"
                 else titles_dict[title_name_r]["base_teaching_hours_social"]
             )
             base_nckh_r = titles_dict[title_name_r]["base_nckh_hours"]
@@ -1637,9 +1658,13 @@ def get_teacher_formula_breakdown(teacher_id, timeframe_id):
             red_weeks = wd_r["exact_weeks"]
             workday_detail_r = wd_r
 
+        rule_name_display = rl["name"]
+        if title_name_r == "__NOT_APPOINTED__":
+            rule_name_display += " [CẢNH BÁO: Không hợp lệ do chưa bổ nhiệm]"
+
         reductions_detail.append(
             {
-                "rule_name": rl["name"],
+                "rule_name": rule_name_display,
                 "teaching_reduction_pct": rl["teaching_reduction_pct"],
                 "nckh_reduction_pct": rl["nckh_reduction_pct"],
                 "period_start": r_start.strftime("%d/%m/%Y"),

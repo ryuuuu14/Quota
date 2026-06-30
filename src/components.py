@@ -510,23 +510,23 @@ def render_formula_card(breakdown, metrics=None):
 
     # ── Summary section ───────────────────────────────────────────────────────────
     if metrics:
-        base_gc = metrics.get("base_gc", 0.0)
+        base_gc = metrics.get("dinh_muc_gc_phai_thuc_hien", 0.0)
         reduce_gc = metrics.get("so_gio_duoc_mien_giam", 0.0)
-        req_gc = max(0.0, metrics.get("dinh_muc_gc_phai_thuc_hien", 0.0) - reduce_gc)
+        req_gc = max(0.0, base_gc - reduce_gc)
         done_gc = metrics.get("tổng_gc_da_thuc_hien", 0.0)
         diff_gc = metrics.get("gc_vuot_thieu_sau_quy_doi", 0.0)
         status_gc_val = metrics.get("hoan_thanh_gd", "Không đạt")
 
-        base_nckh = metrics.get("base_nckh", 0.0)
-        req_nckh = metrics.get("dinh_muc_nckh_phai_thuc_hien", 0.0)
-        reduce_nckh = max(0.0, base_nckh - req_nckh)
+        base_nckh = metrics.get("dinh_muc_nckh_phai_thuc_hien", 0.0)
+        reduce_nckh = metrics.get("so_gio_nckh_duoc_mien_giam", 0.0)
+        req_nckh = max(0.0, base_nckh - reduce_nckh)
         done_nckh = metrics.get("nckh_da_thuc_hien", 0.0)
         diff_nckh = metrics.get("nckh_vuot_thieu_sau_quy_doi", 0.0)
         status_nckh_val = metrics.get("hoan_thanh_nckh", "Không đạt")
 
-        base_nvk = metrics.get("dinh_muc_nvk_goc", 0.0)
+        base_nvk = metrics.get("dinh_muc_nvk_phai_thuc_hien", 0.0)
         reduce_nvk = metrics.get("so_gio_nvk_duoc_mien_giam", 0.0)
-        req_nvk = max(0.0, metrics.get("dinh_muc_nvk_phai_thuc_hien", 0.0) - reduce_nvk)
+        req_nvk = max(0.0, base_nvk - reduce_nvk)
         done_nvk = metrics.get("nvk_da_thuc_hien", 0.0)
         diff_nvk = metrics.get("nvk_vuot_thieu", 0.0)
         status_nvk_val = metrics.get("hoan_thanh_nvk", "Không đạt")
