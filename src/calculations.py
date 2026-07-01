@@ -63,12 +63,12 @@ def get_timeframe_dates(timeframe_id=None):
 def get_timeframe_gap_dates(start_date, end_date):
     """
     Return (gap_start, gap_end) representing the period between the end_date
-    and the end of a full 52-week calendar year from start_date.
-    Returns (None, None) if there is no gap (timeframe is >= 52 weeks).
+    and the end of a full calendar year from start_date.
+    Returns (None, None) if there is no gap (timeframe is >= 1 year).
     """
     s_dt = pd.to_datetime(start_date)
     e_dt = pd.to_datetime(end_date)
-    full_year_end = s_dt + pd.Timedelta(weeks=52) - pd.Timedelta(days=1)
+    full_year_end = s_dt + pd.DateOffset(years=1) - pd.Timedelta(days=1)
 
     if e_dt >= full_year_end:
         return None, None
