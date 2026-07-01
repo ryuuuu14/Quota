@@ -1,7 +1,7 @@
 import streamlit as st
 import io
 import time
-from database import get_connection
+from database import get_connection, clear_all_caches
 from components import (
     render_sidebar,
     render_metric_card,
@@ -160,6 +160,7 @@ with c_run:
     ):
         with st.spinner("Đang tính toán lương và thù lao..."):
             result = run_payroll_cycle(tf_id, teacher_ids=selected_ids)
+            clear_all_caches()
             time.sleep(0.3)
         if "error" in result:
             st.error(f"Lỗi khi tính lương: {result['error']}")
@@ -333,6 +334,7 @@ else:
                     )
                     conn.commit()
                     conn.close()
+                    clear_all_caches()
                     st.session_state[clear_key] = False
                     st.success("Đã xóa dữ liệu bảng lương.")
                     st.rerun()

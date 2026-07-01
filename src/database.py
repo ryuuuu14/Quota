@@ -91,7 +91,9 @@ def init_db():
     CREATE TABLE IF NOT EXISTS departments (
         name TEXT PRIMARY KEY,
         is_teaching_dept BOOLEAN DEFAULT 1,
-        dept_code TEXT
+        dept_code TEXT,
+        subject_group TEXT,
+        coefficient REAL DEFAULT 1.0
     )
     """)
 
@@ -180,6 +182,43 @@ def init_db():
         conn.commit()
     except sqlite3.OperationalError:
         pass
+
+    try:
+        cursor.execute("ALTER TABLE departments ADD COLUMN subject_group TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE departments ADD COLUMN coefficient REAL DEFAULT 1.0")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        # Initialize default subject_group for existing teaching departments where it's NULL
+        cursor.execute("""
+            UPDATE departments 
+            SET subject_group = CASE 
+                WHEN LOWER(name) LIKE '%khoa ngoại ngữ%' 
+                  OR LOWER(name) LIKE '%tự nhiên%' 
+                  OR LOWER(name) LIKE '%kỹ thuật%' 
+                  OR LOWER(name) LIKE '%tin học%' 
+                  OR LOWER(name) LIKE '%thực hành%' 
+                THEN 'Tự nhiên/Kỹ thuật' 
+                ELSE 'Chính trị/Pháp luật/Nghiệp vụ' 
+            END
+            WHERE subject_group IS NULL AND is_teaching_dept = 1
+        """)
+        
+        # Ensure non-teaching departments have NULL
+        cursor.execute("""
+            UPDATE departments 
+            SET subject_group = NULL 
+            WHERE is_teaching_dept = 0 AND subject_group IS NOT NULL
+        """)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
 
 
     try:
@@ -678,6 +717,13 @@ def ensure_db_initialized():
             import seed_teachers
             seed_teachers.run()
 
+def clear_all_caches():
+    """Clear all Streamlit cache data when database modifications occur."""
+    try:
+        import streamlit as st
+        st.cache_data.clear()
+    except Exception as e:
+        print(f"Error clearing cache: {e}")
 
 
 def seed_initial_data():

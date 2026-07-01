@@ -122,3 +122,17 @@
 [2026-06-30 16:38:59] [INFO] Firewall rule configured successfully for port 1111.
 [2026-06-30 16:38:59] [INFO] All network configurations successfully applied!
 [2026-06-30 16:38:59] [INFO] Unified Server URL: http://192.168.0.200:1111
+[2026-07-01 09:28:11] [INFO] Starting network environment configuration...
+[2026-07-01 09:28:11] [INFO] Detected Server LAN IP: 172.20.10.4
+[2026-07-01 09:28:12] [INFO] Ensured legacy port proxy rule on port 80 is removed.
+[2026-07-01 09:28:12] [INFO] Adding firewall inbound rule for TCP port 1111...
+[2026-07-01 09:28:12] [INFO] Firewall rule configured successfully for port 1111.
+[2026-07-01 09:28:12] [INFO] All network configurations successfully applied!
+[2026-07-01 09:28:12] [INFO] Unified Server URL: http://172.20.10.4:1111
+[2026-07-01 09:33:48] [INFO] Starting network environment configuration...
+[2026-07-01 09:33:48] [INFO] Detected Server LAN IP: 172.20.10.4
+[2026-07-01 09:33:48] [INFO] Ensured legacy port proxy rule on port 80 is removed.
+[2026-07-01 09:33:48] [INFO] Adding firewall inbound rule for TCP port 1111...
+[2026-07-01 09:33:48] [INFO] Firewall rule configured successfully for port 1111.
+[2026-07-01 09:33:48] [INFO] All network configurations successfully applied!
+[2026-07-01 09:33:48] [INFO] Unified Server URL: http://172.20.10.4:1111

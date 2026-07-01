@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 from datetime import datetime
-from database import get_connection, init_db
+from database import get_connection, init_db, clear_all_caches
 from components import (
     render_sidebar,
     render_empty_state,
@@ -242,6 +242,7 @@ def show_batch_detail(batch_id: int):
                         ),
                     )
 
+                clear_all_caches()
                 st.success("✅ Đã phê duyệt và cập nhật dữ liệu thành công!")
                 st.rerun()
             except Exception as e:
@@ -278,6 +279,7 @@ def show_batch_detail(batch_id: int):
                             ),
                         )
 
+                    clear_all_caches()
                     st.success("❌ Đã từ chối lô dữ liệu và phản hồi lại Đơn vị.")
                     st.rerun()
                 except Exception as e:
@@ -804,6 +806,7 @@ def show_batch_detail(batch_id: int):
                         f"DELETE FROM {staging_table} WHERE batch_id = ?", (batch_id,)
                     )
 
+                    clear_all_caches()
                     st.success("✅ Đã phê duyệt và cập nhật dữ liệu thành công!")
                     st.rerun()
                 except Exception as e:
@@ -850,6 +853,7 @@ def show_batch_detail(batch_id: int):
                                 (batch_id,),
                             )
 
+                        clear_all_caches()
                         st.success("❌ Đã từ chối lô dữ liệu và phản hồi lại Đơn vị.")
                         st.rerun()
                     except Exception as e:

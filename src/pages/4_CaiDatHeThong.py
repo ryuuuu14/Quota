@@ -21,6 +21,7 @@ from database import (
     delete_timeframe,
     get_cached_timeframes,
     seed_holidays_for_timeframe,
+    clear_all_caches,
 )
 from components import render_empty_state, render_sidebar
 from calculations import get_timeframe_gap_dates
@@ -96,7 +97,7 @@ def request_reduction_rule_change(
     """,
         (dept, f"User {username}", action_desc, json.dumps(diff_data)),
     )
-    conn.commit()
+    conn.commit(); clear_all_caches()
 
 
 def render_delete_button(table, row_id, id_col="id", rule_type=None, rule_name=""):
@@ -145,14 +146,14 @@ def render_delete_button(table, row_id, id_col="id", rule_type=None, rule_name="
                 try:
                     if table == "timeframes":
                         delete_timeframe(int(row_id), conn=conn)
-                        conn.commit()
+                        conn.commit(); clear_all_caches()
                     else:
                         cursor = conn.cursor()
                         cursor.execute(
                             f"DELETE FROM {table} WHERE {id_col} = ?",
                             (int(row_id) if id_col == "id" else row_id,),
                         )
-                        conn.commit()
+                        conn.commit(); clear_all_caches()
                     st.session_state[confirm_key] = False
                     st.success("Đã xoá!")
                     st.rerun()
@@ -287,7 +288,7 @@ def _tab1_body():
                         seed_holidays_for_timeframe(
                             conn, tf_id, tf_name, str(tf_start), str(tf_end)
                         )
-                        conn.commit()
+                        conn.commit(); clear_all_caches()
                         try:
                             get_cached_timeframes.clear()
                         except Exception:
@@ -463,7 +464,7 @@ Khai báo các đợt nghỉ trong năm học để xác định chính xác s�
                                         row["id"],
                                     ),
                                 )
-                                conn.commit()
+                                conn.commit(); clear_all_caches()
                                 st.session_state[edit_key] = False
                                 st.success("Cập nhật đợt nghỉ thành công!")
                                 st.rerun()
@@ -560,7 +561,7 @@ Khai báo các đợt nghỉ trong năm học để xác định chính xác s�
                                     "INSERT INTO academic_holidays (timeframe_id, name, start_date, end_date) VALUES (?, ?, ?, ?)",
                                     (h_tf_id, h_name, h_start, h_end),
                                 )
-                                conn.commit()
+                                conn.commit(); clear_all_caches()
                                 st.success(
                                     "Đã thêm điều chỉnh. Số tuần làm việc sẽ được tính lại tương ứng."
                                 )
@@ -607,6 +608,16 @@ def _tab2_body():
                             value=bool(row["is_teaching_dept"]),
                         )
 
+                        subject_groups = ["Chính trị/Nghiệp vụ", "Tự nhiên/Kỹ thuật"]
+                        current_sg = row["subject_group"] if "subject_group" in row and row["subject_group"] else "Chính trị/Nghiệp vụ"
+                        if current_sg not in subject_groups:
+                            current_sg = "Chính trị/Nghiệp vụ"
+                        new_sg = st.selectbox(
+                            "Khối môn học (Chỉ áp dụng cho Khoa/Bộ môn)",
+                            options=subject_groups,
+                            index=subject_groups.index(current_sg),
+                        )
+
                         c1, c2 = st.columns(2)
                         if c1.form_submit_button("Lưu", type="primary"):
                             if not new_name.strip():
@@ -616,17 +627,21 @@ def _tab2_body():
                                     cursor = conn.cursor()
                                     cursor.execute("PRAGMA foreign_keys = OFF;")
                                     try:
+                                        # Force subject_group to None if not a teaching department
+                                        final_sg = new_sg if new_is_teaching else None
+                                        
                                         # Update department
                                         cursor.execute(
                                             """
                                             UPDATE departments 
-                                            SET name = ?, is_teaching_dept = ?, dept_code = ? 
+                                            SET name = ?, is_teaching_dept = ?, dept_code = ?, subject_group = ?
                                             WHERE name = ?
                                         """,
                                             (
                                                 new_name.strip(),
                                                 int(new_is_teaching),
                                                 new_code.strip() or None,
+                                                final_sg,
                                                 row["name"],
                                             ),
                                         )
@@ -640,7 +655,7 @@ def _tab2_body():
                                             "UPDATE teacher_role_history SET value_text = ? WHERE record_type = 'DEPARTMENT' AND value_text = ?",
                                             (new_name.strip(), row["name"]),
                                         )
-                                        conn.commit()
+                                        conn.commit(); clear_all_caches()
                                         st.session_state[edit_key] = False
                                         st.success("Cập nhật đơn vị thành công!")
                                         st.rerun()
@@ -664,14 +679,19 @@ def _tab2_body():
                     if "dept_code" in row and row["dept_code"]
                     else ""
                 )
+                
+                current_sg = row["subject_group"] if pd.notna(row.get("subject_group")) and row["subject_group"] else "Không"
+                info_html = f'<div style="color: var(--md-on-surface-variant); font-size: 0.85rem; margin-top: 4px;">Khối môn học: <b>{current_sg}</b></div>'
+
+                content_html = f'<div style="display:flex; flex-direction:column;"><div style="display:flex; align-items:center; gap:8px;"><span style="color: var(--md-on-surface); font-weight: 600;">{code_prefix}{row["name"]}</span>{badge_html}</div>{info_html}</div>'
 
                 render_list_item_with_edit(
-                    content=f'<span style="color: var(--md-on-surface); font-weight: 600;">{code_prefix}{row["name"]}</span>',
+                    content=content_html,
                     table="departments",
                     row_id=row["name"],
                     edit_key=edit_key,
                     del_col="name",
-                    badge_html=badge_html,
+                    badge_html="",
                 )
 
     if not read_only:
@@ -682,6 +702,12 @@ def _tab2_body():
                 is_teaching = st.checkbox(
                     "Là đơn vị có giảng dạy (Khoa, Bộ môn)", value=True
                 )
+                
+                subject_groups = ["Chính trị/Nghiệp vụ", "Tự nhiên/Kỹ thuật"]
+                dept_sg = st.selectbox(
+                    "Khối môn học (Chỉ áp dụng cho Khoa/Bộ môn)",
+                    options=subject_groups,
+                )
 
                 if st.form_submit_button("Thêm"):
                     if not dept_name.strip():
@@ -690,14 +716,15 @@ def _tab2_body():
                         try:
                             cursor = conn.cursor()
                             cursor.execute(
-                                "INSERT INTO departments (name, is_teaching_dept, dept_code) VALUES (?, ?, ?)",
+                                "INSERT INTO departments (name, is_teaching_dept, dept_code, subject_group) VALUES (?, ?, ?, ?)",
                                 (
                                     dept_name.strip(),
                                     int(is_teaching),
                                     dept_code.strip() or None,
+                                    dept_sg if is_teaching else None,
                                 ),
                             )
-                            conn.commit()
+                            conn.commit(); clear_all_caches()
                             st.success("Thêm thành công!")
                             st.rerun()
                         except Exception as e:
@@ -771,7 +798,7 @@ def _tab3_body():
                                             "UPDATE teacher_role_history SET value_text = ? WHERE record_type = 'TITLE' AND value_text = ?",
                                             (new_name.strip(), row["name"]),
                                         )
-                                        conn.commit()
+                                        conn.commit(); clear_all_caches()
                                         st.session_state[edit_key] = False
                                         st.success("Cập nhật chức danh thành công!")
                                         st.rerun()
@@ -835,7 +862,7 @@ def _tab3_body():
                             "INSERT INTO titles (name, base_teaching_hours_natural, base_teaching_hours_social, base_nckh_hours) VALUES (?, ?, ?, ?)",
                             (t_name, t_nat, t_soc, t_nckh),
                         )
-                        conn.commit()
+                        conn.commit(); clear_all_caches()
                         st.success("Thêm thành công!")
                         st.rerun()
                     except Exception as e:
@@ -901,7 +928,7 @@ def _tab4_body():
                                                 row["id"],
                                             ),
                                         )
-                                        conn.commit()
+                                        conn.commit(); clear_all_caches()
                                         st.session_state[edit_key] = False
                                         st.success("Cập nhật chức vụ thành công!")
                                         st.rerun()
@@ -980,7 +1007,7 @@ def _tab4_body():
                                 "INSERT INTO reduction_rules (name, rule_type, teaching_reduction_pct, nckh_reduction_pct) VALUES (?, 'ROLE', ?, ?)",
                                 (r_name, r_teach, r_nckh),
                             )
-                            conn.commit()
+                            conn.commit(); clear_all_caches()
                             st.success("Thêm thành công!")
                             st.rerun()
                         except Exception as e:
@@ -1059,7 +1086,7 @@ def _tab5_body():
                                                 row["id"],
                                             ),
                                         )
-                                        conn.commit()
+                                        conn.commit(); clear_all_caches()
                                         st.session_state[edit_key] = False
                                         st.success(
                                             "Cập nhật diện miễn giảm thành công!"
@@ -1142,7 +1169,7 @@ def _tab5_body():
                                 "INSERT INTO reduction_rules (name, rule_type, teaching_reduction_pct, nckh_reduction_pct) VALUES (?, 'SPECIAL', ?, ?)",
                                 (s_name, s_teach, s_nckh),
                             )
-                            conn.commit()
+                            conn.commit(); clear_all_caches()
                             st.success("Thêm thành công!")
                             st.rerun()
                         except Exception as e:
@@ -1245,7 +1272,7 @@ def _tab6_body():
                                             row["id"],
                                         ),
                                     )
-                                    conn.commit()
+                                    conn.commit(); clear_all_caches()
                                     st.session_state[edit_key] = False
                                     st.success("Cập nhật loại hoạt động thành công!")
                                     st.rerun()
@@ -1328,7 +1355,7 @@ def _tab6_body():
                                 int(is_nckh),
                             ),
                         )
-                        conn.commit()
+                        conn.commit(); clear_all_caches()
                         st.success("Thêm thành công!")
                         st.rerun()
                     except Exception as e:
@@ -1450,7 +1477,7 @@ def _tab7_body():
                         cursor.execute(
                             "UPDATE settings SET value = ? WHERE key = ?", (v, k)
                         )
-                    conn.commit()
+                    conn.commit(); clear_all_caches()
                     st.success("Cập nhật thông số hệ thống thành công!")
                     st.rerun()
                 except Exception as e:

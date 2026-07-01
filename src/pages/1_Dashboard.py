@@ -18,7 +18,7 @@ except ImportError:
 
     get_teacher_formula_breakdown = None
     _HAS_FORMULA_BREAKDOWN = False
-from database import get_connection, get_cached_timeframes, ThreadLocalConnectionProxy
+from database import get_connection, get_cached_timeframes, ThreadLocalConnectionProxy, clear_all_caches
 
 try:
     from components import (
@@ -111,6 +111,7 @@ def _render_conversion_suggestions(df_display, selected_tf_id, conn):
                                     (int(row["id"]), selected_tf_id),
                                 )
                                 conn_write.commit()
+                            clear_all_caches()
                             st.success(f"Đã hủy quy đổi thủ công cho {row['name']}!")
                             st.rerun()
                         except Exception as e:
@@ -175,6 +176,7 @@ def _render_conversion_suggestions(df_display, selected_tf_id, conn):
                                     ),
                                 )
                                 conn_write.commit()
+                            clear_all_caches()
                             st.success(
                                 f"Đã áp dụng quy đổi {limits['max_nckh_to_spend']:.1f} NCKH sang {limits['gc_gained']:.1f} Giảng dạy cho {row['name']}!"
                             )
@@ -240,6 +242,7 @@ def _render_conversion_suggestions(df_display, selected_tf_id, conn):
                                     ),
                                 )
                                 conn_write.commit()
+                            clear_all_caches()
                             st.success(
                                 f"Đã áp dụng quy đổi {limits['max_gc_to_spend']:.1f} Giảng dạy sang {limits['nckh_gained']:.1f} NCKH cho {row['name']}!"
                             )

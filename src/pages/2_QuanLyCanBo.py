@@ -1,8 +1,35 @@
 import streamlit as st
 from datetime import date, datetime
-from database import get_connection, delete_teacher, ThreadLocalConnectionProxy
+from database import get_connection, delete_teacher, ThreadLocalConnectionProxy, clear_all_caches
 from components import render_warning_state, render_sidebar, render_chip, _resolve_locale_string
 from database import get_base_salary, get_police_ranks
+
+def get_subject_group_for_dept(dept_name):
+    if not dept_name:
+        return "Chính trị/Nghiệp vụ"
+        
+    try:
+        from database import get_connection
+        cn = get_connection()
+        cur = cn.cursor()
+        cur.execute("SELECT subject_group FROM departments WHERE name = ?", (dept_name,))
+        row = cur.fetchone()
+        cn.close()
+        if row and row[0]:
+            return row[0]
+    except Exception:
+        pass
+
+    natural_depts = [
+        "Khoa Ngoại ngữ - Tin học",
+        "Trung tâm Ngoại ngữ - Tin học",
+        "Trung tâm Ứng dụng Công nghệ thông tin",
+        "Trung tâm Thông tin Khoa học và Thư viện",
+        "Tự nhiên, Kỹ thuật, Ngoại ngữ, Tin học"
+    ]
+    if any(nd in dept_name for nd in natural_depts) or dept_name in natural_depts:
+        return "Tự nhiên/Kỹ thuật"
+    return "Chính trị/Nghiệp vụ"
 
 st.set_page_config(page_title="Quản lý Hồ sơ Nhà giáo", layout="wide")
 render_sidebar("canbo")
@@ -507,16 +534,7 @@ with tab1:
                             value=t_data["name"],
                             key=f"edit_name_{selected_t_id}",
                         )
-                        col_b1, col_b2 = st.columns(2)
-                        new_subj = col_b1.selectbox(
-                            "Khối môn học",
-                            ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"],
-                            index=0
-                            if t_data["subject_group"] == "Tự nhiên/Kỹ thuật"
-                            else 1,
-                            key=f"edit_subj_{selected_t_id}",
-                        )
-                        new_fem = col_b2.selectbox(
+                        new_fem = st.selectbox(
                             "Giới tính",
                             ["Nam", "Nữ"],
                             index=1 if t_data["is_female"] else 0,
@@ -530,13 +548,12 @@ with tab1:
                                 cursor.execute(
                                     """
                                     UPDATE teachers 
-                                    SET name = ?, subject_group = ?, is_female = ?, employment_type = ?,
+                                    SET name = ?, is_female = ?, employment_type = ?,
                                         guest_rank = ?, total_12m_salary = ?, police_rank_id = ?, salary_coefficient = ?
                                     WHERE id = ?
                                 """,
                                     (
                                         new_name,
-                                        new_subj,
                                         1 if new_fem == "Nữ" else 0,
                                         st.session_state[edit_emp_key],
                                         new_guest_rank if is_edit_guest else None,
@@ -548,7 +565,7 @@ with tab1:
                                         selected_t_id,
                                     ),
                                 )
-                                conn.commit()
+                                conn.commit(); clear_all_caches()
                                 st.success("Đã cập nhật thông tin cơ bản!")
                                 st.rerun()
                             else:
@@ -581,7 +598,7 @@ with tab1:
                                         f"Chỉnh sửa thông tin cơ bản: {new_name}",
                                         "",
                                         new_name,
-                                        new_subj,
+                                        t_data["subject_group"],
                                         1 if new_fem == "Nữ" else 0,
                                         st.session_state[edit_emp_key],
                                         new_guest_rank if is_edit_guest else None,
@@ -593,7 +610,7 @@ with tab1:
                                         selected_t_id,
                                     ),
                                 )
-                                conn.commit()
+                                conn.commit(); clear_all_caches()
                                 st.success(
                                     f"🎉 Đã gửi yêu cầu cập nhật thông tin cán bộ (Lô #{batch_id}) đến Quản trị viên phê duyệt!"
                                 )
@@ -722,7 +739,7 @@ with tab1:
                                     """,
                                         (selected_rank["id"], coeff, selected_t_id),
                                     )
-                                    conn.commit()
+                                    conn.commit(); clear_all_caches()
                                     st.success(
                                         "Đã cập nhật Cấp bậc hàm! Lương sẽ được tính theo tỷ lệ thời gian."
                                     )
@@ -849,6 +866,11 @@ with tab1:
                                     cursor = conn.cursor()
                                     if is_admin:
                                         if field_type in ["TITLE", "DEPARTMENT"]:
+                                            if field_type == "DEPARTMENT":
+                                                cursor.execute(
+                                                    "UPDATE teachers SET subject_group = ? WHERE id = ?",
+                                                    (get_subject_group_for_dept(selected_val), selected_t_id)
+                                                )
                                             cursor.execute(
                                                 "UPDATE teacher_role_history SET end_date = date(?, '-1 day') WHERE teacher_id = ? AND record_type = ? AND end_date IS NULL",
                                                 (
@@ -895,7 +917,7 @@ with tab1:
                                                     weeks_override,
                                                 ),
                                             )
-                                        conn.commit()
+                                        conn.commit(); clear_all_caches()
                                         st.success("Đã cập nhật lịch sử!")
                                         st.rerun()
                                     else:
@@ -944,7 +966,7 @@ with tab1:
                                                 f"Yêu cầu điều chỉnh {action_type} thành: {selected_val}",
                                                 "",
                                                 t_data["name"],
-                                                t_data["subject_group"],
+                                                get_subject_group_for_dept(target_dept),
                                                 int(t_data["is_female"]),
                                                 t_data["employment_type"],
                                                 t_data["guest_rank"],
@@ -956,7 +978,7 @@ with tab1:
                                                 selected_t_id,
                                             ),
                                         )
-                                        conn.commit()
+                                        conn.commit(); clear_all_caches()
                                         st.success(
                                             f"🎉 Đã gửi yêu cầu điều chỉnh {action_type} (Lô #{batch_id}) đến Quản trị viên phê duyệt!"
                                         )
@@ -1143,7 +1165,7 @@ with tab1:
                                     "DELETE FROM teacher_role_history WHERE id = ?",
                                     (del_id,),
                                 )
-                                conn.commit()
+                                conn.commit(); clear_all_caches()
                                 st.success("Đã xoá dòng lịch sử!")
                                 st.rerun()
                         else:
@@ -1206,7 +1228,7 @@ with tab1:
                                     selected_t_id,
                                 ),
                             )
-                            conn.commit()
+                            conn.commit(); clear_all_caches()
                             st.success(
                                 f"🎉 Đã gửi yêu cầu xóa hồ sơ nhà giáo (Lô #{batch_id}) đến Quản trị viên phê duyệt!"
                             )
@@ -1216,7 +1238,8 @@ with tab1:
 with tab2:
     # --- TOP: THÊM MỚI HỒ SƠ ---
     if user is not None:
-        with st.expander("➕ Thêm mới Hồ sơ Nhà giáo", expanded=False):
+        if True:
+            st.markdown("### ➕ Thêm mới Hồ sơ Nhà giáo")
             df_titles = pd.read_sql_query("SELECT name FROM titles", conn)
             titles_list = (
                 df_titles["name"].tolist()
@@ -1301,15 +1324,19 @@ with tab2:
                     help="Nhập mã định danh nhà giáo (có thể bao gồm chữ và số, ví dụ: 8A512). Để trống để hệ thống tự động cấp phát.",
                 )
                 name = col2.text_input("Họ và tên")
-                subject_group = col1.selectbox(
-                    "Khối môn học", ["Tự nhiên/Kỹ thuật", "Chính trị/Nghiệp vụ"]
-                )
-                is_female = col2.selectbox("Giới tính", ["Nam", "Nữ"]) == "Nữ"
+                is_female = col1.selectbox("Giới tính", ["Nam", "Nữ"]) == "Nữ"
 
                 initial_title = col1.selectbox("Chức danh ban đầu", options=titles_list)
                 initial_dept = col2.selectbox("Đơn vị công tác", options=depts_list)
-                initial_role = col1.selectbox("Chức vụ ban đầu", options=roles_list)
-                start_date = col2.date_input(
+                
+                subject_groups = ["Chính trị/Pháp luật/Nghiệp vụ", "Tự nhiên/Kỹ thuật"]
+                initial_sg = col1.selectbox(
+                    "Khối môn học", 
+                    options=subject_groups, 
+                    help="Hệ thống sẽ tự động lấy Khối môn học theo Khoa/Bộ môn. Nếu công tác tại Phòng/Trung tâm (không có khối môn học), hệ thống sẽ sử dụng giá trị này để làm cơ sở tính định mức (Điều 6)."
+                )
+                initial_role = col2.selectbox("Chức vụ ban đầu", options=roles_list)
+                start_date = col1.date_input(
                     "Ngày bắt đầu công tác", value=date.today()
                 )
 
@@ -1355,7 +1382,7 @@ with tab2:
                                 (
                                     teacher_code_val,
                                     name.strip(),
-                                    subject_group,
+                                    get_subject_group_for_dept(initial_dept) or ("Tự nhiên/Kỹ thuật" if "Tự nhiên" in initial_sg else "Chính trị/Nghiệp vụ"),
                                     int(is_female),
                                     st.session_state.create_emp_type,
                                     create_guest_rank if is_guest else None,
@@ -1392,7 +1419,7 @@ with tab2:
                                     (new_teacher_id, role_id, start_date.isoformat()),
                                 )
 
-                            conn.commit()
+                            conn.commit(); clear_all_caches()
                             st.session_state["profile_creation_toast"] = (
                                 "Đã thêm hồ sơ và khởi tạo lịch sử thành công!"
                             )
@@ -1423,11 +1450,11 @@ with tab2:
                                 (
                                     batch_id,
                                     1,
-                                    "NEW",
+                                    "ADD",
                                     "Thêm cán bộ mới trực tiếp từ giao diện",
                                     "",
                                     name.strip(),
-                                    subject_group,
+                                    get_subject_group_for_dept(initial_dept) or ("Tự nhiên/Kỹ thuật" if "Tự nhiên" in initial_sg else "Chính trị/Nghiệp vụ"),
                                     int(is_female),
                                     st.session_state.create_emp_type,
                                     create_guest_rank if is_guest else None,
@@ -1435,13 +1462,11 @@ with tab2:
                                     create_coefficient if not is_guest else None,
                                     initial_title,
                                     initial_dept,
-                                    initial_role
-                                    if initial_role != "Không có"
-                                    else None,
+                                    initial_role if initial_role != "Không có" else None,
                                     teacher_code_val,
                                 ),
                             )
-                            conn.commit()
+                            conn.commit(); clear_all_caches()
                             st.session_state["profile_creation_toast"] = (
                                 f"Đã gửi yêu cầu thêm cán bộ thành công! (Lô #{batch_id})"
                             )

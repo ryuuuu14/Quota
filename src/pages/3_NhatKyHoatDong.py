@@ -10,6 +10,7 @@ from database import (
     get_cached_activity_types,
     get_cached_timeframes,
     ThreadLocalConnectionProxy,
+    clear_all_caches,
 )
 from components import render_empty_state, render_warning_state, render_sidebar
 from auth import get_current_user, get_scoped_teacher_ids, require_role
@@ -173,7 +174,7 @@ else:
                                     "DELETE FROM activity_logs WHERE id = ?",
                                     (int(del_id),),
                                 )
-                                conn.commit()
+                                conn.commit(); clear_all_caches()
                                 st.session_state[confirm_key] = False
                                 st.success("Đã xoá thành công!")
                                 st.rerun()
@@ -413,7 +414,7 @@ else:
                         final_tf_id,
                     ),
                 )
-                conn.commit()
+                conn.commit(); clear_all_caches()
                 st.success("Đã lưu nhật ký thành công!")
                 from calculations import calculate_activity_hours
 
