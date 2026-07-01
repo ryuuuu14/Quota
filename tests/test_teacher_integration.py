@@ -102,14 +102,17 @@ def seed_base_data(conn, cursor):
         except Exception:
             pass
     # Timeframe - match regulation 44-week academic year
-    # Aug 4, 2025 (Mon) → Jun 4, 2026 (Thu) = ~44 working weeks
+    # Aug 4, 2025 (Mon) → Jul 5, 2026 (Sun) = ~48 calendar weeks, minus 4 weeks holidays = 44 active weeks
     cursor.execute(
         """
         INSERT INTO timeframes (name, start_date, end_date, norm_multiplier, standard_academic_weeks)
         VALUES (?, ?, ?, ?, ?)
     """,
-        ("Năm học 2025-2026", "2025-08-04", "2026-06-05", 1.0, 44.0),
+        ("Năm học 2025-2026", "2025-08-04", "2026-07-05", 1.0, 44.0),
     )
+    tf_id = cursor.lastrowid
+    from database import seed_holidays_for_timeframe
+    seed_holidays_for_timeframe(conn, tf_id, "Năm học 2025-2026", "2025-08-04", "2026-07-05")
 
     # Titles — match Điều 6
     titles = [
@@ -293,7 +296,7 @@ def seed_teacher_LeVanD(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
         VALUES (?, 'TITLE', ?, ?, ?)
     """,
-        (tid, "Giảng viên chính", "2025-08-04", "2026-06-05"),
+        (tid, "Giảng viên chính", "2025-08-04", "2026-07-05"),
     )
 
     # Department
@@ -302,7 +305,7 @@ def seed_teacher_LeVanD(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
         VALUES (?, 'DEPARTMENT', ?, ?, ?)
     """,
-        (tid, "Chính trị, Pháp luật, Nghiệp vụ", "2025-08-04", "2026-06-05"),
+        (tid, "Chính trị, Pháp luật, Nghiệp vụ", "2025-08-04", "2026-07-05"),
     )
 
     # Role: Phó Trưởng khoa (weeks 1-17: Aug 4 → Nov 30, 2025)
@@ -322,7 +325,7 @@ def seed_teacher_LeVanD(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
         VALUES (?, 'REDUCTION', 'Trưởng khoa', ?, ?, ?)
     """,
-        (tid, tk_rule_id, "2025-12-01", "2026-06-05"),
+        (tid, tk_rule_id, "2025-12-01", "2026-07-05"),
     )
 
     # Đi thực tế 8 tuần (Aug 4 → Sep 28, 2025 = 40 weekdays = 8 weeks)
@@ -379,7 +382,7 @@ def seed_teacher_BuiThiX(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
         VALUES (?, 'TITLE', ?, ?, ?)
     """,
-        (tid, "Giảng viên chính", "2025-11-17", "2026-06-05"),
+        (tid, "Giảng viên chính", "2025-11-17", "2026-07-05"),
     )
 
     # Department
@@ -388,7 +391,7 @@ def seed_teacher_BuiThiX(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
         VALUES (?, 'DEPARTMENT', ?, ?, ?)
     """,
-        (tid, "Chính trị, Pháp luật, Nghiệp vụ", "2025-08-04", "2026-06-05"),
+        (tid, "Chính trị, Pháp luật, Nghiệp vụ", "2025-08-04", "2026-07-05"),
     )
 
     # Thai sản 7 tuần (Aug 4 → Sep 21, 2025)
@@ -420,7 +423,7 @@ def seed_teacher_BuiThiX(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date)
         VALUES (?, 'REDUCTION', 'Đi học', ?, ?, ?)
     """,
-        (tid, dh_rule_id, "2026-04-06", "2026-06-05"),
+        (tid, dh_rule_id, "2026-04-06", "2026-07-05"),
     )
 
     conn.commit()
@@ -446,7 +449,7 @@ def seed_teacher_Simple(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
         VALUES (?, 'TITLE', ?, ?, ?)
     """,
-        (tid, "Giảng viên", "2025-08-04", "2026-06-05"),
+        (tid, "Giảng viên", "2025-08-04", "2026-07-05"),
     )
 
     cursor.execute(
@@ -454,7 +457,7 @@ def seed_teacher_Simple(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, start_date, end_date)
         VALUES (?, 'DEPARTMENT', ?, ?, ?)
     """,
-        (tid, "Chính trị, Pháp luật, Nghiệp vụ", "2025-08-04", "2026-06-05"),
+        (tid, "Chính trị, Pháp luật, Nghiệp vụ", "2025-08-04", "2026-07-05"),
     )
 
     conn.commit()
@@ -635,9 +638,9 @@ def run_system_tests(conn, cursor, tf_id):
         )
         assert_approx(
             r["so_gio_duoc_mien_giam"],
-            47.1,
+            45.31,
             tolerance=0.15,
-            label="Lê Văn D — giảm 47,1 (±0,15, regulation-exact)",
+            label="Lê Văn D — giảm 45.31 (±0,15, regulation-exact with holidays)",
         )
     else:
         print("  ⚠️  Lê Văn D not found in output")
@@ -655,18 +658,19 @@ def run_system_tests(conn, cursor, tf_id):
         # Compute expected using system's own base_gc for proportional verification
         base_gv = 250.0
         base_gvc = 280.0
-        weeks_gv = 15.0
-        weeks_gvc = 29.0
+        weeks_gv = 14.6
+        weeks_gvc = 29.4
         ideal_dinh_muc = (
             base_gv * weeks_gv / 44.0 + base_gvc * weeks_gvc / 44.0
-        )  # 269.8
+        )  # 270.05
 
-        # Proportional reduction ratio (from regulation pattern)
+        # Proportional reduction ratio (from regulation pattern with holidays)
         # reduction_ratio = tổng_reduction / tổng_định_mức_phần
-        # Expected: 119.14 / 269.77 ≈ 0.442
-        ideal_giam = (base_gv * weeks_gv / 44.0) * (7.0 / 15.0 + 0.15 * 8.0 / 15.0) + (
-            base_gvc * weeks_gvc / 44.0
-        ) * (9.0 / 29.0 + 0.15 * 16.0 / 29.0)
+        # Expected: 139.96 / 270.05 ≈ 0.518
+        ideal_giam = (
+            (base_gv * weeks_gv / 44.0) * (6.6 / 14.6 + 0.15 * 8.0 / 14.6)
+            + (base_gvc * weeks_gvc / 44.0) * (12.6 / 29.4 + 0.15 * 16.2 / 29.4)
+        )
 
         print(
             f"    Ideal (44-week):   định mức={ideal_dinh_muc:.1f}, giảm={ideal_giam:.1f}, ratio={ideal_giam / ideal_dinh_muc:.3f}"

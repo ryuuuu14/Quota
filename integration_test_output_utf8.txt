@@ -1,0 +1,189 @@
+
+============================================================
+  META-VALIDATION: Deriving expected values from the regulation
+============================================================
+
+  All expected values below are derived EXACTLY from:
+    "Quy định chế độ làm việc đối với nhà giáo (Bản chuẩn toàn văn).md"
+    Điều 10, Ví dụ 1 and Ví dụ 2.
+
+  ─────────────────────────────────────────────────────────────
+  REGULATION CITATION: Ví dụ 1 — Lê Văn D (lines 381-383)
+  ─────────────────────────────────────────────────────────────
+  "Nhà giáo Lê Văn D có chức vụ Phó Trưởng khoa, chức danh Giảng viên chính.
+   Ngày 01/12/2025, nhà giáo Lê Văn D có quyết định bổ nhiệm chức vụ Trưởng khoa."
+
+   Step 1 — Base norm:
+     GVC (Chính trị, PL, NV) = 280 GC (Điều 6.2)
+
+   Step 2 — Role reduction split:
+     Phó Trưởng khoa (17 tuần) → giữ lại 70%  → 280 × 0.70 × 17/44 = 75.7 GC
+     Trưởng khoa (27 tuần)     → giữ lại 60%  → 280 × 0.60 × 27/44 = 103.1 GC
+     [75,7 GC + 103,1 GC = 178,8 GC]  ← ĐỊNH MỨC THỰC TẾ   (A)
+
+   Step 3 — Event reductions (Điều 10.3.b):
+     Đi thực tế 8 tuần (trong Phó TK period):
+       75,7 × 8/17 = 35,6 GC
+
+     Đi học 3 tuần (trong Trưởng khoa period):
+       103,1 × 3/27 = 11,5 GC
+
+     [35,6 GC + 11,5 GC = 47,1 GC]    ← TỔNG GIẢM          (B)
+
+   Result: Định mức thực tế = 178,8 GC, Giảm = 47,1 GC
+
+
+  ─────────────────────────────────────────────────────────────
+  REGULATION CITATION: Ví dụ 2 — Bùi Thị X (lines 384-386)
+  ─────────────────────────────────────────────────────────────
+  "Nhà giáo nữ Bùi Thị X có chức danh Giảng viên.
+   Ngày 17/11/2025, được bổ nhiệm Giảng viên chính."
+
+   Step 1 — Base norms:
+     GV (Điều 6.2)    = 250 GC (Chính trị, PL, NV — social science)
+     GVC (Điều 6.2)   = 280 GC
+
+   Step 2 — Timeline split:
+     GV period: 15 tuần (04/8 → 16/11/2025)  → 250 × 15/44     = 85,2 GC
+     GVC period: 29 tuần (17/11 → 05/6/2026) → 280 × 29/44     = 184,5 GC
+     [85,2 + 184,5 = 269,7 GC]              ← ĐỊNH MỨC THỰC TẾ (A)
+
+   Note: The regulation example uses 260/280 GC as simplified values,
+   but Điều 6.2 specifies GV = 250, GVC = 280 for social sciences.
+
+   Step 3 — Reductions (Điều 10.3.b + 10.3.c):
+     GV period (15 tuần, định mức 85,2):
+       - Thai sản 7 tuần: 85,2 × 7/15 × 100% = 39,8 GC
+       - Nuôi con <12m 8 tuần: 85,2 × 8/15 × 15% = 6,8 GC
+
+     GVC period (29 tuần, định mức 184,5):
+       - Đi học 13 tuần: 184,5 × 13/29 × 100% = 82,7 GC
+       - Nuôi con <12m 16 tuần: 184,5 × 16/29 × 15% = 15,3 GC
+
+     [39,8 + 6,8 + 82,7 + 15,3 = 144,6 GC]  ← TỔNG GIẢM      (B)
+
+   Note: Using Điều 6's actual base values gives 269,7/144,6 vs. the
+   regulation example's 273,1/146,4 (which used 260 instead of 250).
+
+  ─────────────────────────────────────────────────────────────
+  TEACHING ACTIVITY VERIFICATION
+  ─────────────────────────────────────────────────────────────
+  For any teacher with logged teaching activities:
+    tổng_gc_da_thuc_hien = Σ (quantity × base_conversion_rate × class_multiplier)
+    nckh_da_thuc_hien    = Σ (quantity × base_conversion_rate)
+
+  These are per Điều 8 (activity-to-GC conversion rules).
+
+
+============================================================
+  SETUP: Creating test database
+============================================================
+  Test DB: C:\Users\Dell\AppData\Local\Temp\tmph63dwxes.sqlite
+
+============================================================
+  SEEDING: Teacher records from the regulation
+============================================================
+
+  --- Seeding Lê Văn D (Ví dụ 1)
+    Lê Văn D → teacher_id=1
+
+  --- Seeding Bùi Thị X (Ví dụ 2)
+    Bùi Thị X → teacher_id=2
+
+  --- Seeding GV Binh Thuong (simple GC + NCKH activity)
+    GV Bình Thường → teacher_id=3
+
+  --- Seeding Trợ giảng A, B, C
+    Seeded Trợ giảng A, B, C successfully
+
+============================================================
+  SYSTEM VALIDATION: calculate_teacher_metrics() output
+============================================================
+
+  Dashboard Output (all teachers):
+    Lê Văn D:
+      title=Giảng viên chính, base_gc=280, base_nckh=600
+      dinh_muc_gc_phai_thuc_hien=178.56
+      so_gio_duoc_mien_giam=45.31
+      tong_gc_da_thuc_hien=0.00
+      nckh_da_thuc_hien=0.00
+    Bùi Thị X:
+      title=Giảng viên chính, base_gc=280, base_nckh=600
+      dinh_muc_gc_phai_thuc_hien=270.05
+      so_gio_duoc_mien_giam=139.96
+      tong_gc_da_thuc_hien=0.00
+      nckh_da_thuc_hien=0.00
+    GV Bình Thường:
+      title=Giảng viên, base_gc=250, base_nckh=600
+      dinh_muc_gc_phai_thuc_hien=250.00
+      so_gio_duoc_mien_giam=0.00
+      tong_gc_da_thuc_hien=110.00
+      nckh_da_thuc_hien=1000.00
+    Trợ giảng A:
+      title=Trợ giảng, base_gc=200, base_nckh=300
+      dinh_muc_gc_phai_thuc_hien=200.00
+      so_gio_duoc_mien_giam=100.00
+      tong_gc_da_thuc_hien=0.00
+      nckh_da_thuc_hien=0.00
+    Trợ giảng B:
+      title=Trợ giảng, base_gc=200, base_nckh=300
+      dinh_muc_gc_phai_thuc_hien=200.00
+      so_gio_duoc_mien_giam=40.00
+      tong_gc_da_thuc_hien=0.00
+      nckh_da_thuc_hien=0.00
+    Trợ giảng C:
+      title=Trợ giảng, base_gc=200, base_nckh=300
+      dinh_muc_gc_phai_thuc_hien=200.00
+      so_gio_duoc_mien_giam=63.45
+      tong_gc_da_thuc_hien=0.00
+      nckh_da_thuc_hien=0.00
+
+  --- Assertion Results
+
+  --- Lê Văn D (Ví dụ 1)
+    Regulation: Định mức = [280×70%×17/44]+[280×60%×27/44] = 178,8  (ideal 44-week split)
+    System:     Định mức = 178.56  (exact working-day calculation)
+    Regulation: Giảm    = [75,7×8/17]+[103,1×3/27] = 47,1
+    System:     Giảm    = 45.31
+    → diff: định mức=-0.24  giảm=-1.79
+  ✅ PASS  Lê Văn D — định mức ≈ 178,8 (±3% working-day tolerance)  →  178.56 (expected 178.80)
+  ❌ FAIL  Lê Văn D — giảm 47,1 (±0,15, regulation-exact)  →  45.31 (expected 47.10, diff=-1.79)
+
+  --- Bùi Thị X (Ví dụ 2)
+    GV base=250 (Điều 6.2 social) → GVC base=280 (Điều 6.2 social)
+    System: định mức=270.05, giảm=139.96
+    Ideal (44-week):   định mức=269.8, giảm=119.1, ratio=0.442
+    System ratio:      giảm/định_mức = 0.518
+  ✅ PASS  Bùi Thị X — định mức ≈ 270 (±3% working-day tolerance)  →  270.05 (expected 269.77)
+  ❌ FAIL  Bùi Thị X — giảm ≈ 119 (±3% working-day tolerance)  →  139.96 (expected 119.14, diff=20.83)
+  ❌ FAIL  Bùi Thị X — reduction ratio ≈ 0.442 (±0.02)  →  0.52 (expected 0.44, diff=0.08)
+
+  --- GV Bình Thường: activity log GC/NCKH verification
+    Expected: tổng GC = 110.0 (100 tiết + 10 buổi coi thi)
+    Expected: NCKH = 1000.0 (1 bài báo ISI/Scopus)
+  ✅ PASS  GV Bình Thường — tổng GC = 110.0 (exact)  →  110.00 (expected 110.00)
+  ✅ PASS  GV Bình Thường — NCKH = 1000.0 (exact)  →  1000.00 (expected 1000.00)
+    GV social base GC = 250. System: 250.00 (due to working-day weeks / 44)
+  ✅ PASS  GV Bình Thường — định mức ≈ 250 (±2.5, working-day tolerance)  →  250.00 (expected 250.00)
+      Implied working weeks in TF: 44.00 (should be ≈ 44)
+
+  --- Trợ giảng A (Giảm 50% định mức)
+    System: định mức=200.00, giảm=100.00
+  ✅ PASS  Trợ giảng A — giảm ≈ 100 GC (50% of 200 GC, working-day tolerance)  →  100.00 (expected 100.00)
+
+  --- Trợ giảng B (Giảm 20% định mức)
+    System: định mức=200.00, giảm=40.00
+  ✅ PASS  Trợ giảng B — giảm ≈ 40 GC (20% of 200 GC, working-day tolerance)  →  40.00 (expected 40.00)
+
+  --- Trợ giảng C (Múi phân chia 50% / 20%)
+    System: định mức=200.00, giảm=63.45
+  ✅ PASS  Trợ giảng C — giảm nằm trong khoảng (40 GC, 100 GC) phụ thuộc vào số tuần  →  63.45 (expected 65.00)
+
+============================================================
+  SUMMARY
+============================================================
+  PASS: 8
+  FAIL: 3
+  Total: 11
+
+  ⚠️  3 test(s) FAILED — review above.

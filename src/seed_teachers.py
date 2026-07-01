@@ -20,7 +20,7 @@ from database import get_connection
 
 TF_NAME = "Năm học 2025-2026"
 TF_START = "2025-08-04"
-TF_END = "2026-06-05"
+TF_END = "2026-07-05"
 STD_WEEKS = 44.0
 
 
@@ -288,7 +288,7 @@ def seed_teacher_PhamThiC(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, value_text, reduction_rule_id, start_date, end_date, actual_weeks_override)
         VALUES (?, 'REDUCTION', 'Nuôi con nhỏ dưới 12 tháng', ?, ?, ?, ?)
     """,
-        (tid, rule_nc, "2026-06-02", "2026-06-05", 4.0),
+        (tid, rule_nc, "2026-06-02", "2026-07-05", 4.0),
     )
 
     conn.commit()
@@ -340,7 +340,7 @@ def seed_teacher_LeVanD(conn, cursor, tf_id):
         INSERT INTO teacher_role_history (teacher_id, record_type, reduction_rule_id, start_date, end_date)
         VALUES (?, 'REDUCTION', ?, ?, ?)
     """,
-        (tid, rule_tk, "2025-12-01", "2026-06-05"),
+        (tid, rule_tk, "2025-12-01", "2026-07-05"),
     )
 
     # Đi thực tế 8 tuần: 04/8 → 28/9/2025

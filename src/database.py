@@ -716,11 +716,11 @@ def seed_initial_data():
         pass
     try:
         cursor.execute(
-            "INSERT INTO timeframes (name, start_date, end_date, norm_multiplier, standard_academic_weeks) VALUES ('Năm học 2025-2026', '2025-08-04', '2026-07-06', 1.0, 44.0)"
+            "INSERT INTO timeframes (name, start_date, end_date, norm_multiplier, standard_academic_weeks) VALUES ('Năm học 2025-2026', '2025-08-04', '2026-07-05', 1.0, 44.0)"
         )
         tf_id = cursor.lastrowid
         seed_holidays_for_timeframe(
-            conn, tf_id, "Năm học 2025-2026", "2025-08-04", "2026-07-06"
+            conn, tf_id, "Năm học 2025-2026", "2025-08-04", "2026-07-05"
         )
     except Exception:
         pass
@@ -1263,7 +1263,7 @@ def seed_holidays_for_timeframe(conn, timeframe_id, name, start_date_str, end_da
         ("Nghỉ Tết Nguyên đán", preset["tet_start"], preset["tet_end"]),
         ("Nghỉ Giỗ tổ Hùng Vương", preset["hung_vuong"], preset["hung_vuong"]),
         ("Ngày Truyền thống CAND (19/8)", f"{y_start}-08-19", f"{y_start}-08-19"),
-        ("Nghỉ Lễ Quốc khánh (2/9)", f"{y_start}-09-02", f"{y_start}-09-03"),
+        ("Nghỉ Lễ Quốc khánh (2/9)", f"{y_start}-09-02", f"{y_start}-09-02"),
         ("Nghỉ Tết Dương lịch", f"{y_end}-01-01", f"{y_end}-01-01"),
         ("Nghỉ Lễ 30/4 & 1/5", f"{y_end}-04-30", f"{y_end}-05-01"),
     ]
